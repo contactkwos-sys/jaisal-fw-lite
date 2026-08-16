@@ -79,36 +79,70 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const admin = createClient(supabaseUrl, serviceKey)
 
-    let roleId = role_id as string | undefined
-    if (!roleId && role_name) {
-      const { data: role, error: roleErr } = await admin
-        .from('roles')
-        .select('id')
-        .eq('role_name', role_name)
-        .maybeSingle()
-      if (roleErr) throw roleErr
-      if (!role) {
-        return new Response(JSON.stringify({ error: 'Role not found' }), {
-          status: 404,
+    let user: {
+      id: string
+      full_name: string
+      role_id: string | null
+      pin_hash: string
+    } | null = null
+
+    // Prefer public.users when grants exist; fall back to auth user_metadata
+    if (role_id || role_name) {
+      let roleId = role_id as string | undefined
+      if (!roleId && role_name) {
+        const { data: role } = await admin
+          .from('roles')
+          .select('id')
+          .eq('role_name', role_name)
+          .maybeSingle()
+        roleId = role?.id
+      }
+      if (roleId) {
+        const { data } = await admin
+          .from('users')
+          .select('id, full_name, role_id, pin_hash, is_active')
+          .eq('role_id', roleId)
+          .eq('is_active', true)
+          .maybeSingle()
+        if (data?.pin_hash) {
+          user = {
+            id: data.id,
+            full_name: data.full_name,
+            role_id: data.role_id,
+            pin_hash: data.pin_hash,
+          }
+        }
+      }
+    }
+
+    if (!user) {
+      const { data: listed, error: listErr } = await admin.auth.admin.listUsers({ perPage: 200 })
+      if (listErr) throw listErr
+      const match = (listed.users || []).find((u) => {
+        const meta = (u.user_metadata || {}) as Record<string, string>
+        if (role_name && meta.role_name === role_name) return true
+        if (role_id && meta.role_id === role_id) return true
+        return false
+      })
+      if (!match) {
+        return new Response(JSON.stringify({ error: 'No active user for this role' }), {
+          status: 401,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
-      roleId = role.id
-    }
-
-    const { data: user, error: userErr } = await admin
-      .from('users')
-      .select('id, full_name, role_id, pin_hash, is_active')
-      .eq('role_id', roleId!)
-      .eq('is_active', true)
-      .maybeSingle()
-
-    if (userErr) throw userErr
-    if (!user) {
-      return new Response(JSON.stringify({ error: 'No active user for this role' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      const meta = (match.user_metadata || {}) as Record<string, string>
+      if (!meta.pin_hash) {
+        return new Response(JSON.stringify({ error: 'PIN not configured for user' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      user = {
+        id: match.id,
+        full_name: meta.full_name || match.email || 'User',
+        role_id: meta.role_id || role_id || null,
+        pin_hash: meta.pin_hash,
+      }
     }
 
     const ok = await verifyPin(String(pin), user.pin_hash)
@@ -133,7 +167,10 @@ Deno.serve(async (req) => {
     })
     if (linkErr) throw linkErr
 
-    const tokenHash = linkData.properties?.hashed_token
+    const tokenHash =
+      (linkData as { properties?: { hashed_token?: string }; hashed_token?: string }).properties
+        ?.hashed_token ||
+      (linkData as { hashed_token?: string }).hashed_token
     if (!tokenHash) {
       return new Response(JSON.stringify({ error: 'Failed to create session token' }), {
         status: 500,

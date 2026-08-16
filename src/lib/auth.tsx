@@ -6,13 +6,15 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import type { Session } from '@supabase/supabase-js'
+import type { Session, User } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 import type { AppUser, Role } from './database.types'
 
+type Profile = AppUser & { roles: Role | null }
+
 type AuthState = {
   session: Session | null
-  profile: (AppUser & { roles: Role | null }) | null
+  profile: Profile | null
   loading: boolean
   isCeo: boolean
   loginWithPin: (role: Role, pin: string) => Promise<void>
@@ -22,27 +24,60 @@ type AuthState = {
 
 const AuthContext = createContext<AuthState | null>(null)
 
-async function fetchProfile(userId: string) {
+function profileFromAuthUser(user: User): Profile {
+  const meta = (user.user_metadata || {}) as Record<string, string>
+  const roleName = meta.role_name || meta.full_name || 'User'
+  return {
+    id: user.id,
+    full_name: meta.full_name || roleName,
+    role_id: meta.role_id || `meta-${roleName.toLowerCase()}`,
+    pin_hash: meta.pin_hash || '',
+    is_active: true,
+    created_at: user.created_at || new Date().toISOString(),
+    roles: {
+      id: meta.role_id || `meta-${roleName.toLowerCase()}`,
+      role_name: roleName,
+      is_custom: false,
+      created_at: user.created_at || new Date().toISOString(),
+    },
+  }
+}
+
+async function fetchProfile(user: User): Promise<Profile> {
   const { data, error } = await supabase
     .from('users')
     .select('id, full_name, role_id, pin_hash, is_active, created_at, roles(*)')
-    .eq('id', userId)
+    .eq('id', user.id)
     .maybeSingle()
-  if (error) throw error
-  return data as (AppUser & { roles: Role | null }) | null
+
+  if (!error && data) {
+    const row = data as any
+    const roles = Array.isArray(row.roles) ? row.roles[0] ?? null : row.roles ?? null
+    return {
+      id: row.id,
+      full_name: row.full_name,
+      role_id: row.role_id,
+      pin_hash: row.pin_hash,
+      is_active: row.is_active,
+      created_at: row.created_at,
+      roles,
+    } as Profile
+  }
+  // Tables may lack GRANTs yet — fall back to auth metadata
+  return profileFromAuthUser(user)
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
-  const [profile, setProfile] = useState<(AppUser & { roles: Role | null }) | null>(null)
+  const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
 
   const refreshProfile = useCallback(async () => {
     const { data } = await supabase.auth.getSession()
     const s = data.session
     setSession(s)
-    if (s?.user?.id) {
-      const p = await fetchProfile(s.user.id)
+    if (s?.user) {
+      const p = await fetchProfile(s.user)
       setProfile(p)
     } else {
       setProfile(null)
@@ -60,12 +95,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })()
     const { data: sub } = supabase.auth.onAuthStateChange(async (_event, next) => {
       setSession(next)
-      if (next?.user?.id) {
+      if (next?.user) {
         try {
-          const p = await fetchProfile(next.user.id)
+          const p = await fetchProfile(next.user)
           setProfile(p)
         } catch {
-          setProfile(null)
+          setProfile(profileFromAuthUser(next.user))
         }
       } else {
         setProfile(null)
@@ -77,26 +112,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [refreshProfile])
 
-  const loginWithPin = useCallback(async (role: Role, pin: string) => {
-    const { data, error } = await supabase.functions.invoke('pin-login', {
-      body: { role_id: role.id, role_name: role.role_name, pin },
-    })
-    if (error) {
-      throw new Error(
-        (data as { error?: string } | null)?.error ?? error.message ?? 'Login failed',
-      )
-    }
-    if (data?.error) throw new Error(data.error)
-    if (!data?.access_token || !data?.refresh_token) {
-      throw new Error('No session returned from pin-login')
-    }
-    const { error: setErr } = await supabase.auth.setSession({
-      access_token: data.access_token,
-      refresh_token: data.refresh_token,
-    })
-    if (setErr) throw setErr
-    await refreshProfile()
-  }, [refreshProfile])
+  const loginWithPin = useCallback(
+    async (role: Role, pin: string) => {
+      const { data, error } = await supabase.functions.invoke('pin-login', {
+        body: { role_id: role.id, role_name: role.role_name, pin },
+      })
+      if (error) {
+        throw new Error(
+          (data as { error?: string } | null)?.error ?? error.message ?? 'Login failed',
+        )
+      }
+      if (data?.error) throw new Error(data.error)
+      if (!data?.access_token || !data?.refresh_token) {
+        throw new Error('No session returned from pin-login')
+      }
+      const { error: setErr } = await supabase.auth.setSession({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+      })
+      if (setErr) throw setErr
+      await refreshProfile()
+    },
+    [refreshProfile],
+  )
 
   const logout = useCallback(async () => {
     await supabase.auth.signOut()

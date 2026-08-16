@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "node scripts/serve-app.mjs",
+    "functions:local": "node scripts/local-functions-server.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",
