@@ -23,18 +23,26 @@ Design tokens: [`styles/theme.css`](styles/theme.css) (imported via [`styles/bas
 
 Redeploy / deploy these from the Supabase Dashboard (Edge Functions → Deploy from source). Use `verify_jwt = false`.
 
-| Function | Raw source URL |
-|---|---|
-| `pin-login` | https://raw.githubusercontent.com/contactkwos-sys/jaisal-fw-lite/main/supabase/functions/pin-login/index.ts |
-| `roles-gate` | https://raw.githubusercontent.com/contactkwos-sys/jaisal-fw-lite/main/supabase/functions/roles-gate/index.ts |
-| `pin-reset` | https://raw.githubusercontent.com/contactkwos-sys/jaisal-fw-lite/main/supabase/functions/pin-reset/index.ts |
+| Function | Raw source URL | Status (this run) |
+|---|---|---|
+| `pin-login` | https://raw.githubusercontent.com/contactkwos-sys/jaisal-fw-lite/main/supabase/functions/pin-login/index.ts | Already ACTIVE (unchanged) |
+| `roles-gate` | https://raw.githubusercontent.com/contactkwos-sys/jaisal-fw-lite/main/supabase/functions/roles-gate/index.ts | Redeployed (update/delete actions) |
+| `pin-reset` | https://raw.githubusercontent.com/contactkwos-sys/jaisal-fw-lite/main/supabase/functions/pin-reset/index.ts | Deployed |
 
 Also mirrored under `public/functions/` for copy/paste deploy.
 
-**Manual deploy needed: `pin-login`, `roles-gate`, `pin-reset`**
+**Manual deploy needed (if CLI deploy unavailable):** `pin-login`, `roles-gate`, `pin-reset`
 
 `roles-gate` now supports `list` / `create` / `update` / `delete`.  
 `pin-reset` (new in Phase 6) hashes a 4-digit PIN with PBKDF2 and upserts `public.users` + auth metadata.
+
+## Deploy confirmation (Phases 2–8 run)
+
+- Migration `20260816000200_phases_2_to_8.sql` applied on live project `doitrzsyvcipugmrzykx` (tables verified).
+- `main` merged via PR https://github.com/contactkwos-sys/jaisal-fw-lite/pull/5
+- Netlify production https://jaisal-fw-lite.netlify.app serving build with CEO Dashboard / Costing / Purchase modules
+- Edge functions `pin-reset` + updated `roles-gate` deployed via Supabase CLI (`verify_jwt=false`)
+
 
 ## Screens by phase
 
