@@ -1,41 +1,48 @@
 import { useAuth } from '../lib/auth'
-
-type Tab = 'attendance' | 'stock' | 'design'
+import type { AppScreen } from '../lib/nav'
 
 type Props = {
-  active: Tab
-  onChange: (tab: Tab) => void
+  active: AppScreen
+  isCeo: boolean
+  onChange: (tab: AppScreen) => void
 }
 
-export function BottomNav({ active, onChange }: Props) {
+const BASE_TABS: Array<{ id: AppScreen; label: string }> = [
+  { id: 'attendance', label: 'Attend' },
+  { id: 'stock', label: 'Stock' },
+  { id: 'purchase', label: 'Inward' },
+  { id: 'production', label: 'Prod' },
+  { id: 'maintenance', label: 'Maint' },
+  { id: 'dispatch', label: 'Out' },
+  { id: 'design', label: 'Design' },
+  { id: 'admin', label: 'Admin' },
+]
+
+export function BottomNav({ active, isCeo, onChange }: Props) {
   const { logout } = useAuth()
+  const tabs = [
+    ...(isCeo ? [{ id: 'home' as AppScreen, label: 'Home' }] : []),
+    ...BASE_TABS,
+    ...(isCeo ? [{ id: 'costing' as AppScreen, label: 'Cost' }] : []),
+  ]
 
   return (
     <nav className="bottom-nav" aria-label="Main">
-      <button
-        type="button"
-        className={active === 'attendance' ? 'nav-item active' : 'nav-item'}
-        onClick={() => onChange('attendance')}
-      >
-        Attendance
-      </button>
-      <button
-        type="button"
-        className={active === 'stock' ? 'nav-item active' : 'nav-item'}
-        onClick={() => onChange('stock')}
-      >
-        Stock
-      </button>
-      <button
-        type="button"
-        className={active === 'design' ? 'nav-item active' : 'nav-item'}
-        onClick={() => onChange('design')}
-      >
-        Design
-      </button>
-      <button type="button" className="nav-item nav-logout" onClick={() => void logout()}>
-        Logout
-      </button>
+      <div className="bottom-nav-scroll">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            className={active === t.id ? 'nav-item active' : 'nav-item'}
+            onClick={() => onChange(t.id)}
+          >
+            {t.label}
+          </button>
+        ))}
+        <button type="button" className="nav-item nav-logout" onClick={() => void logout()}>
+          Out
+        </button>
+      </div>
     </nav>
   )
 }

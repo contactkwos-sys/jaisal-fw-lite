@@ -20,6 +20,7 @@ export type Worker = {
   full_name: string
   department: string | null
   is_active: boolean
+  role_id?: string | null
 }
 
 export type Attendance = {
@@ -39,6 +40,7 @@ export type BeamPipeStock = {
   variety_name: string
   quantity_pcs: number
   updated_at: string
+  is_filled?: boolean
 }
 
 export type WeftYarnStock = {
@@ -72,3 +74,164 @@ export type ApprovalQueue = {
   status: string
   created_at: string
 }
+
+export type WeftPurchase = {
+  id: string
+  quality: string
+  weight_kg: number
+  rate: number
+  supplier: string | null
+  input_mode: string
+  photo_url: string | null
+  barcode: string | null
+  created_at: string
+}
+
+export type BeamPipeOut = {
+  id: string
+  pipe_variety: string
+  vendor_name: string
+  date_out: string
+  time_out: string
+  status: string
+  created_at: string
+}
+
+export type BeamPipeIn = {
+  id: string
+  pipe_variety: string
+  kg: number
+  tar_count: number
+  meter: number
+  challan_no: string | null
+  gst_no: string | null
+  gst_amount: number
+  out_id: string | null
+  created_at: string
+}
+
+export type WarpYarnInward = {
+  id: string
+  colour: string
+  qty_kg: number
+  supplier: string | null
+  gst_no: string | null
+  invoice_no: string | null
+  input_mode: string
+  photo_url: string | null
+  created_at: string
+}
+
+export type JobCard = {
+  id: string
+  dno: string
+  machine_no: string | null
+  operator_name: string | null
+  created_at: string
+}
+
+export type JobCardColour = {
+  id: string
+  job_card_id: string
+  colour: string | null
+  matching: string | null
+  pick: number | null
+  program_meter: number | null
+  fut_panel: string | null
+}
+
+export type ProductionEntry = {
+  id: string
+  machine_no: string
+  entry_date: string
+  shift: string
+  operator_name: string | null
+  working_hour: number
+  total_meter: number
+  shift_diff: number
+  efficiency_pct: number
+  created_at: string
+}
+
+export type MaintenanceRequest = {
+  id: string
+  machine_no: string
+  priority: string
+  problem: string | null
+  item_needed: string | null
+  photo_url: string | null
+  assigned_to: string | null
+  status: string
+  cost: number
+  created_at: string
+}
+
+export type RepairingTracker = {
+  id: string
+  item_name: string
+  for_what: string
+  vendor: string | null
+  gatepass_no: string
+  date_out: string
+  date_in: string | null
+  status: string
+  cost: number
+  created_at: string
+}
+
+export type FoldingEntry = {
+  id: string
+  dno: string
+  meter_folded: number
+  rolls: number
+  created_at: string
+}
+
+export type Challan = {
+  id: string
+  challan_no: string
+  party: string
+  meter: number
+  rolls: number
+  rate: number
+  gst_pct: number
+  total: number
+  created_at: string
+}
+
+export type Gatepass = {
+  id: string
+  challan_id: string | null
+  tempo_driver: string | null
+  vehicle_no: string | null
+  date: string
+  gatepass_no: string | null
+  driver_signed: boolean
+  received_signed: boolean
+  signed_by_driver: string | null
+  signed_by_received: string | null
+  created_at: string
+}
+
+export type PayrollRate = {
+  id: string
+  role_id: string
+  rate_per_day: number
+  created_at: string
+}
+
+export type ElectricityEntry = {
+  id: string
+  entry_date: string
+  source: string
+  unit_kwh: number
+  rate_per_unit: number
+  total: number
+  created_at: string
+}
+
+/** assumed: 6 looms labelled M1–M6 */
+export const MACHINES = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6'] as const
+
+/** assumed: weft low-stock alert threshold = 50 kg (configurable) */
+export const WEFT_LOW_STOCK_KG = 50

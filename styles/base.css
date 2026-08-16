@@ -20,6 +20,15 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+h1, h2, .screen-header h1, .section-title {
+  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+}
+
+.num, input.num, .kpi-card strong, .kpi-total {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
 a {
   color: var(--warp);
 }

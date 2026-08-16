@@ -85,6 +85,49 @@ Deno.serve(async (req) => {
       })
     }
 
+    if (action === 'update') {
+      const roleId = String(body.role_id ?? '').trim()
+      const name = String(body.role_name ?? '').trim()
+      if (!roleId || !name) {
+        return new Response(JSON.stringify({ error: 'role_id and role_name required' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      const { data, error } = await admin
+        .from('roles')
+        .update({ role_name: name })
+        .eq('id', roleId)
+        .select('id, role_name, is_custom, created_at')
+        .single()
+      if (error) throw error
+      return new Response(JSON.stringify({ role: data }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    if (action === 'delete') {
+      const roleId = String(body.role_id ?? '').trim()
+      if (!roleId) {
+        return new Response(JSON.stringify({ error: 'role_id required' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      const { data: role } = await admin.from('roles').select('is_custom').eq('id', roleId).maybeSingle()
+      if (role && role.is_custom === false) {
+        return new Response(JSON.stringify({ error: 'Cannot delete default role' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      const { error } = await admin.from('roles').delete().eq('id', roleId)
+      if (error) throw error
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
     return new Response(JSON.stringify({ error: 'Unknown action' }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
