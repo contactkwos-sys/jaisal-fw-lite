@@ -1,0 +1,96 @@
+@import "./theme.css";
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--warp);
+}
+
+button,
+.btn {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 0.55rem 1rem;
+  font: inherit;
+  cursor: pointer;
+  background: var(--weft);
+  color: var(--bg);
+}
+
+button:hover,
+.btn:hover {
+  filter: brightness(1.05);
+}
+
+.btn-warp {
+  background: var(--warp);
+  color: var(--text);
+}
+
+.btn-wa {
+  background: var(--wa);
+  color: var(--bg);
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--text);
+}
+
+.surface {
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+.surface2 {
+  background: var(--surface2);
+  border: 1px solid var(--line);
+}
+
+.text-muted {
+  color: var(--muted);
+}
+
+.text-muted2 {
+  color: var(--muted2);
+}
+
+.text-sage {
+  color: var(--sage);
+}
+
+.text-danger {
+  color: var(--danger);
+}
+
+.text-greige {
+  color: var(--greige);
+}
+
+.text-weft {
+  color: var(--weft);
+}
+
+.text-warp {
+  color: var(--warp);
+}
