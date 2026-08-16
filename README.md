@@ -74,6 +74,5 @@ CEO login lands on **Home** dashboard. Other roles land on Attendance (Phase 1 b
 
 ## Known follow-ups
 
-1. Deploy edge functions listed above (especially **`pin-reset`** and updated **`roles-gate`**).
-2. Confirm Netlify auto-deploy from `main` after merge.
-3. Optionally map each worker to `role_id` for accurate payroll.
+1. Optionally map each worker to `role_id` for accurate payroll.
+2. If PIN reset fails after a dashboard re-deploy, re-run `supabase functions deploy pin-reset --no-verify-jwt` (and `roles-gate`).
