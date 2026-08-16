@@ -1,22 +1,22 @@
 # jaisal-fw-lite
 
-Lightweight Jaisal FW app shell.
+Lightweight factory floor app (attendance, stock, design) on Vite + React + Supabase.
 
 ## Theme
 
-Design tokens live in [`styles/theme.css`](styles/theme.css). Import via [`styles/base.css`](styles/base.css).
+Design tokens: [`styles/theme.css`](styles/theme.css) (imported via [`styles/base.css`](styles/base.css)). Do not edit those files for feature work — use the tokens in app UI.
 
-| Token | Hex | Role |
-| --- | --- | --- |
-| `--bg` | `#14171c` | Page background |
-| `--surface` / `--surface2` | `#1c2027` / `#232833` | Panels |
-| `--line` | `#2d323d` | Borders |
-| `--warp` | `#5b7fb0` | Blue accent (warp yarn) |
-| `--weft` | `#d9a441` | Gold accent / primary buttons |
-| `--greige` | `#b8ad98` | Neutral yarn tone |
-| `--sage` | `#7a9a7f` | Success / positive |
-| `--text` / `--muted` / `--muted2` | `#ede9e2` / `#9096a1` / `#6b7280` | Typography |
-| `--danger` | `#c96a5a` | Errors |
-| `--wa` | `#5fb583` | WhatsApp actions |
+## Setup
 
-Open [`index.html`](index.html) in a browser to preview the palette.
+1. Copy `.env.example` → `.env` and set `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY`.
+2. Apply `supabase/migrations/20260816000100_initial_schema.sql`.
+3. Deploy edge functions `pin-login` and `roles-gate` (`verify_jwt = false`).
+4. Run `supabase/seed.sql` (or create matching `auth.users` + `public.users`). Demo PIN: `1234`.
+5. `npm install` && `npm run dev`
+
+## Screens
+
+- Login — role chips + 4-digit PIN (PBKDF2 via `pin-login`)
+- Attendance — date + worker times + auto status
+- Stock — Beam Pipe / Weft Yarn; CEO applies, others queue approval
+- Design — image upload + rates; conversion charge auto
