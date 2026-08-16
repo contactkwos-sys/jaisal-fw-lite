@@ -81,7 +81,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data, error } = await supabase.functions.invoke('pin-login', {
       body: { role_id: role.id, role_name: role.role_name, pin },
     })
-    if (error) throw error
+    if (error) {
+      throw new Error(
+        (data as { error?: string } | null)?.error ?? error.message ?? 'Login failed',
+      )
+    }
     if (data?.error) throw new Error(data.error)
     if (!data?.access_token || !data?.refresh_token) {
       throw new Error('No session returned from pin-login')
