@@ -118,9 +118,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: { role_id: role.id, role_name: role.role_name, pin },
       })
       if (error) {
-        throw new Error(
-          (data as { error?: string } | null)?.error ?? error.message ?? 'Login failed',
-        )
+        const bodyError = (data as { error?: string; message?: string } | null)?.error
+          ?? (data as { message?: string } | null)?.message
+        const ctx = (error as { context?: Response }).context
+        let gatewayMessage: string | undefined
+        if (!bodyError && ctx && typeof ctx.json === 'function') {
+          try {
+            const payload = (await ctx.clone().json()) as { error?: string; message?: string }
+            gatewayMessage = payload.error ?? payload.message
+          } catch {
+            /* ignore non-JSON gateway bodies */
+          }
+        }
+        throw new Error(bodyError ?? gatewayMessage ?? error.message ?? 'Login failed')
       }
       if (data?.error) throw new Error(data.error)
       if (!data?.access_token || !data?.refresh_token) {
