@@ -1,132 +1,13 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Jaisal FW Lite — Theme</title>
-    <link rel="stylesheet" href="styles/base.css" />
-    <style>
-      .page {
-        max-width: 720px;
-        margin: 0 auto;
-        padding: 2.5rem 1.25rem 4rem;
-      }
-
-      h1 {
-        margin: 0 0 0.35rem;
-        font-size: 1.75rem;
-        font-weight: 600;
-        letter-spacing: -0.02em;
-      }
-
-      .lead {
-        margin: 0 0 2rem;
-        color: var(--muted);
-      }
-
-      .swatches {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-        gap: 0.75rem;
-        margin-bottom: 2.5rem;
-      }
-
-      .swatch {
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        overflow: hidden;
-        background: var(--surface);
-      }
-
-      .swatch-chip {
-        height: 64px;
-      }
-
-      .swatch-meta {
-        padding: 0.65rem 0.75rem 0.8rem;
-      }
-
-      .swatch-name {
-        font-size: 0.85rem;
-        font-weight: 600;
-      }
-
-      .swatch-hex {
-        font-size: 0.75rem;
-        color: var(--muted2);
-        font-variant-numeric: tabular-nums;
-      }
-
-      .actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.6rem;
-        margin-bottom: 2rem;
-      }
-
-      .panel {
-        padding: 1.25rem;
-        border-radius: 8px;
-      }
-
-      .panel p {
-        margin: 0 0 0.5rem;
-      }
-
-      .panel p:last-child {
-        margin-bottom: 0;
-      }
-    </style>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Jaisal FW Lite</title>
   </head>
   <body>
-    <main class="page">
-      <h1>Jaisal FW Lite</h1>
-      <p class="lead">Theme color tokens — warp, weft, and greige.</p>
-
-      <div class="swatches" id="swatches"></div>
-
-      <div class="actions">
-        <button type="button">Primary (weft)</button>
-        <button type="button" class="btn-warp">Accent (warp)</button>
-        <button type="button" class="btn-wa">WhatsApp</button>
-        <button type="button" class="btn-ghost">Ghost</button>
-      </div>
-
-      <div class="panel surface">
-        <p>Surface panel on <span class="text-muted">muted</span> / <span class="text-muted2">muted2</span></p>
-        <p><span class="text-sage">+12.4% sage</span> · <span class="text-danger">−3.1% danger</span> · <span class="text-greige">greige</span></p>
-        <p><span class="text-warp">warp</span> · <span class="text-weft">weft</span></p>
-      </div>
-    </main>
-    <script>
-      const tokens = [
-        ["bg", "#14171c"],
-        ["surface", "#1c2027"],
-        ["surface2", "#232833"],
-        ["line", "#2d323d"],
-        ["warp", "#5b7fb0"],
-        ["warp-soft", "#3a4a63"],
-        ["weft", "#d9a441"],
-        ["weft-soft", "#4a3f26"],
-        ["greige", "#b8ad98"],
-        ["sage", "#7a9a7f"],
-        ["text", "#ede9e2"],
-        ["muted", "#9096a1"],
-        ["muted2", "#6b7280"],
-        ["danger", "#c96a5a"],
-        ["wa", "#5fb583"],
-      ];
-
-      const root = document.getElementById("swatches");
-      for (const [name, hex] of tokens) {
-        const el = document.createElement("div");
-        el.className = "swatch";
-        el.innerHTML =
-          `<div class="swatch-chip" style="background:var(--${name})"></div>` +
-          `<div class="swatch-meta"><div class="swatch-name">--${name}</div>` +
-          `<div class="swatch-hex">${hex}</div></div>`;
-        root.appendChild(el);
-      }
-    </script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

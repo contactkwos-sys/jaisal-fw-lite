@@ -1,0 +1,20 @@
+# Jaisal FW Lite — local Supabase
+project_id = "jaisal-fw-lite"
+
+[api]
+enabled = true
+
+[db]
+port = 54322
+
+[studio]
+enabled = true
+
+[auth]
+enabled = true
+
+[functions.pin-login]
+verify_jwt = false
+
+[functions.roles-gate]
+verify_jwt = false

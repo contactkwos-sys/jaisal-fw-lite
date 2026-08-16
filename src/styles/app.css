@@ -1,0 +1,279 @@
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background:
+    radial-gradient(1200px 500px at 10% -10%, var(--warp-soft), transparent 60%),
+    radial-gradient(900px 400px at 100% 0%, var(--weft-soft), transparent 55%),
+    var(--bg);
+}
+
+.app-main {
+  flex: 1;
+  width: min(720px, 100%);
+  margin: 0 auto;
+  padding: 1.25rem 1rem 5.5rem;
+}
+
+.app-loading {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+}
+
+.screen-header {
+  margin-bottom: 1.25rem;
+}
+
+.screen-header h1 {
+  margin: 0 0 0.35rem;
+  font-size: 1.5rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.login-screen {
+  width: min(420px, 100%);
+  margin: 0 auto;
+  padding: 2rem 1rem 3rem;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1rem;
+  background:
+    radial-gradient(900px 420px at 50% -20%, var(--warp-soft), transparent 60%),
+    var(--bg);
+}
+
+.role-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.chip {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.4rem 0.85rem;
+  font-size: 0.9rem;
+}
+
+.chip-active {
+  background: var(--warp-soft);
+  border-color: var(--warp);
+  color: var(--text);
+}
+
+.chip-add {
+  border-style: dashed;
+  color: var(--greige);
+}
+
+.add-role-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  width: 100%;
+}
+
+.add-role-row input,
+.field input,
+.form-stack input {
+  width: 100%;
+  background: var(--surface2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.55rem 0.7rem;
+  font: inherit;
+}
+
+.pin-pad {
+  display: grid;
+  gap: 1rem;
+  margin: 0.5rem 0;
+}
+
+.pin-dots {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: transparent;
+}
+
+.dot.filled {
+  background: var(--weft);
+  border-color: var(--weft);
+}
+
+.pin-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+}
+
+.pin-key {
+  min-height: 3rem;
+  font-size: 1.15rem;
+}
+
+.login-btn,
+.primary-save {
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+.form-error,
+.form-ok {
+  margin: 0.25rem 0;
+  font-size: 0.9rem;
+}
+
+.list {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.card-row {
+  border-radius: 8px;
+  padding: 0.9rem 1rem;
+}
+
+.row-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.time-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+
+.status-chip {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.status-present {
+  color: var(--sage);
+  border-color: var(--sage);
+}
+
+.status-on-break {
+  color: var(--weft);
+  border-color: var(--weft);
+}
+
+.status-completed {
+  color: var(--warp);
+  border-color: var(--warp);
+}
+
+.status-absent {
+  color: var(--muted2);
+}
+
+.segment {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-top: 0.5rem;
+}
+
+.seg {
+  background: var(--surface);
+  color: var(--muted);
+  border: 0;
+  border-radius: 0;
+  padding: 0.45rem 0.9rem;
+}
+
+.seg.active {
+  background: var(--warp-soft);
+  color: var(--text);
+}
+
+.icon-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.icon-btn {
+  padding: 0.35rem 0.5rem;
+  min-width: 2.25rem;
+}
+
+.form-stack {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.readonly {
+  color: var(--greige);
+}
+
+.bottom-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  border-top: 1px solid var(--line);
+  backdrop-filter: blur(8px);
+  padding: 0.35rem 0.4rem calc(0.35rem + env(safe-area-inset-bottom));
+  z-index: 20;
+}
+
+.nav-item {
+  background: transparent;
+  color: var(--muted);
+  border: 0;
+  border-radius: 8px;
+  padding: 0.65rem 0.35rem;
+  font-size: 0.8rem;
+}
+
+.nav-item.active {
+  color: var(--weft);
+  background: var(--weft-soft);
+}
+
+.nav-logout {
+  color: var(--danger);
+}
+
+@media (max-width: 480px) {
+  .time-grid {
+    grid-template-columns: 1fr;
+  }
+}
