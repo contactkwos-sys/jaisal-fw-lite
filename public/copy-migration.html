@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Copy Migration SQL</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #14171c;
+        --surface: #1c2027;
+        --line: #2d323d;
+        --weft: #d9a441;
+        --text: #ede9e2;
+        --muted: #9096a1;
+        --sage: #7a9a7f;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: system-ui, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        padding: 1rem;
+      }
+      h1 { font-size: 1.25rem; margin: 0 0 0.5rem; }
+      p { color: var(--muted); margin: 0 0 1rem; }
+      .row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem; }
+      button, a.btn {
+        appearance: none;
+        border: 0;
+        border-radius: 8px;
+        padding: 0.85rem 1rem;
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-block;
+      }
+      .primary { background: var(--weft); color: #14171c; }
+      .secondary { background: var(--surface); color: var(--text); border: 1px solid var(--line); }
+      #status { min-height: 1.25rem; color: var(--sage); margin-bottom: 0.75rem; }
+      textarea {
+        width: 100%;
+        min-height: 60vh;
+        background: var(--surface);
+        color: var(--text);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 0.75rem;
+        font: 12px/1.4 ui-monospace, monospace;
+        white-space: pre;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Migration SQL</h1>
+    <p>Copy button dabao → Supabase SQL Editor mein paste → Run.</p>
+    <div class="row">
+      <button class="primary" id="copyBtn" type="button">Copy full SQL</button>
+      <button class="secondary" id="selectBtn" type="button">Select all</button>
+      <a class="btn secondary" href="/migration.sql" download="migration.sql">Download .sql</a>
+    </div>
+    <div id="status"></div>
+    <textarea id="sql" readonly></textarea>
+    <script>
+      const status = document.getElementById('status')
+      const box = document.getElementById('sql')
+      async function load() {
+        const res = await fetch('/migration.sql')
+        box.value = await res.text()
+      }
+      async function copyText() {
+        try {
+          await navigator.clipboard.writeText(box.value)
+          status.textContent = 'Copied! Ab Supabase SQL Editor mein paste karo.'
+        } catch {
+          box.focus()
+          box.select()
+          const ok = document.execCommand('copy')
+          status.textContent = ok
+            ? 'Copied! Ab Supabase SQL Editor mein paste karo.'
+            : 'Auto-copy blocked — Select all dabao, phir manually copy karo.'
+        }
+      }
+      document.getElementById('copyBtn').onclick = () => void copyText()
+      document.getElementById('selectBtn').onclick = () => {
+        box.focus()
+        box.select()
+        status.textContent = 'Selected — ab Copy / Ctrl+C / long-press Copy.'
+      }
+      void load()
+    </script>
+  </body>
+</html>
