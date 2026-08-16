@@ -8,7 +8,7 @@ Design tokens: [`styles/theme.css`](styles/theme.css) (imported via [`styles/bas
 
 ## Setup
 
-1. Copy `.env.example` → `.env` and set `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY`.
+1. Copy `.env.example` → `.env` and set `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` (publishable key uses letter **O** in `OyI39…`, not digit `0`).
 2. Apply `supabase/migrations/20260816000100_initial_schema.sql`.
 3. Deploy edge functions `pin-login` and `roles-gate` (`verify_jwt = false`).
 4. Run `supabase/seed.sql` (or create matching `auth.users` + `public.users`). Demo PIN: `1234`.
