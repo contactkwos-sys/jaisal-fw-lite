@@ -1,0 +1,24 @@
+/**
+ * Jaisal FW Lite — design tokens
+ * Textile-inspired palette: warp (blue), weft (gold), greige (neutral yarn)
+ */
+:root {
+  --bg: #14171c;
+  --surface: #1c2027;
+  --surface2: #232833;
+  --line: #2d323d;
+
+  --warp: #5b7fb0; /* blue accent — warp yarn */
+  --warp-soft: #3a4a63;
+  --weft: #d9a441; /* gold accent — weft yarn, primary buttons */
+  --weft-soft: #4a3f26;
+  --greige: #b8ad98;
+  --sage: #7a9a7f; /* success / positive numbers */
+
+  --text: #ede9e2;
+  --muted: #9096a1;
+  --muted2: #6b7280;
+
+  --danger: #c96a5a;
+  --wa: #5fb583; /* WhatsApp button green */
+}
