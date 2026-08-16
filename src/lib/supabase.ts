@@ -7,16 +7,12 @@ if (!url || !anonKey) {
   console.warn('Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY')
 }
 
-function resolveFunctionsUrl() {
-  const explicit = import.meta.env.VITE_SUPABASE_FUNCTIONS_URL
-  if (explicit) return explicit
-  if (import.meta.env.VITE_USE_LOCAL_FUNCTIONS === '1' && typeof window !== 'undefined') {
-    return `${window.location.origin}/functions/v1`
-  }
-  return undefined
-}
-
-const functionsUrl = resolveFunctionsUrl()
+/**
+ * Production (Netlify): leave VITE_SUPABASE_FUNCTIONS_URL unset —
+ * client calls https://<project>.supabase.co/functions/v1/*
+ * Optional override only for local/dev proxy testing.
+ */
+const functionsUrl = import.meta.env.VITE_SUPABASE_FUNCTIONS_URL || undefined
 
 export const supabase = createClient(url ?? '', anonKey ?? '', {
   auth: {
