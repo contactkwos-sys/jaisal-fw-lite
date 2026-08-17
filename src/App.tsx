@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { BottomNav } from './components/BottomNav'
+import { AppShell } from './components/AppShell'
 import { AuthProvider, useAuth } from './lib/auth'
 import type { AppScreen } from './lib/nav'
 import { AdminScreen } from './screens/AdminScreen'
@@ -14,7 +14,7 @@ import { ProductionScreen } from './screens/ProductionScreen'
 import { PurchaseScreen } from './screens/PurchaseScreen'
 import { StockScreen } from './screens/StockScreen'
 
-function AppShell() {
+function AuthenticatedApp() {
   const { session, loading, isCeo } = useAuth()
   const [tab, setTab] = useState<AppScreen>('attendance')
   const [sub, setSub] = useState<string | undefined>()
@@ -24,6 +24,8 @@ function AppShell() {
   useEffect(() => {
     if (!session) return
     setTab(isCeo ? 'home' : 'attendance')
+    setSub(undefined)
+    setFilter(undefined)
   }, [session, isCeo])
 
   if (loading) {
@@ -45,57 +47,58 @@ function AppShell() {
   }
 
   return (
-    <div className="app-shell">
-      <div className="app-main">
-        {tab === 'home' ? (
-          <DashboardScreen
-            onNavigate={(t) => go(t.screen, t.sub, t.filter)}
-          />
-        ) : null}
-        {tab === 'attendance' ? <AttendanceScreen /> : null}
-        {tab === 'stock' ? <StockScreen /> : null}
-        {tab === 'design' ? <DesignScreen /> : null}
-        {tab === 'purchase' ? (
-          <PurchaseScreen initialSub={sub || 'general'} />
-        ) : null}
-        {tab === 'production' ? (
-          <ProductionScreen
-            initialSub={(sub as 'job' | 'entry' | 'report') || 'job'}
-            filter={filter}
-          />
-        ) : null}
-        {tab === 'maintenance' ? (
-          <MaintenanceScreen
-            initialSub={(sub as 'request' | 'repair') || 'request'}
-            filter={filter}
-          />
-        ) : null}
-        {tab === 'dispatch' ? (
-          <DispatchScreen
-            initialSub={(sub as 'folding' | 'challan' | 'gatepass') || 'folding'}
-            filter={filter}
-          />
-        ) : null}
-        {tab === 'admin' ? (
-          <AdminScreen initialSub={(sub as 'roles' | 'payroll' | 'approvals') || 'roles'} />
-        ) : null}
-        {tab === 'costing' ? (
-          <CostingScreen initialSub={(sub as 'summary' | 'electricity') || 'summary'} />
-        ) : null}
-      </div>
-      <BottomNav
-        active={tab}
-        isCeo={isCeo}
-        onChange={(next) => go(next)}
-      />
-    </div>
+    <AppShell
+      active={tab}
+      sub={sub}
+      isCeo={isCeo}
+      onNavigate={(t) => go(t.screen, t.sub, t.filter)}
+    >
+      {tab === 'home' ? (
+        <DashboardScreen onNavigate={(t) => go(t.screen, t.sub, t.filter)} />
+      ) : null}
+      {tab === 'attendance' ? <AttendanceScreen /> : null}
+      {tab === 'stock' ? (
+        <StockScreen
+          initialTab={(sub as 'beam' | 'weft') || 'beam'}
+          onTabChange={(t) => setSub(t)}
+        />
+      ) : null}
+      {tab === 'design' ? <DesignScreen /> : null}
+      {tab === 'purchase' ? (
+        <PurchaseScreen initialSub={sub || 'general'} />
+      ) : null}
+      {tab === 'production' ? (
+        <ProductionScreen
+          initialSub={(sub as 'job' | 'entry' | 'report') || 'job'}
+          filter={filter}
+        />
+      ) : null}
+      {tab === 'maintenance' ? (
+        <MaintenanceScreen
+          initialSub={(sub as 'request' | 'repair') || 'request'}
+          filter={filter}
+        />
+      ) : null}
+      {tab === 'dispatch' ? (
+        <DispatchScreen
+          initialSub={(sub as 'folding' | 'challan' | 'gatepass') || 'folding'}
+          filter={filter}
+        />
+      ) : null}
+      {tab === 'admin' ? (
+        <AdminScreen initialSub={(sub as 'roles' | 'payroll' | 'approvals') || 'roles'} />
+      ) : null}
+      {tab === 'costing' ? (
+        <CostingScreen initialSub={(sub as 'summary' | 'electricity') || 'summary'} />
+      ) : null}
+    </AppShell>
   )
 }
 
 export default function App() {
   return (
     <AuthProvider>
-      <AppShell />
+      <AuthenticatedApp />
     </AuthProvider>
   )
 }
