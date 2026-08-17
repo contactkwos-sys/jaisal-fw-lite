@@ -57,6 +57,7 @@ export function ProductionScreen({ initialSub = 'job' }: Props) {
   const [workingHour, setWorkingHour] = useState('12')
   const [totalMeter, setTotalMeter] = useState('')
   const [entryProgramId, setEntryProgramId] = useState('')
+  const [updateBeamMeter, setUpdateBeamMeter] = useState(true)
 
   const [reportDate, setReportDate] = useState(todayISO())
   const [entries, setEntries] = useState<ProductionEntry[]>([])
@@ -301,9 +302,56 @@ export function ProductionScreen({ initialSub = 'job' }: Props) {
           const { error: iErr } = await supabase.from('production_entries').insert(payload)
           if (iErr) throw iErr
           if (entryProgramId) await maybeCompleteProgramFromProduction(entryProgramId)
+
+          if (updateBeamMeter) {
+            const meter = Number(totalMeter) || 0
+            const { data: loading, error: lErr } = await supabase
+              .from('beam_loading')
+              .select('id')
+              .eq('machine_no', entryMachine)
+              .eq('status', 'RUNNING')
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle()
+            if (lErr) throw lErr
+            if (loading?.id) {
+              const { data: existing, error: eErr } = await supabase
+                .from('daily_beam_production')
+                .select('id, production_meter')
+                .eq('beam_loading_id', loading.id)
+                .eq('production_date', entryDate)
+                .maybeSingle()
+              if (eErr) throw eErr
+              if (existing?.id) {
+                const { error: uErr } = await supabase
+                  .from('daily_beam_production')
+                  .update({
+                    production_meter: Number(existing.production_meter || 0) + meter,
+                    efficiency,
+                  })
+                  .eq('id', existing.id)
+                if (uErr) throw uErr
+              } else {
+                const { error: bErr } = await supabase.from('daily_beam_production').insert({
+                  beam_loading_id: loading.id,
+                  machine_no: entryMachine,
+                  production_date: entryDate,
+                  production_meter: meter,
+                  efficiency,
+                })
+                if (bErr) throw bErr
+              }
+            }
+          }
         },
       })
-      setMessage(result === 'applied' ? 'Production entry saved' : 'Sent to approval queue')
+      setMessage(
+        result === 'applied'
+          ? updateBeamMeter
+            ? 'Production entry saved · beam meter updated'
+            : 'Production entry saved'
+          : 'Sent to approval queue',
+      )
       setTotalMeter('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed')
@@ -618,6 +666,14 @@ export function ProductionScreen({ initialSub = 'job' }: Props) {
               onChange={(e) => setTotalMeter(e.target.value)}
               required
             />
+          </label>
+          <label className="check-row">
+            <input
+              type="checkbox"
+              checked={updateBeamMeter}
+              onChange={(e) => setUpdateBeamMeter(e.target.checked)}
+            />
+            Update Beam Meter (deduct from running beam on this machine)
           </label>
           <button type="submit" className="primary-save" disabled={busy}>
             Save Entry

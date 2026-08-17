@@ -18,6 +18,7 @@ import { ProgramScreen } from './screens/ProgramScreen'
 import { PurchaseScreen } from './screens/PurchaseScreen'
 import { SecurityGateScreen } from './screens/SecurityGateScreen'
 import { StockScreen } from './screens/StockScreen'
+import { BeamRemainingReport } from './pages/BeamRemainingReport'
 
 function AuthenticatedApp() {
   const { session, loading, isCeo } = useAuth()
@@ -102,6 +103,7 @@ function AuthenticatedApp() {
       {tab === 'costing' ? (
         <CostingScreen initialSub={(sub as 'summary' | 'electricity') || 'summary'} />
       ) : null}
+      {tab === 'beam-remaining' ? <BeamRemainingReport /> : null}
     </AppShell>
   )
 }
