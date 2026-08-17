@@ -10,7 +10,7 @@ export type AppScreen =
   | 'admin'
   | 'costing'
 
-export type PurchaseSub = 'weft' | 'beam_out' | 'beam_in' | 'warp'
+export type PurchaseSub = 'general' | 'weft' | 'maint_in' | 'repair_inv' | 'report'
 export type ProductionSub = 'job' | 'entry' | 'report'
 export type MaintenanceSub = 'request' | 'repair'
 export type DispatchSub = 'folding' | 'challan' | 'gatepass'

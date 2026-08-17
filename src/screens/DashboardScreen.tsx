@@ -35,6 +35,7 @@ type Flow = {
   production: number
   folding: number
   dispatch: number
+  inwardSpend: number
 }
 
 export function DashboardScreen({ onNavigate }: Props) {
@@ -59,6 +60,7 @@ export function DashboardScreen({ onNavigate }: Props) {
     production: 0,
     folding: 0,
     dispatch: 0,
+    inwardSpend: 0,
   })
   const [beams, setBeams] = useState<BeamPipeStock[]>([])
   const [yarns, setYarns] = useState<WeftYarnStock[]>([])
@@ -82,6 +84,9 @@ export function DashboardScreen({ onNavigate }: Props) {
       gp,
       warpIn,
       weftBuy,
+      generalBuy,
+      maintIn,
+      repairInv,
     ] = await Promise.all([
       supabase.from('attendance').select('id, status').eq('date', today),
       supabase.from('beam_pipe_stock').select('*'),
@@ -94,7 +99,10 @@ export function DashboardScreen({ onNavigate }: Props) {
       supabase.from('job_cards').select('id, dno, created_at'),
       supabase.from('gatepass').select('id', { count: 'exact', head: true }).or('driver_signed.eq.false,received_signed.eq.false'),
       supabase.from('warp_yarn_inward').select('qty_kg').gte('created_at', `${today}T00:00:00`).lte('created_at', `${today}T23:59:59`),
-      supabase.from('weft_purchases').select('weight_kg').gte('created_at', `${today}T00:00:00`).lte('created_at', `${today}T23:59:59`),
+      supabase.from('weft_purchases').select('weight_kg, grand_total').gte('created_at', `${today}T00:00:00`).lte('created_at', `${today}T23:59:59`),
+      supabase.from('general_purchases').select('grand_total').gte('created_at', `${today}T00:00:00`).lte('created_at', `${today}T23:59:59`),
+      supabase.from('maintenance_inward').select('grand_total').gte('created_at', `${today}T00:00:00`).lte('created_at', `${today}T23:59:59`),
+      supabase.from('maintenance_repair_invoices').select('grand_total').gte('created_at', `${today}T00:00:00`).lte('created_at', `${today}T23:59:59`),
     ])
 
     const present = (att.data ?? []).filter((a) => {
@@ -154,6 +162,11 @@ export function DashboardScreen({ onNavigate }: Props) {
       production: greige,
       folding: (fold.data ?? []).reduce((s, r) => s + Number(r.meter_folded || 0), 0),
       dispatch: dispatchM,
+      inwardSpend:
+        (weftBuy.data ?? []).reduce((s, r) => s + Number(r.grand_total || 0), 0) +
+        (generalBuy.data ?? []).reduce((s, r) => s + Number(r.grand_total || 0), 0) +
+        (maintIn.data ?? []).reduce((s, r) => s + Number(r.grand_total || 0), 0) +
+        (repairInv.data ?? []).reduce((s, r) => s + Number(r.grand_total || 0), 0),
     })
   }, [today])
 
@@ -277,10 +290,10 @@ export function DashboardScreen({ onNavigate }: Props) {
 
   const quick: Array<{ label: string; screen: AppScreen; sub?: string }> = [
     { label: 'Attendance', screen: 'attendance' },
-    { label: 'Inward', screen: 'purchase', sub: 'warp' },
-    { label: 'Yarn Purchase', screen: 'purchase', sub: 'weft' },
-    { label: 'Warp→Beam', screen: 'purchase', sub: 'beam_out' },
-    { label: 'Weft Issue', screen: 'purchase', sub: 'weft' },
+    { label: 'General Buy', screen: 'purchase', sub: 'general' },
+    { label: 'Weft Purchase', screen: 'purchase', sub: 'weft' },
+    { label: 'Maint Inward', screen: 'purchase', sub: 'maint_in' },
+    { label: 'Purchase Report', screen: 'purchase', sub: 'report' },
     { label: 'Production', screen: 'production', sub: 'entry' },
     { label: 'Folding', screen: 'dispatch', sub: 'folding' },
     { label: 'Challan', screen: 'dispatch', sub: 'challan' },
@@ -335,7 +348,7 @@ export function DashboardScreen({ onNavigate }: Props) {
       <div className="list">
         {(
           [
-            [`Beam Return Pending (${alerts.beamPending})`, { screen: 'purchase' as AppScreen, sub: 'beam_out', filter: 'pending' }],
+            [`Beam Return Pending (${alerts.beamPending})`, { screen: 'purchase' as AppScreen, sub: 'report', filter: 'pending' }],
             [`Weft Low Stock <${WEFT_LOW_STOCK_KG}kg (${alerts.weftLow})`, { screen: 'stock' as AppScreen }],
             [`Repair Out Pending (${alerts.repairOut})`, { screen: 'maintenance' as AppScreen, sub: 'repair' }],
             [`Program Pending (${alerts.programPending})`, { screen: 'production' as AppScreen, sub: 'job' }],
@@ -357,8 +370,9 @@ export function DashboardScreen({ onNavigate }: Props) {
       <div className="flow-row">
         {(
           [
-            ['Warp Issue', `${flow.warpIn.toFixed(1)} kg`],
-            ['Weft Issue', `${flow.weftBuy.toFixed(1)} kg`],
+            ['Warp Inward', `${flow.warpIn.toFixed(1)} kg`],
+            ['Weft Buy', `${flow.weftBuy.toFixed(1)} kg`],
+            ['Inward ₹', `₹${flow.inwardSpend.toFixed(0)}`],
             ['Production', `${flow.production.toFixed(1)} m`],
             ['Folding', `${flow.folding.toFixed(1)} m`],
             ['Dispatch', `${flow.dispatch.toFixed(1)} m`],

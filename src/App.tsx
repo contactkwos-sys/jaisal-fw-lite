@@ -56,7 +56,7 @@ function AppShell() {
         {tab === 'stock' ? <StockScreen /> : null}
         {tab === 'design' ? <DesignScreen /> : null}
         {tab === 'purchase' ? (
-          <PurchaseScreen initialSub={(sub as 'weft' | 'beam_out' | 'beam_in' | 'warp') || 'weft'} />
+          <PurchaseScreen initialSub={sub || 'general'} />
         ) : null}
         {tab === 'production' ? (
           <ProductionScreen

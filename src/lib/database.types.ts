@@ -107,9 +107,62 @@ export type WeftPurchase = {
   weight_kg: number
   rate: number
   supplier: string | null
+  party_name?: string | null
+  challan_no?: string | null
+  gst_pct?: number
+  subtotal?: number
+  grand_total?: number
+  purchase_date?: string | null
   input_mode: string
   photo_url: string | null
   barcode: string | null
+  created_at: string
+}
+
+export type WeftPurchaseItem = {
+  id: string
+  purchase_id: string
+  quality: string | null
+  weight_kg: number
+  rate: number
+  amount: number
+}
+
+export type GeneralPurchase = {
+  id: string
+  purchase_date: string
+  party_name: string | null
+  challan_no: string | null
+  gst_pct: number
+  subtotal: number
+  grand_total: number
+  photo_url: string | null
+  input_mode?: string
+  created_at: string
+}
+
+export type MaintenanceInward = {
+  id: string
+  inward_date: string
+  party_name: string | null
+  challan_no: string | null
+  gst_pct: number
+  subtotal: number
+  grand_total: number
+  photo_url: string | null
+  created_at: string
+}
+
+export type MaintenanceRepairInvoice = {
+  id: string
+  invoice_date: string
+  vendor_name: string | null
+  invoice_no: string | null
+  repairing_tracker_id: string | null
+  repair_cost: number
+  gst_pct: number
+  grand_total: number
+  photo_url: string | null
   created_at: string
 }
 

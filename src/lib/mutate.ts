@@ -36,6 +36,16 @@ export async function uploadFactoryPhoto(file: File, folder: string): Promise<st
   return data.publicUrl
 }
 
+/** Purchase / inward challan photos → purchase-photos bucket. */
+export async function uploadPurchasePhoto(file: File, folder: string): Promise<string> {
+  const ext = file.name.split('.').pop() || 'jpg'
+  const path = `${folder}/${Date.now()}-${crypto.randomUUID()}.${ext}`
+  const { error } = await supabase.storage.from('purchase-photos').upload(path, file, { upsert: false })
+  if (error) throw error
+  const { data } = supabase.storage.from('purchase-photos').getPublicUrl(path)
+  return data.publicUrl
+}
+
 export function todayISO() {
   return new Date().toISOString().slice(0, 10)
 }

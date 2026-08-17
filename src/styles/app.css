@@ -472,6 +472,19 @@
   gap: 0.75rem;
 }
 
+.pin-bulk-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.pin-bulk-list li {
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
 .report-section h2 {
   font-size: 1rem;
   margin: 0.75rem 0 0.4rem;

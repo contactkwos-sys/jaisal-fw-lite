@@ -28,6 +28,7 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
   const [roles, setRoles] = useState<Role[]>([])
   const [newPin, setNewPin] = useState<Record<string, string>>({})
   const [editName, setEditName] = useState<Record<string, string>>({})
+  const [bulkPins, setBulkPins] = useState<Array<{ role: string; pin: string }> | null>(null)
 
   const [rates, setRates] = useState<PayrollRate[]>([])
   const [rateDraft, setRateDraft] = useState<Record<string, string>>({})
@@ -135,6 +136,58 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
       setNewPin((p) => ({ ...p, [role.id]: '' }))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'PIN reset failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function autoGenerateAllPins() {
+    if (!isCeo) {
+      setError('CEO only')
+      return
+    }
+    if (!roles.length) {
+      setError('No roles loaded')
+      return
+    }
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    setBulkPins(null)
+    try {
+      const ordered = [...roles].sort((a, b) => {
+        const ta = a.created_at || ''
+        const tb = b.created_at || ''
+        if (ta !== tb) return ta < tb ? -1 : 1
+        return a.role_name.localeCompare(b.role_name)
+      })
+
+      const assigned: Array<{ role: string; pin: string }> = []
+      let seq = 1
+      for (const role of ordered) {
+        const isCeoRole = role.role_name.toLowerCase() === 'ceo'
+        let pin: string
+        if (isCeoRole) {
+          pin = '3060'
+        } else if (seq <= 9) {
+          pin = `${seq}${seq}${seq}${seq}`
+          seq += 1
+        } else {
+          pin = String(1000 + seq).slice(-4)
+          seq += 1
+        }
+
+        const { data, error: fnErr } = await supabase.functions.invoke('pin-reset', {
+          body: { role_id: role.id, role_name: role.role_name, pin },
+        })
+        if (fnErr) throw fnErr
+        if (data?.error) throw new Error(data.error)
+        assigned.push({ role: role.role_name, pin })
+      }
+      setBulkPins(assigned)
+      setMessage(`Auto-generated PINs for ${assigned.length} roles`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Bulk PIN generation failed')
     } finally {
       setBusy(false)
     }
@@ -274,6 +327,34 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
 
       {sub === 'roles' ? (
         <div className="list">
+          {isCeo ? (
+            <div className="form-stack">
+              <button
+                type="button"
+                className="primary-save"
+                disabled={busy}
+                onClick={() => void autoGenerateAllPins()}
+              >
+                Auto-Generate All PINs
+              </button>
+              {bulkPins ? (
+                <article className="card-row surface form-stack">
+                  <strong>Assigned PINs — note & share</strong>
+                  <ul className="pin-bulk-list">
+                    {bulkPins.map((row) => (
+                      <li key={row.role} className="row-top">
+                        <span>{row.role}</span>
+                        <strong className="num text-weft">{row.pin}</strong>
+                      </li>
+                    ))}
+                  </ul>
+                  <button type="button" className="btn-ghost" onClick={() => setBulkPins(null)}>
+                    Dismiss
+                  </button>
+                </article>
+              ) : null}
+            </div>
+          ) : null}
           {roles.map((role) => (
             <article key={role.id} className="card-row surface form-stack">
               <div className="row-top">

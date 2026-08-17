@@ -7,15 +7,34 @@ type Props = {
   onChange: (m: Mode) => void
   onBarcode?: (code: string) => void
   onPhoto?: (file: File) => void
+  /** Defaults to scan / manual / photo. Purchase forms can pass manual + photo only. */
+  modes?: Mode[]
   children: ReactNode
 }
 
+const LABELS: Record<Mode, string> = {
+  scan: 'Scan',
+  manual: 'Manual',
+  photo: 'Photo',
+}
+
 /** Input mode toggle: Scan (BarcodeDetector / manual fallback), Manual, Photo. */
-export function InputModePanel({ value, onChange, onBarcode, onPhoto, children }: Props) {
+export function InputModePanel({
+  value,
+  onChange,
+  onBarcode,
+  onPhoto,
+  modes = ['scan', 'manual', 'photo'],
+  children,
+}: Props) {
   const [scanError, setScanError] = useState<string | null>(null)
   const [manualCode, setManualCode] = useState('')
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
+
+  useEffect(() => {
+    if (!modes.includes(value) && modes[0]) onChange(modes[0])
+  }, [modes, value, onChange])
 
   useEffect(() => {
     let cancelled = false
@@ -76,14 +95,14 @@ export function InputModePanel({ value, onChange, onBarcode, onPhoto, children }
   return (
     <div className="input-mode-panel">
       <div className="segment">
-        {(['scan', 'manual', 'photo'] as const).map((m) => (
+        {modes.map((m) => (
           <button
             key={m}
             type="button"
             className={value === m ? 'seg active' : 'seg'}
             onClick={() => onChange(m)}
           >
-            {m === 'scan' ? 'Scan' : m === 'manual' ? 'Manual' : 'Photo'}
+            {LABELS[m]}
           </button>
         ))}
       </div>

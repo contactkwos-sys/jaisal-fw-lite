@@ -21,12 +21,17 @@ function emptyTimes(): Pick<RowState, 'in_time' | 'break_out' | 'break_in' | 'ou
   return { in_time: '', break_out: '', break_in: '', out_time: '', status: 'Absent' }
 }
 
+const DEPT_SUGGESTIONS = ['Weaving', 'Folding', 'Security', 'Maintenance', 'Office', 'Other']
+
 export function AttendanceScreen() {
   const [date, setDate] = useState(todayISO)
   const [rows, setRows] = useState<RowState[]>([])
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [showAdd, setShowAdd] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newDept, setNewDept] = useState('')
 
   const load = useCallback(async () => {
     setError(null)
@@ -91,6 +96,40 @@ export function AttendanceScreen() {
     )
   }
 
+  async function handleAddWorker(e: { preventDefault: () => void }) {
+    e.preventDefault()
+    const full_name = newName.trim()
+    if (!full_name) {
+      setError('Full name required')
+      return
+    }
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const { data, error: iErr } = await supabase
+        .from('workers')
+        .insert({
+          full_name,
+          department: newDept.trim() || null,
+          is_active: true,
+        })
+        .select('*')
+        .single()
+      if (iErr) throw iErr
+      const worker = data as Worker
+      setRows((prev) => [...prev, { worker, attendanceId: null, ...emptyTimes() }])
+      setNewName('')
+      setNewDept('')
+      setShowAdd(false)
+      setMessage(`${worker.full_name} added — fill attendance below`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Add worker failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function handleSave() {
     setBusy(true)
     setMessage(null)
@@ -134,7 +173,46 @@ export function AttendanceScreen() {
           <span className="text-muted">Date</span>
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </label>
+        <button
+          type="button"
+          className="btn-ghost"
+          onClick={() => setShowAdd((v) => !v)}
+        >
+          {showAdd ? 'Cancel' : '+ Add Worker'}
+        </button>
       </header>
+
+      {showAdd ? (
+        <form className="form-stack surface card-row" onSubmit={(e) => void handleAddWorker(e)}>
+          <label className="field">
+            <span className="text-muted">Full Name</span>
+            <input
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              required
+              placeholder="Worker name"
+              autoFocus
+            />
+          </label>
+          <label className="field">
+            <span className="text-muted">Department</span>
+            <input
+              list="dept-list"
+              value={newDept}
+              onChange={(e) => setNewDept(e.target.value)}
+              placeholder="e.g. Weaving"
+            />
+            <datalist id="dept-list">
+              {DEPT_SUGGESTIONS.map((d) => (
+                <option key={d} value={d} />
+              ))}
+            </datalist>
+          </label>
+          <button type="submit" className="primary-save" disabled={busy || !newName.trim()}>
+            Save Worker
+          </button>
+        </form>
+      ) : null}
 
       <div className="list">
         {rows.map((row) => (
