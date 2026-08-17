@@ -152,7 +152,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(null)
   }, [])
 
-  const isCeo = profile?.roles?.role_name === 'CEO'
+  const roleName = profile?.roles?.role_name || ''
+  const isCeo =
+    roleName === 'CEO' ||
+    (!roleName && (profile?.full_name === 'CEO' || profile?.full_name?.toLowerCase() === 'ceo'))
+
 
   return (
     <AuthContext.Provider
