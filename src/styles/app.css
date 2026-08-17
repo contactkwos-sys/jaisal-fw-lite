@@ -1003,3 +1003,157 @@ body.drawer-open {
     grid-column: 1 / -1;
   }
 }
+
+/* Beam Remaining Report */
+.beam-remaining-screen {
+  display: grid;
+  gap: 1rem;
+}
+
+.beam-load-panel {
+  padding: 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+}
+
+.beam-load-panel .form-stack {
+  margin-top: 0.75rem;
+}
+
+.beam-remain-table tbody tr.beam-row-urgent {
+  background: rgba(201, 106, 90, 0.18);
+}
+
+.beam-remain-table tbody tr.beam-row-warn {
+  background: rgba(217, 164, 65, 0.14);
+}
+
+.beam-remain-table tfoot .beam-total-row td {
+  border-top: 1px solid var(--line);
+  padding-top: 0.75rem;
+}
+
+/* Design Master register (cleaned Design & Job Card) */
+.design-register-screen {
+  display: grid;
+  gap: 1rem;
+}
+
+.design-register-form {
+  padding: 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  gap: 0.75rem;
+}
+
+.design-register-preview {
+  display: grid;
+  gap: 0.5rem;
+  justify-items: start;
+}
+
+.design-register-preview img {
+  max-width: min(280px, 100%);
+  max-height: 220px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+}
+
+.design-register-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.design-register-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.design-register-card-main {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.design-register-thumb {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+}
+
+.design-register-thumb.empty {
+  display: inline-block;
+}
+
+.dwc-cost-badge {
+  display: inline-flex;
+  margin-top: 0.25rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid rgba(217, 164, 65, 0.45);
+  color: var(--weft);
+  background: rgba(217, 164, 65, 0.12);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+/* Design image crop modal */
+.design-crop-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 0.75rem;
+}
+
+.design-crop-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.design-crop-panel {
+  position: relative;
+  z-index: 1;
+  width: min(720px, 100%);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.85rem;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.design-crop-head {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.design-crop-stage {
+  position: relative;
+  width: 100%;
+  height: min(55vh, 420px);
+  background: #0d0f12;
+  border-radius: 8px;
+  overflow: hidden;
+  touch-action: none;
+}
+
+.design-crop-zoom input[type='range'] {
+  width: 100%;
+}
+
+.design-crop-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  justify-content: flex-end;
+}

@@ -33,6 +33,11 @@ async function hashPin(pin: string): Promise<string> {
   return `pbkdf2$sha256$${iterations}$${bytesToB64(salt.buffer)}$${bytesToB64(bits)}`
 }
 
+/** Supabase Auth rejects short passwords; double the 4-digit PIN for auth only. */
+function authPasswordFromPin(pin: string): string {
+  return `${pin}${pin}`
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -75,8 +80,17 @@ Deno.serve(async (req) => {
       })
     }
 
-    const pin_hash = await hashPin(String(pin))
+    const displayPin = String(pin)
+    const authPassword = authPasswordFromPin(displayPin)
+    const pin_hash = await hashPin(displayPin)
     const displayName = full_name || roleName || 'User'
+    const meta = {
+      role_id: roleId,
+      role_name: roleName,
+      full_name: displayName,
+      pin_hash,
+      pin_hint: displayPin,
+    }
 
     // Update existing public.users for role, else create auth user + row
     const { data: existing } = await admin
@@ -90,31 +104,32 @@ Deno.serve(async (req) => {
       const { error: uErr } = await admin.from('users').update({ pin_hash }).eq('id', existing.id)
       if (uErr) throw uErr
       await admin.auth.admin.updateUserById(existing.id, {
-        user_metadata: { role_id: roleId, role_name: roleName, full_name: displayName, pin_hash },
+        password: authPassword,
+        user_metadata: meta,
       })
-      return new Response(JSON.stringify({ ok: true, user_id: existing.id }), {
+      return new Response(JSON.stringify({ ok: true, user_id: existing.id, pin_hint: displayPin }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
     const email = `${String(roleName).toLowerCase().replace(/[^a-z0-9]+/g, '.')}@jaisal.local`
-    const password = crypto.randomUUID()
     const { data: created, error: cErr } = await admin.auth.admin.createUser({
       email,
-      password,
+      password: authPassword,
       email_confirm: true,
-      user_metadata: { role_id: roleId, role_name: roleName, full_name: displayName, pin_hash },
+      user_metadata: meta,
     })
     if (cErr) {
       // Maybe auth user already exists — find by metadata
       const { data: listed } = await admin.auth.admin.listUsers({ perPage: 200 })
       const match = (listed?.users || []).find((u) => {
-        const meta = (u.user_metadata || {}) as Record<string, string>
-        return meta.role_id === roleId || meta.role_name === roleName
+        const m = (u.user_metadata || {}) as Record<string, string>
+        return m.role_id === roleId || m.role_name === roleName
       })
       if (!match) throw cErr
       await admin.auth.admin.updateUserById(match.id, {
-        user_metadata: { role_id: roleId, role_name: roleName, full_name: displayName, pin_hash },
+        password: authPassword,
+        user_metadata: meta,
       })
       await admin.from('users').upsert({
         id: match.id,
@@ -123,7 +138,7 @@ Deno.serve(async (req) => {
         pin_hash,
         is_active: true,
       })
-      return new Response(JSON.stringify({ ok: true, user_id: match.id }), {
+      return new Response(JSON.stringify({ ok: true, user_id: match.id, pin_hint: displayPin }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
@@ -137,7 +152,7 @@ Deno.serve(async (req) => {
       is_active: true,
     })
 
-    return new Response(JSON.stringify({ ok: true, user_id: userId }), {
+    return new Response(JSON.stringify({ ok: true, user_id: userId, pin_hint: displayPin }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (err) {

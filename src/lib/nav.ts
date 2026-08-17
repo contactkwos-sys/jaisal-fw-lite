@@ -16,6 +16,8 @@ export type AppScreen =
   | 'parties'
   | 'sample-job-card'
   | 'sample-register'
+  | 'beam-remaining'
+  | 'design-wise-costing'
 
 export type PurchaseSub = 'general' | 'weft' | 'maint_in' | 'repair_inv' | 'report'
 export type ProductionSub = 'job' | 'entry' | 'report'
@@ -61,6 +63,8 @@ export type NavItemId =
   | 'payroll'
   | 'sample-job-card'
   | 'sample-register'
+  | 'beam-remaining'
+  | 'design-wise-costing'
 
 export type NavItem = {
   id: NavItemId
@@ -86,6 +90,7 @@ export const PRIMARY_NAV: NavItem[] = [
   { id: 'dispatch', label: 'Dispatch & Gate Pass', screen: 'dispatch', sub: 'challan' },
   { id: 'design', label: 'Design & Job Card', screen: 'design' },
   { id: 'sample-job-card', label: 'Sample Job Card', screen: 'sample-job-card' },
+  { id: 'design-wise-costing', label: 'Design Wise Costing', screen: 'design-wise-costing' },
   { id: 'broadcast', label: 'Design Broadcast', screen: 'broadcast' },
   { id: 'security-gate', label: 'Security Gate', screen: 'security', sub: 'inward' },
 ]
@@ -96,6 +101,7 @@ export const ADMIN_NAV: NavItem[] = [
   { id: 'stock-reports', label: 'Stock Reports', screen: 'purchase', sub: 'report' },
   { id: 'reports', label: 'Reports', screen: 'production', sub: 'report' },
   { id: 'sample-register', label: 'Sample Register', screen: 'sample-register' },
+  { id: 'beam-remaining', label: 'Beam Remaining', screen: 'beam-remaining' },
   { id: 'party-report', label: 'Party Delivery Report', screen: 'orders', sub: 'report' },
   { id: 'costing', label: 'Costing', screen: 'costing', ceoOnly: true },
   { id: 'admin-master', label: 'Admin Master', screen: 'admin', sub: 'roles' },
@@ -120,6 +126,8 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   parties: 'Party Master',
   'sample-job-card': 'Sample Job Card',
   'sample-register': 'Sample Register',
+  'beam-remaining': 'Beam Remaining Report',
+  'design-wise-costing': 'Design Wise Costing',
 }
 
 /** Resolve which nav row is highlighted for the current screen/sub. */
