@@ -938,3 +938,68 @@ body.drawer-open {
     padding: 0;
   }
 }
+
+.broadcast-preview {
+  border-radius: 8px;
+  overflow: hidden;
+  max-width: 420px;
+}
+
+.broadcast-preview img {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  background: var(--surface2);
+}
+
+.broadcast-caption {
+  width: 100%;
+  background: var(--surface2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.55rem 0.7rem;
+  font: inherit;
+  resize: vertical;
+}
+
+.broadcast-share-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.broadcast-share-btn {
+  flex: 1 1 10rem;
+  min-height: 2.75rem;
+}
+
+.broadcast-share-business {
+  outline: 1px dashed color-mix(in srgb, var(--wa) 55%, var(--line));
+}
+
+.party-bulk-textarea {
+  width: 100%;
+  background: var(--surface2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.65rem 0.75rem;
+  font: inherit;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.design-costing-header .btn-wa {
+  margin-top: 0.65rem;
+}
+
+@media (min-width: 1024px) {
+  .form-stack > .broadcast-preview,
+  .form-stack > .broadcast-share-row,
+  .form-stack > .broadcast-caption,
+  .form-stack > textarea {
+    grid-column: 1 / -1;
+  }
+}

@@ -17,7 +17,8 @@ Design tokens: [`styles/theme.css`](styles/theme.css) (imported via [`styles/bas
    - `supabase/migrations/20260817000100_design_warp_weft_costing.sql` (Design Master structured costing)
    - `supabase/migrations/20260817000200_purchase_inward_rebuild.sql` (Purchase & Inward rebuild)
    - `supabase/migrations/20260817000300_order_program_dispatch.sql` (Order Book → Program → Job Card → Dispatch)
-   - Mobile helpers: `public/migration.sql`, `public/migration-phases-2-8.sql`, `public/migration-design-costing.sql`, `public/migration-purchase-inward.sql`, `public/migration-order-program.sql`, `public/grants.sql`
+   - `supabase/migrations/20260817000400_design_broadcast_party_master.sql` (Design Broadcast + Party Master)
+   - Mobile helpers: `public/migration.sql`, `public/migration-phases-2-8.sql`, `public/migration-design-costing.sql`, `public/migration-purchase-inward.sql`, `public/migration-order-program.sql`, `public/migration-design-broadcast-party.sql`, `public/grants.sql`
 3. Deploy edge functions with **`verify_jwt = false`** (see list below).
 4. Run `supabase/seed.sql` (or create matching `auth.users` + `public.users`). Demo PIN: `1234`.
 5. `npm install` && `npm run dev`

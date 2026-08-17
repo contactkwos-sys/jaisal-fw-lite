@@ -284,6 +284,21 @@ export type AdjustmentNote = {
   created_at: string
 }
 
+export type DesignBroadcast = {
+  id: string
+  design_id: string | null
+  main_photo_url: string | null
+  colour_chart_url: string | null
+  caption: string | null
+  created_at: string
+}
+
+export type PartyMaster = {
+  id: string
+  party_name: string
+  created_at: string
+}
+
 export type MaintenanceRequest = {
   id: string
   machine_no: string

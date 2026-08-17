@@ -59,11 +59,13 @@ export function OrderBookScreen({ initialSub }: Props) {
   }, [initialSub])
 
   const loadParties = useCallback(async () => {
-    const [{ data: orders }, { data: challans }] = await Promise.all([
+    const [{ data: master }, { data: orders }, { data: challans }] = await Promise.all([
+      supabase.from('party_master').select('party_name').order('party_name').limit(500),
       supabase.from('order_book').select('party_name').order('created_at', { ascending: false }).limit(200),
       supabase.from('challans').select('party').order('created_at', { ascending: false }).limit(100),
     ])
     const set = new Set<string>()
+    for (const p of master ?? []) if (p.party_name) set.add(String(p.party_name))
     for (const o of orders ?? []) if (o.party_name) set.add(String(o.party_name))
     for (const c of challans ?? []) if (c.party) set.add(String(c.party))
     setParties([...set].sort((a, b) => a.localeCompare(b)))
