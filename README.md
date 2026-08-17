@@ -57,6 +57,8 @@ Also mirrored under `public/functions/` for copy/paste deploy.
 
 - Migration `20260817000300_order_program_dispatch.sql` applied on live project `doitrzsyvcipugmrzykx` (tables `order_book`, `order_book_items`, `programs`, `program_petty`, `adjustment_notes` + job/challan/program columns)
 - Screens: Order Book (+ Party Delivery Report + Adjust), Program Card / Pending Tracker, Job Card Issue (A4 2×2 print), Security Gate consolidated logs, Dispatch links job/program and completes on dual-signed gatepass
+- Merged via PR https://github.com/contactkwos-sys/jaisal-fw-lite/pull/11 (`a5aaa3b`); Netlify live `index-CivxuqZv.js`
+- API smoke `node scripts/order-flow-api-smoke.mjs`: order → program → job → dispatch complete → 3 adjustments **PASS**
 
 
 ## Screens by phase
