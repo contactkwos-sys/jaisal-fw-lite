@@ -12,6 +12,8 @@ export type AppScreen =
   | 'orders'
   | 'programs'
   | 'security'
+  | 'broadcast'
+  | 'parties'
 
 export type PurchaseSub = 'general' | 'weft' | 'maint_in' | 'repair_inv' | 'report'
 export type ProductionSub = 'job' | 'entry' | 'report'
@@ -38,6 +40,7 @@ export type NavItemId =
   | 'warp-beam'
   | 'weft-issue'
   | 'order-book'
+  | 'party-master'
   | 'program'
   | 'program-pending'
   | 'production'
@@ -45,6 +48,7 @@ export type NavItemId =
   | 'folding'
   | 'dispatch'
   | 'design'
+  | 'broadcast'
   | 'security-gate'
   | 'maintenance'
   | 'stock-reports'
@@ -66,6 +70,7 @@ export const PRIMARY_NAV: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', screen: 'home', ceoOnly: true },
   { id: 'attendance', label: 'Attendance', screen: 'attendance' },
   { id: 'order-book', label: 'Order Book', screen: 'orders', sub: 'entry' },
+  { id: 'party-master', label: 'Party Master', screen: 'parties' },
   { id: 'inward', label: 'Inward', screen: 'purchase', sub: 'general' },
   { id: 'yarn', label: 'Yarn Management', screen: 'stock', sub: 'weft' },
   { id: 'warp-beam', label: 'Warp Beam', screen: 'stock', sub: 'beam' },
@@ -76,6 +81,7 @@ export const PRIMARY_NAV: NavItem[] = [
   { id: 'folding', label: 'Folding', screen: 'dispatch', sub: 'folding' },
   { id: 'dispatch', label: 'Dispatch & Gate Pass', screen: 'dispatch', sub: 'challan' },
   { id: 'design', label: 'Design & Job Card', screen: 'design' },
+  { id: 'broadcast', label: 'Design Broadcast', screen: 'broadcast' },
   { id: 'security-gate', label: 'Security Gate', screen: 'security', sub: 'inward' },
 ]
 
@@ -104,6 +110,8 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   orders: 'Order Book',
   programs: 'Program',
   security: 'Security Gate',
+  broadcast: 'Design Broadcast',
+  parties: 'Party Master',
 }
 
 /** Resolve which nav row is highlighted for the current screen/sub. */

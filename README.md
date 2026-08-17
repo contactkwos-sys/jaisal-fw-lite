@@ -17,7 +17,8 @@ Design tokens: [`styles/theme.css`](styles/theme.css) (imported via [`styles/bas
    - `supabase/migrations/20260817000100_design_warp_weft_costing.sql` (Design Master structured costing)
    - `supabase/migrations/20260817000200_purchase_inward_rebuild.sql` (Purchase & Inward rebuild)
    - `supabase/migrations/20260817000300_order_program_dispatch.sql` (Order Book → Program → Job Card → Dispatch)
-   - Mobile helpers: `public/migration.sql`, `public/migration-phases-2-8.sql`, `public/migration-design-costing.sql`, `public/migration-purchase-inward.sql`, `public/migration-order-program.sql`, `public/grants.sql`
+   - `supabase/migrations/20260817000400_design_broadcast_party_master.sql` (Design Broadcast + Party Master)
+   - Mobile helpers: `public/migration.sql`, `public/migration-phases-2-8.sql`, `public/migration-design-costing.sql`, `public/migration-purchase-inward.sql`, `public/migration-order-program.sql`, `public/migration-design-broadcast-party.sql`, `public/grants.sql`
 3. Deploy edge functions with **`verify_jwt = false`** (see list below).
 4. Run `supabase/seed.sql` (or create matching `auth.users` + `public.users`). Demo PIN: `1234`.
 5. `npm install` && `npm run dev`
@@ -60,6 +61,12 @@ Also mirrored under `public/functions/` for copy/paste deploy.
 - Merged via PR https://github.com/contactkwos-sys/jaisal-fw-lite/pull/11 (`a5aaa3b`); Netlify live `index-CivxuqZv.js`
 - API smoke `node scripts/order-flow-api-smoke.mjs`: order → program → job → dispatch complete → 3 adjustments **PASS**
 
+## Deploy confirmation (Design Broadcast + Party Master)
+
+- Migration `20260817000400_design_broadcast_party_master.sql` applied on live project (`design_broadcasts`, `party_master`)
+- Design Broadcast: select design, main + colour-chart uploads to `design-images`, WhatsApp / WhatsApp Business via Web Share API
+- Party Master: bulk paste + single add; Order Book party field suggests from `party_master`
+
 
 ## Screens by phase
 
@@ -75,6 +82,7 @@ Also mirrored under `public/functions/` for copy/paste deploy.
 | 8 | Built | Daily Costing, Electricity Entry, Expense vs Billing / Profit |
 | 9 | Not built | OCR / image-reading to auto-extract Design No. and Pick count from uploaded design photos |
 | 10 | Built | Order Book → Program → Job Card Issue → Dispatch completion + Party-wise Delivery Report + Adjust |
+| 11 | Built | Design Broadcast (2 photos + Web Share) + Party Master bulk-add |
 
 CEO login lands on **Home** dashboard. Other roles land on Attendance (Phase 1 behaviour). Navigation uses a shared `AppShell`: mobile (<1024px) left drawer with hamburger; desktop/iPad (≥1024px) fixed left sidebar (never collapsed).
 

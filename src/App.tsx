@@ -6,11 +6,13 @@ import { AdminScreen } from './screens/AdminScreen'
 import { AttendanceScreen } from './screens/AttendanceScreen'
 import { CostingScreen } from './screens/CostingScreen'
 import { DashboardScreen } from './screens/DashboardScreen'
+import { DesignBroadcastScreen } from './screens/DesignBroadcastScreen'
 import { DesignScreen } from './screens/DesignScreen'
 import { DispatchScreen } from './screens/DispatchScreen'
 import { LoginScreen } from './screens/LoginScreen'
 import { MaintenanceScreen } from './screens/MaintenanceScreen'
 import { OrderBookScreen } from './screens/OrderBookScreen'
+import { PartyMasterScreen } from './screens/PartyMasterScreen'
 import { ProductionScreen } from './screens/ProductionScreen'
 import { ProgramScreen } from './screens/ProgramScreen'
 import { PurchaseScreen } from './screens/PurchaseScreen'
@@ -65,7 +67,11 @@ function AuthenticatedApp() {
           onTabChange={(t) => setSub(t)}
         />
       ) : null}
-      {tab === 'design' ? <DesignScreen /> : null}
+      {tab === 'design' ? (
+        <DesignScreen onBroadcast={() => go('broadcast')} />
+      ) : null}
+      {tab === 'broadcast' ? <DesignBroadcastScreen initialDesignId={filter} /> : null}
+      {tab === 'parties' ? <PartyMasterScreen /> : null}
       {tab === 'purchase' ? (
         <PurchaseScreen initialSub={sub || 'general'} />
       ) : null}

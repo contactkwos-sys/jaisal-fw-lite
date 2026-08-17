@@ -77,7 +77,7 @@ async function suggestWeftRate(itemColour: string): Promise<number | null> {
   return Number(row.rate)
 }
 
-export function DesignScreen() {
+export function DesignScreen({ onBroadcast }: { onBroadcast?: () => void }) {
   const { profile } = useAuth()
   const [dno, setDno] = useState('')
   const [designDate, setDesignDate] = useState(todayISO())
@@ -275,6 +275,11 @@ export function DesignScreen() {
       <header className="screen-header design-costing-header">
         <h1>Design Master</h1>
         <p className="text-muted design-costing-sub">Factory costing register</p>
+        {onBroadcast ? (
+          <button type="button" className="btn-wa" onClick={() => onBroadcast()}>
+            Broadcast
+          </button>
+        ) : null}
       </header>
 
       <div className="design-costing-card">
