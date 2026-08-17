@@ -60,7 +60,7 @@ Also mirrored under `public/functions/` for copy/paste deploy.
 | 8 | Built | Daily Costing, Electricity Entry, Expense vs Billing / Profit |
 | 9 | Not built | OCR / image-reading to auto-extract Design No. and Pick count from uploaded design photos |
 
-CEO login lands on **Home** dashboard. Other roles land on Attendance (Phase 1 behaviour). Bottom nav is scrollable and grows with modules.
+CEO login lands on **Home** dashboard. Other roles land on Attendance (Phase 1 behaviour). Navigation uses a shared `AppShell`: mobile (<1024px) left drawer with hamburger; desktop/iPad (≥1024px) fixed left sidebar (never collapsed).
 
 ## Design Master costing (live)
 

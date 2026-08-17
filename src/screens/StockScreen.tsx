@@ -5,10 +5,23 @@ import type { BeamPipeStock, WeftYarnStock } from '../lib/database.types'
 import { supabase } from '../lib/supabase'
 
 type Tab = 'beam' | 'weft'
+type Props = {
+  initialTab?: Tab
+  onTabChange?: (tab: Tab) => void
+}
 
-export function StockScreen() {
+export function StockScreen({ initialTab = 'beam', onTabChange }: Props) {
   const { isCeo, profile } = useAuth()
-  const [tab, setTab] = useState<Tab>('beam')
+  const [tab, setTab] = useState<Tab>(initialTab)
+
+  useEffect(() => {
+    if (initialTab) setTab(initialTab)
+  }, [initialTab])
+
+  function selectTab(next: Tab) {
+    setTab(next)
+    onTabChange?.(next)
+  }
   const [beams, setBeams] = useState<BeamPipeStock[]>([])
   const [yarns, setYarns] = useState<WeftYarnStock[]>([])
   const [message, setMessage] = useState<string | null>(null)
@@ -204,14 +217,14 @@ export function StockScreen() {
           <button
             type="button"
             className={tab === 'beam' ? 'seg active' : 'seg'}
-            onClick={() => setTab('beam')}
+            onClick={() => selectTab('beam')}
           >
             Beam Pipe
           </button>
           <button
             type="button"
             className={tab === 'weft' ? 'seg active' : 'seg'}
-            onClick={() => setTab('weft')}
+            onClick={() => selectTab('weft')}
           >
             Weft Yarn
           </button>

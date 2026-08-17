@@ -38,6 +38,20 @@ type Flow = {
   inwardSpend: number
 }
 
+type InwardRow = {
+  id: string
+  type: string
+  party: string
+  amount: number
+  when: string
+}
+
+type MachineRow = {
+  machine: string
+  meters: number
+  entries: number
+}
+
 export function DashboardScreen({ onNavigate }: Props) {
   const { isCeo, profile } = useAuth()
   const [kpis, setKpis] = useState<Kpis>({
@@ -64,6 +78,8 @@ export function DashboardScreen({ onNavigate }: Props) {
   })
   const [beams, setBeams] = useState<BeamPipeStock[]>([])
   const [yarns, setYarns] = useState<WeftYarnStock[]>([])
+  const [recentInward, setRecentInward] = useState<InwardRow[]>([])
+  const [topMachines, setTopMachines] = useState<MachineRow[]>([])
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -87,6 +103,10 @@ export function DashboardScreen({ onNavigate }: Props) {
       generalBuy,
       maintIn,
       repairInv,
+      recentGeneral,
+      recentWeft,
+      recentMaint,
+      prodByMachine,
     ] = await Promise.all([
       supabase.from('attendance').select('id, status').eq('date', today),
       supabase.from('beam_pipe_stock').select('*'),
@@ -103,6 +123,25 @@ export function DashboardScreen({ onNavigate }: Props) {
       supabase.from('general_purchases').select('grand_total').gte('created_at', `${today}T00:00:00`).lte('created_at', `${today}T23:59:59`),
       supabase.from('maintenance_inward').select('grand_total').gte('created_at', `${today}T00:00:00`).lte('created_at', `${today}T23:59:59`),
       supabase.from('maintenance_repair_invoices').select('grand_total').gte('created_at', `${today}T00:00:00`).lte('created_at', `${today}T23:59:59`),
+      supabase
+        .from('general_purchases')
+        .select('id, party_name, grand_total, created_at')
+        .order('created_at', { ascending: false })
+        .limit(6),
+      supabase
+        .from('weft_purchases')
+        .select('id, party_name, supplier, grand_total, created_at')
+        .order('created_at', { ascending: false })
+        .limit(6),
+      supabase
+        .from('maintenance_inward')
+        .select('id, party_name, grand_total, created_at')
+        .order('created_at', { ascending: false })
+        .limit(6),
+      supabase
+        .from('production_entries')
+        .select('machine_no, total_meter')
+        .eq('entry_date', today),
     ])
 
     const present = (att.data ?? []).filter((a) => {
@@ -168,6 +207,45 @@ export function DashboardScreen({ onNavigate }: Props) {
         (maintIn.data ?? []).reduce((s, r) => s + Number(r.grand_total || 0), 0) +
         (repairInv.data ?? []).reduce((s, r) => s + Number(r.grand_total || 0), 0),
     })
+
+    const inwardRows: InwardRow[] = [
+      ...(recentGeneral.data ?? []).map((r) => ({
+        id: String(r.id),
+        type: 'General',
+        party: String(r.party_name || '—'),
+        amount: Number(r.grand_total || 0),
+        when: String(r.created_at || ''),
+      })),
+      ...(recentWeft.data ?? []).map((r) => ({
+        id: String(r.id),
+        type: 'Weft',
+        party: String(r.party_name || r.supplier || '—'),
+        amount: Number(r.grand_total || 0),
+        when: String(r.created_at || ''),
+      })),
+      ...(recentMaint.data ?? []).map((r) => ({
+        id: String(r.id),
+        type: 'Maint',
+        party: String(r.party_name || '—'),
+        amount: Number(r.grand_total || 0),
+        when: String(r.created_at || ''),
+      })),
+    ]
+      .sort((a, b) => (a.when < b.when ? 1 : -1))
+      .slice(0, 6)
+    setRecentInward(inwardRows)
+
+    const machineMap = new Map<string, MachineRow>()
+    for (const row of prodByMachine.data ?? []) {
+      const machine = String(row.machine_no || '—')
+      const prev = machineMap.get(machine) || { machine, meters: 0, entries: 0 }
+      prev.meters += Number(row.total_meter || 0)
+      prev.entries += 1
+      machineMap.set(machine, prev)
+    }
+    setTopMachines(
+      [...machineMap.values()].sort((a, b) => b.meters - a.meters).slice(0, 6),
+    )
   }, [today])
 
   useEffect(() => {
@@ -290,30 +368,39 @@ export function DashboardScreen({ onNavigate }: Props) {
 
   const quick: Array<{ label: string; screen: AppScreen; sub?: string }> = [
     { label: 'Attendance', screen: 'attendance' },
-    { label: 'General Buy', screen: 'purchase', sub: 'general' },
-    { label: 'Weft Purchase', screen: 'purchase', sub: 'weft' },
-    { label: 'Maint Inward', screen: 'purchase', sub: 'maint_in' },
-    { label: 'Purchase Report', screen: 'purchase', sub: 'report' },
+    { label: 'Inward', screen: 'purchase', sub: 'general' },
+    { label: 'Weft Issue', screen: 'purchase', sub: 'weft' },
     { label: 'Production', screen: 'production', sub: 'entry' },
     { label: 'Folding', screen: 'dispatch', sub: 'folding' },
-    { label: 'Challan', screen: 'dispatch', sub: 'challan' },
-    { label: 'Reports', screen: 'production', sub: 'report' },
-    { label: 'Costing', screen: 'costing' },
+    { label: 'Dispatch', screen: 'dispatch', sub: 'challan' },
   ]
 
-  return (
-    <div className="screen">
-      <header className="screen-header">
-        <h1>CEO Dashboard</h1>
-        <p className="text-muted">Live floor snapshot · {today}</p>
-      </header>
+  const alertRows = (
+    [
+      [`Beam Return Pending (${alerts.beamPending})`, { screen: 'purchase' as AppScreen, sub: 'report', filter: 'pending' }],
+      [`Weft Low Stock <${WEFT_LOW_STOCK_KG}kg (${alerts.weftLow})`, { screen: 'stock' as AppScreen, sub: 'weft' }],
+      [`Repair Out Pending (${alerts.repairOut})`, { screen: 'maintenance' as AppScreen, sub: 'repair' }],
+      [`Program Pending (${alerts.programPending})`, { screen: 'production' as AppScreen, sub: 'job' }],
+      [`Gatepass Pending Sign (${alerts.gatepassPending})`, { screen: 'dispatch' as AppScreen, sub: 'gatepass' }],
+    ] as const
+  ).filter((row) => !row[0].includes('(0)'))
 
-      <section className="kpi-grid">
+  const flowSteps = [
+    ['Warp Issue', `${flow.warpIn.toFixed(1)} kg`],
+    ['Weft Issue', `${flow.weftBuy.toFixed(1)} kg`],
+    ['Production', `${flow.production.toFixed(1)} m`],
+    ['Folding', `${flow.folding.toFixed(1)} m`],
+    ['Dispatch', `${flow.dispatch.toFixed(1)} m`],
+  ] as const
+
+  return (
+    <div className="screen dashboard-screen">
+      <section className="kpi-grid kpi-grid-5">
         {(
           [
             ['Attendance Today', kpis.attendanceToday, { screen: 'attendance' as AppScreen }],
-            ['Warp Beam Stock', kpis.warpBeamStock, { screen: 'stock' as AppScreen }],
-            ['Weft Yarn Stock', `${kpis.weftYarnStock.toFixed(1)} kg`, { screen: 'stock' as AppScreen }],
+            ['Warp Beam Stock', kpis.warpBeamStock, { screen: 'stock' as AppScreen, sub: 'beam' }],
+            ['Weft Yarn Stock', `${kpis.weftYarnStock.toFixed(1)} kg`, { screen: 'stock' as AppScreen, sub: 'weft' }],
             ['Greige / Prod Today', `${kpis.greigeToday.toFixed(1)} m`, { screen: 'production' as AppScreen, sub: 'report' }],
             ['Dispatch Today', `${kpis.dispatchToday.toFixed(1)} m`, { screen: 'dispatch' as AppScreen, sub: 'challan' }],
           ] as const
@@ -330,63 +417,123 @@ export function DashboardScreen({ onNavigate }: Props) {
         ))}
       </section>
 
-      <h2 className="section-title">Quick Access</h2>
-      <div className="quick-grid">
-        {quick.map((q) => (
-          <button
-            key={q.label}
-            type="button"
-            className="quick-tile surface2"
-            onClick={() => onNavigate({ screen: q.screen, sub: q.sub })}
-          >
-            {q.label}
-          </button>
-        ))}
-      </div>
-
-      <h2 className="section-title">Alerts & Reminders</h2>
-      <div className="list">
-        {(
-          [
-            [`Beam Return Pending (${alerts.beamPending})`, { screen: 'purchase' as AppScreen, sub: 'report', filter: 'pending' }],
-            [`Weft Low Stock <${WEFT_LOW_STOCK_KG}kg (${alerts.weftLow})`, { screen: 'stock' as AppScreen }],
-            [`Repair Out Pending (${alerts.repairOut})`, { screen: 'maintenance' as AppScreen, sub: 'repair' }],
-            [`Program Pending (${alerts.programPending})`, { screen: 'production' as AppScreen, sub: 'job' }],
-            [`Gatepass Pending Sign (${alerts.gatepassPending})`, { screen: 'dispatch' as AppScreen, sub: 'gatepass' }],
-          ] as const
-        )
-          .filter((row) => !row[0].includes('(0)'))
-          .map(([label, nav]) => (
-            <button key={label} type="button" className="alert-row surface" onClick={() => onNavigate(nav)}>
-              {label}
-            </button>
-          ))}
-        {!alerts.beamPending && !alerts.weftLow && !alerts.repairOut && !alerts.programPending && !alerts.gatepassPending ? (
-          <p className="text-sage">No alerts</p>
-        ) : null}
-      </div>
-
-      <h2 className="section-title">Today Summary Flow</h2>
-      <div className="flow-row">
-        {(
-          [
-            ['Warp Inward', `${flow.warpIn.toFixed(1)} kg`],
-            ['Weft Buy', `${flow.weftBuy.toFixed(1)} kg`],
-            ['Inward ₹', `₹${flow.inwardSpend.toFixed(0)}`],
-            ['Production', `${flow.production.toFixed(1)} m`],
-            ['Folding', `${flow.folding.toFixed(1)} m`],
-            ['Dispatch', `${flow.dispatch.toFixed(1)} m`],
-          ] as const
-        ).map(([label, val]) => (
-          <div key={label} className="flow-card surface2">
-            <span className="text-muted2">{label}</span>
-            <strong className="num">{val}</strong>
+      <div className="dash-split">
+        <section className="dash-panel">
+          <h2 className="section-title">Quick Access</h2>
+          <div className="quick-grid quick-grid-6">
+            {quick.map((q) => (
+              <button
+                key={q.label}
+                type="button"
+                className="quick-tile surface2"
+                onClick={() => onNavigate({ screen: q.screen, sub: q.sub })}
+              >
+                {q.label}
+              </button>
+            ))}
           </div>
-        ))}
+        </section>
+
+        <section className="dash-panel">
+          <h2 className="section-title">Alerts & Reminders</h2>
+          <div className="list alert-list">
+            {alertRows.map(([label, nav]) => (
+              <button key={label} type="button" className="alert-row surface" onClick={() => onNavigate(nav)}>
+                {label}
+              </button>
+            ))}
+            {alertRows.length === 0 ? <p className="text-sage">No alerts</p> : null}
+          </div>
+        </section>
+      </div>
+
+      <section>
+        <h2 className="section-title">Today&apos;s Summary Flow</h2>
+        <div className="flow-row flow-row-h">
+          {flowSteps.map(([label, val], idx) => (
+            <div key={label} className="flow-step">
+              <div className="flow-card surface2">
+                <span className="text-muted2">{label}</span>
+                <strong className="num">{val}</strong>
+              </div>
+              {idx < flowSteps.length - 1 ? (
+                <span className="flow-arrow" aria-hidden="true">
+                  →
+                </span>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div className="dash-split dash-split-tables">
+        <section className="dash-panel dash-panel-wide">
+          <h2 className="section-title">Recent Inward</h2>
+          <div className="dash-table-wrap surface">
+            <table className="dash-table">
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Party</th>
+                  <th className="num">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentInward.length === 0 ? (
+                  <tr>
+                    <td colSpan={3} className="text-muted">
+                      No recent inward
+                    </td>
+                  </tr>
+                ) : (
+                  recentInward.map((row) => (
+                    <tr key={`${row.type}-${row.id}`}>
+                      <td>{row.type}</td>
+                      <td>{row.party}</td>
+                      <td className="num">₹{row.amount.toFixed(0)}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="dash-panel">
+          <h2 className="section-title">Top Machines</h2>
+          <div className="dash-table-wrap surface">
+            <table className="dash-table">
+              <thead>
+                <tr>
+                  <th>Machine</th>
+                  <th className="num">Meters</th>
+                  <th className="num">Entries</th>
+                </tr>
+              </thead>
+              <tbody>
+                {topMachines.length === 0 ? (
+                  <tr>
+                    <td colSpan={3} className="text-muted">
+                      No production today
+                    </td>
+                  </tr>
+                ) : (
+                  topMachines.map((row) => (
+                    <tr key={row.machine}>
+                      <td>{row.machine}</td>
+                      <td className="num">{row.meters.toFixed(1)}</td>
+                      <td className="num">{row.entries}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
       </div>
 
       {isCeo ? (
-        <>
+        <section className="dash-stock-edit">
           <h2 className="section-title">Stock Summary (inline edit)</h2>
           <div className="list">
             {beams.map((b) => (
@@ -414,7 +561,7 @@ export function DashboardScreen({ onNavigate }: Props) {
               </article>
             ))}
           </div>
-        </>
+        </section>
       ) : null}
 
       {error ? <p className="form-error text-danger">{error}</p> : null}
