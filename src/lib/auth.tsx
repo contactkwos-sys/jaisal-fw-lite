@@ -152,10 +152,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(null)
   }, [])
 
-  const roleName = profile?.roles?.role_name || ''
+  const roleName =
+    profile?.roles?.role_name ||
+    (session?.user?.user_metadata as { role_name?: string } | undefined)?.role_name ||
+    ''
   const isCeo =
     roleName === 'CEO' ||
-    (!roleName && (profile?.full_name === 'CEO' || profile?.full_name?.toLowerCase() === 'ceo'))
+    profile?.full_name === 'CEO' ||
+    (session?.user?.user_metadata as { full_name?: string } | undefined)?.full_name === 'CEO'
 
 
   return (
