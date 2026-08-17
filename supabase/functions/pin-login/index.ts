@@ -164,6 +164,31 @@ Deno.serve(async (req) => {
       })
     }
 
+    const sessionUser = {
+      id: user.id,
+      full_name: user.full_name,
+      role_id: user.role_id,
+    }
+
+    // Prefer password session using doubled PIN (Auth min length); UI still uses 4-digit PIN.
+    const authPassword = `${String(pin)}${String(pin)}`
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY') || serviceKey
+    const passwordClient = createClient(supabaseUrl, anonKey)
+    const { data: pwSession, error: pwErr } = await passwordClient.auth.signInWithPassword({
+      email: authUser.user.email,
+      password: authPassword,
+    })
+    if (!pwErr && pwSession.session) {
+      return new Response(
+        JSON.stringify({
+          access_token: pwSession.session.access_token,
+          refresh_token: pwSession.session.refresh_token,
+          user: sessionUser,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
+    }
+
     const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
       type: 'magiclink',
       email: authUser.user.email,
@@ -191,11 +216,7 @@ Deno.serve(async (req) => {
       JSON.stringify({
         access_token: sessionData.session?.access_token,
         refresh_token: sessionData.session?.refresh_token,
-        user: {
-          id: user.id,
-          full_name: user.full_name,
-          role_id: user.role_id,
-        },
+        user: sessionUser,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     )

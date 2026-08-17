@@ -17,10 +17,23 @@ export function LoginScreen() {
   const [busy, setBusy] = useState(false)
 
   async function loadRoles() {
+    const { data: tableData, error: tableErr } = await supabase
+      .from('roles')
+      .select('id, role_name, is_custom, created_at')
+      .order('created_at', { ascending: true })
+    if (!tableErr && tableData?.length) {
+      setRoles(tableData as Role[])
+      if (!selectedId) {
+        const ceo = tableData.find((r) => r.role_name === 'CEO')
+        setSelectedId(ceo?.id ?? tableData[0].id)
+      }
+      return
+    }
+
     const { data, error: fnErr } = await supabase.functions.invoke('roles-gate', {
       body: { action: 'list' },
     })
-    if (fnErr) throw fnErr
+    if (fnErr) throw new Error(fnErr.message || tableErr?.message || 'Load failed')
     if (data?.error) throw new Error(data.error)
     const list = (data?.roles ?? []) as Role[]
     setRoles(list)

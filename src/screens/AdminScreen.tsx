@@ -38,12 +38,23 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
   const [queue, setQueue] = useState<ApprovalQueue[]>([])
 
   const loadRoles = useCallback(async () => {
-    const { data, error: fnErr } = await supabase.functions.invoke('roles-gate', {
+    // Prefer direct table read (authenticated RLS). Edge `roles-gate` can fail with
+    // browser "TypeError: Load failed" when the function gateway/network flakes.
+    const { data, error } = await supabase
+      .from('roles')
+      .select('id, role_name, is_custom, created_at')
+      .order('created_at', { ascending: true })
+    if (!error && data) {
+      setRoles(data as Role[])
+      return
+    }
+
+    const { data: fnData, error: fnErr } = await supabase.functions.invoke('roles-gate', {
       body: { action: 'list' },
     })
-    if (fnErr) throw fnErr
-    if (data?.error) throw new Error(data.error)
-    setRoles((data?.roles ?? []) as Role[])
+    if (fnErr) throw new Error(fnErr.message || error?.message || 'Load failed')
+    if (fnData?.error) throw new Error(fnData.error)
+    setRoles((fnData?.roles ?? []) as Role[])
   }, [])
 
   const loadPayroll = useCallback(async () => {
@@ -155,36 +166,37 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
     setMessage(null)
     setBulkPins(null)
     try {
-      const ordered = [...roles].sort((a, b) => {
-        const ta = a.created_at || ''
-        const tb = b.created_at || ''
-        if (ta !== tb) return ta < tb ? -1 : 1
-        return a.role_name.localeCompare(b.role_name)
-      })
+      // CEO first, then remaining roles in stable name order
+      const ceoRole = roles.find((r) => r.role_name.toLowerCase() === 'ceo')
+      const others = roles
+        .filter((r) => r.role_name.toLowerCase() !== 'ceo')
+        .sort((a, b) => a.role_name.localeCompare(b.role_name))
+      const ordered = ceoRole ? [ceoRole, ...others] : others
 
       const assigned: Array<{ role: string; pin: string }> = []
-      let seq = 1
+      const pinByRoleId: Record<string, string> = {}
+      let nextPin = 1001
       for (const role of ordered) {
         const isCeoRole = role.role_name.toLowerCase() === 'ceo'
+        // CEO fixed 3060; everyone else gets unique 4-digit sequential PINs (1001, 1002, …)
         let pin: string
         if (isCeoRole) {
           pin = '3060'
-        } else if (seq <= 9) {
-          pin = `${seq}${seq}${seq}${seq}`
-          seq += 1
         } else {
-          pin = String(1000 + seq).slice(-4)
-          seq += 1
+          pin = String(nextPin)
+          nextPin += 1
         }
 
         const { data, error: fnErr } = await supabase.functions.invoke('pin-reset', {
           body: { role_id: role.id, role_name: role.role_name, pin },
         })
-        if (fnErr) throw fnErr
+        if (fnErr) throw new Error(fnErr.message || 'PIN reset request failed')
         if (data?.error) throw new Error(data.error)
         assigned.push({ role: role.role_name, pin })
+        pinByRoleId[role.id] = pin
       }
       setBulkPins(assigned)
+      setNewPin((prev) => ({ ...prev, ...pinByRoleId }))
       setMessage(`Auto-generated PINs for ${assigned.length} roles`)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Bulk PIN generation failed')

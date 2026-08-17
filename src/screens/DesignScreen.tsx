@@ -210,6 +210,9 @@ export function DesignScreen({ onBroadcast }: { onBroadcast?: () => void }) {
         colour: warp.item_colour || wefts[0]?.item_colour || null,
         image_url,
         design_date: designDate,
+        cost_per_meter: summary.finalCostPerMeter,
+        matching_cost: summary.totalConversion,
+        total_cost: summary.finalCostPerMeter,
       }
 
       const warpPayload = {
@@ -536,6 +539,20 @@ export function DesignScreen({ onBroadcast }: { onBroadcast?: () => void }) {
             <div className="final-cost">
               <span>Final Cost / Meter</span>
               <strong className="num">₹{fmtQty(summary.finalCostPerMeter)}</strong>
+            </div>
+            <div className="summary-grid design-cost-persist">
+              <div className="summary-row field-auto">
+                <span>Cost / Meter</span>
+                <strong className="num">₹{fmtQty(summary.finalCostPerMeter)}</strong>
+              </div>
+              <div className="summary-row field-auto">
+                <span>Matching Cost</span>
+                <strong className="num">₹{fmtQty(summary.totalConversion)}</strong>
+              </div>
+              <div className="summary-row field-auto">
+                <span>Total Cost</span>
+                <strong className="num">₹{fmtQty(summary.finalCostPerMeter)}</strong>
+              </div>
             </div>
           </section>
 
