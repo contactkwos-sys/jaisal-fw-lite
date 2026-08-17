@@ -45,6 +45,12 @@ Also mirrored under `public/functions/` for copy/paste deploy.
 - Netlify production https://jaisal-fw-lite.netlify.app serving build with CEO Dashboard / Costing / Purchase modules
 - Edge functions `pin-reset` + updated `roles-gate` deployed via Supabase CLI (`verify_jwt=false`)
 
+## Deploy confirmation (responsive AppShell nav)
+
+- PR https://github.com/contactkwos-sys/jaisal-fw-lite/pull/8 merged to `main` (`58dd22b`)
+- Netlify production redeployed; live bundle includes `app-sidebar` / `1024px` breakpoint / `kpi-grid-5` (no bottom tabs)
+- Smoke test `node scripts/prod-nav-smoke.mjs`: **16/16 PASS** (mobile drawer + desktop fixed sidebar, CEO login PIN `1234`, dashboard KPIs/flow/tables, Production / Dispatch / Design reachable)
+
 
 ## Screens by phase
 
