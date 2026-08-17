@@ -9,6 +9,9 @@ export type AppScreen =
   | 'dispatch'
   | 'admin'
   | 'costing'
+  | 'orders'
+  | 'programs'
+  | 'security'
 
 export type PurchaseSub = 'general' | 'weft' | 'maint_in' | 'repair_inv' | 'report'
 export type ProductionSub = 'job' | 'entry' | 'report'
@@ -17,6 +20,9 @@ export type DispatchSub = 'folding' | 'challan' | 'gatepass'
 export type AdminSub = 'roles' | 'payroll' | 'approvals'
 export type CostingSub = 'summary' | 'electricity'
 export type StockSub = 'beam' | 'weft'
+export type OrdersSub = 'entry' | 'report'
+export type ProgramsSub = 'create' | 'pending'
+export type SecuritySub = 'inward' | 'maintenance' | 'dispatch'
 
 export type NavTarget = {
   screen: AppScreen
@@ -31,13 +37,19 @@ export type NavItemId =
   | 'yarn'
   | 'warp-beam'
   | 'weft-issue'
+  | 'order-book'
+  | 'program'
+  | 'program-pending'
   | 'production'
+  | 'job-card'
   | 'folding'
   | 'dispatch'
   | 'design'
+  | 'security-gate'
   | 'maintenance'
   | 'stock-reports'
   | 'reports'
+  | 'party-report'
   | 'costing'
   | 'admin-master'
   | 'payroll'
@@ -53,20 +65,26 @@ export type NavItem = {
 export const PRIMARY_NAV: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', screen: 'home', ceoOnly: true },
   { id: 'attendance', label: 'Attendance', screen: 'attendance' },
+  { id: 'order-book', label: 'Order Book', screen: 'orders', sub: 'entry' },
   { id: 'inward', label: 'Inward', screen: 'purchase', sub: 'general' },
   { id: 'yarn', label: 'Yarn Management', screen: 'stock', sub: 'weft' },
   { id: 'warp-beam', label: 'Warp Beam', screen: 'stock', sub: 'beam' },
   { id: 'weft-issue', label: 'Weft Issue', screen: 'purchase', sub: 'weft' },
+  { id: 'program', label: 'Program Card', screen: 'programs', sub: 'create' },
+  { id: 'job-card', label: 'Job Card Issue', screen: 'production', sub: 'job' },
   { id: 'production', label: 'Production', screen: 'production', sub: 'entry' },
   { id: 'folding', label: 'Folding', screen: 'dispatch', sub: 'folding' },
   { id: 'dispatch', label: 'Dispatch & Gate Pass', screen: 'dispatch', sub: 'challan' },
   { id: 'design', label: 'Design & Job Card', screen: 'design' },
+  { id: 'security-gate', label: 'Security Gate', screen: 'security', sub: 'inward' },
 ]
 
 export const ADMIN_NAV: NavItem[] = [
+  { id: 'program-pending', label: 'Program Pending', screen: 'programs', sub: 'pending' },
   { id: 'maintenance', label: 'Maintenance', screen: 'maintenance', sub: 'request' },
   { id: 'stock-reports', label: 'Stock Reports', screen: 'purchase', sub: 'report' },
   { id: 'reports', label: 'Reports', screen: 'production', sub: 'report' },
+  { id: 'party-report', label: 'Party Delivery Report', screen: 'orders', sub: 'report' },
   { id: 'costing', label: 'Costing', screen: 'costing', ceoOnly: true },
   { id: 'admin-master', label: 'Admin Master', screen: 'admin', sub: 'roles' },
   { id: 'payroll', label: 'Payroll', screen: 'admin', sub: 'payroll' },
@@ -83,13 +101,15 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   dispatch: 'Dispatch',
   admin: 'Admin',
   costing: 'Costing',
+  orders: 'Order Book',
+  programs: 'Program',
+  security: 'Security Gate',
 }
 
 /** Resolve which nav row is highlighted for the current screen/sub. */
 export function isNavItemActive(item: NavItem, screen: AppScreen, sub?: string): boolean {
   if (item.screen !== screen) return false
 
-  // Screens with competing nav rows need an exact sub match.
   if (screen === 'stock') {
     return (sub || 'beam') === (item.sub || 'beam')
   }
@@ -111,8 +131,18 @@ export function isNavItemActive(item: NavItem, screen: AppScreen, sub?: string):
   if (screen === 'production') {
     const current = sub || 'entry'
     if (item.sub === 'report') return current === 'report'
-    if (item.sub === 'entry') return current === 'entry' || current === 'job'
+    if (item.sub === 'job') return current === 'job'
+    if (item.sub === 'entry') return current === 'entry'
     return current === item.sub
+  }
+  if (screen === 'orders') {
+    return (sub || 'entry') === (item.sub || 'entry')
+  }
+  if (screen === 'programs') {
+    return (sub || 'create') === (item.sub || 'create')
+  }
+  if (screen === 'security') {
+    return (sub || 'inward') === (item.sub || 'inward')
   }
   if (screen === 'admin') {
     const current = sub || 'roles'
@@ -132,6 +162,11 @@ export function titleFor(screen: AppScreen, sub?: string): string {
   if (screen === 'dispatch' && sub === 'folding') return 'Folding'
   if (screen === 'dispatch') return 'Dispatch & Gate Pass'
   if (screen === 'production' && sub === 'report') return 'Reports'
+  if (screen === 'production' && sub === 'job') return 'Job Card Issue'
+  if (screen === 'orders' && sub === 'report') return 'Party Delivery Report'
+  if (screen === 'programs' && sub === 'pending') return 'Program Pending'
+  if (screen === 'programs') return 'Program Card'
+  if (screen === 'security') return 'Security Gate'
   if (screen === 'admin' && sub === 'payroll') return 'Payroll'
   if (screen === 'admin') return 'Admin Master'
   return PAGE_TITLES[screen]

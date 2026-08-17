@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ShareActions } from '../components/ShareActions'
 import { SubTabs } from '../components/SubTabs'
 import { useAuth } from '../lib/auth'
-import type { Challan, Gatepass } from '../lib/database.types'
+import type { Challan, Gatepass, JobCard } from '../lib/database.types'
 import { applyOrQueue, nextDocNo, todayISO } from '../lib/mutate'
+import { markProgramDispatched } from '../lib/programs'
 import { printSummary, rowsToHtml, shareWhatsApp } from '../lib/share'
 import { supabase } from '../lib/supabase'
 
@@ -28,6 +29,9 @@ export function DispatchScreen({ initialSub = 'folding' }: Props) {
   const [rate, setRate] = useState('')
   const [gstPct, setGstPct] = useState('5')
   const [challans, setChallans] = useState<Challan[]>([])
+  const [jobCards, setJobCards] = useState<JobCard[]>([])
+  const [linkJobCardId, setLinkJobCardId] = useState('')
+  const [linkProgramId, setLinkProgramId] = useState('')
 
   const [challanId, setChallanId] = useState('')
   const [tempo, setTempo] = useState('')
@@ -50,7 +54,7 @@ export function DispatchScreen({ initialSub = 'folding' }: Props) {
   }, [meter, rate, gstPct])
 
   const loadChallans = useCallback(async () => {
-    const [{ data: ch }, { data: gp }] = await Promise.all([
+    const [{ data: ch }, { data: gp }, { data: jobs }] = await Promise.all([
       supabase.from('challans').select('*').order('created_at', { ascending: false }).limit(50),
       supabase
         .from('gatepass')
@@ -58,9 +62,15 @@ export function DispatchScreen({ initialSub = 'folding' }: Props) {
         .or('driver_signed.eq.false,received_signed.eq.false')
         .order('created_at', { ascending: false })
         .limit(30),
+      supabase
+        .from('job_cards')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(50),
     ])
     setChallans((ch as Challan[]) ?? [])
     setPendingGp((gp as Gatepass[]) ?? [])
+    setJobCards((jobs as JobCard[]) ?? [])
     setChallanNo(nextDocNo('CH-', (ch ?? []).map((c) => c.challan_no)))
     setGpNo(nextDocNo('DG-', (gp ?? []).map((g) => g.gatepass_no ?? '')))
     if (!challanId && ch?.[0]) setChallanId(ch[0].id)
@@ -130,6 +140,7 @@ export function DispatchScreen({ initialSub = 'folding' }: Props) {
     setError(null)
     setMessage(null)
     try {
+      const linkedJob = jobCards.find((j) => j.id === linkJobCardId)
       const payload = {
         challan_no: challanNo,
         party: party.trim(),
@@ -137,6 +148,8 @@ export function DispatchScreen({ initialSub = 'folding' }: Props) {
         rolls: Number(challanRolls) || 0,
         rate: Number(rate) || 0,
         gst_pct: Number(gstPct) || 0,
+        program_id: linkProgramId || linkedJob?.program_id || null,
+        job_card_id: linkJobCardId || null,
       }
       const result = await applyOrQueue({
         isCeo,
@@ -155,6 +168,8 @@ export function DispatchScreen({ initialSub = 'folding' }: Props) {
       setMeter('')
       setChallanRolls('')
       setRate('')
+      setLinkJobCardId('')
+      setLinkProgramId('')
       await loadChallans()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed')
@@ -203,6 +218,14 @@ export function DispatchScreen({ initialSub = 'folding' }: Props) {
         apply: async () => {
           const { error: iErr } = await supabase.from('gatepass').insert(payload)
           if (iErr) throw iErr
+          const delivered =
+            Boolean(payload.driver_signed) && Boolean(payload.received_signed) && Boolean(challanId)
+          if (delivered) {
+            const ch = challans.find((c) => c.id === challanId)
+            if (ch?.program_id) {
+              await markProgramDispatched(ch.program_id, Number(ch.meter || 0))
+            }
+          }
         },
       })
       setMessage(result === 'applied' ? 'Gatepass saved' : 'Sent to approval queue')
@@ -264,6 +287,27 @@ export function DispatchScreen({ initialSub = 'folding' }: Props) {
           <label className="field">
             <span className="text-muted">Challan No</span>
             <input value={challanNo} onChange={(e) => setChallanNo(e.target.value)} required />
+          </label>
+          <label className="field">
+            <span className="text-muted">Link Job Card</span>
+            <select
+              value={linkJobCardId}
+              onChange={(e) => {
+                const id = e.target.value
+                setLinkJobCardId(id)
+                const job = jobCards.find((j) => j.id === id)
+                if (job?.program_id) setLinkProgramId(job.program_id)
+                if (job?.dno && !party) setParty(job.dno)
+                if (job?.total_meter != null && !meter) setMeter(String(job.total_meter))
+              }}
+            >
+              <option value="">—</option>
+              {jobCards.map((j) => (
+                <option key={j.id} value={j.id}>
+                  {j.job_card_no || j.id.slice(0, 8)} · {j.dno} · {j.machine_no}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="field">
             <span className="text-muted">Party / Marka</span>

@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ShareActions } from '../components/ShareActions'
 import { SubTabs } from '../components/SubTabs'
 import { useAuth } from '../lib/auth'
-import { MACHINES, type ProductionEntry } from '../lib/database.types'
-import { applyOrQueue, todayISO } from '../lib/mutate'
+import { MACHINES, type JobCard, type ProductionEntry } from '../lib/database.types'
+import { applyOrQueue, nextDocNo, todayISO } from '../lib/mutate'
+import { maybeCompleteProgramFromProduction, programTargetMeter } from '../lib/programs'
 import { printSummary, rowsToHtml, shareWhatsApp } from '../lib/share'
 import { supabase } from '../lib/supabase'
 
@@ -16,6 +17,15 @@ type ColourBlock = {
   fut_panel: string
 }
 
+type ProgramOpt = {
+  id: string
+  label: string
+  dno: string
+  colour: string
+  machine_no: string
+  total_meter: number
+}
+
 type Props = { initialSub?: Sub; filter?: string }
 
 export function ProductionScreen({ initialSub = 'job' }: Props) {
@@ -25,24 +35,29 @@ export function ProductionScreen({ initialSub = 'job' }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  // Job card
+  const [programOpts, setProgramOpts] = useState<ProgramOpt[]>([])
+  const [programId, setProgramId] = useState('')
+  const [jobCardNo, setJobCardNo] = useState('JC-0001')
+  const [printCards, setPrintCards] = useState<JobCard[]>([])
   const [dno, setDno] = useState('')
+  const [jobColour, setJobColour] = useState('')
+  const [jobTotalMeter, setJobTotalMeter] = useState('')
   const [colours, setColours] = useState<ColourBlock[]>([
     { colour: '', matching: '', pick: '', program_meter: '', fut_panel: '' },
   ])
   const [machine, setMachine] = useState<string>(MACHINES[0])
   const [operator, setOperator] = useState('')
   const [operators, setOperators] = useState<string[]>([])
+  const [manualMode, setManualMode] = useState(false)
 
-  // Machine entry
   const [entryMachine, setEntryMachine] = useState<string>(MACHINES[0])
   const [entryDate, setEntryDate] = useState(todayISO())
   const [shift, setShift] = useState<'Day' | 'Night'>('Day')
   const [entryOp, setEntryOp] = useState('')
   const [workingHour, setWorkingHour] = useState('12')
   const [totalMeter, setTotalMeter] = useState('')
+  const [entryProgramId, setEntryProgramId] = useState('')
 
-  // Daily report
   const [reportDate, setReportDate] = useState(todayISO())
   const [entries, setEntries] = useState<ProductionEntry[]>([])
 
@@ -53,6 +68,47 @@ export function ProductionScreen({ initialSub = 'job' }: Props) {
   const loadOps = useCallback(async () => {
     const { data } = await supabase.from('workers').select('full_name').eq('is_active', true)
     setOperators((data ?? []).map((w) => w.full_name))
+  }, [])
+
+  const loadPrograms = useCallback(async () => {
+    const { data: progs } = await supabase
+      .from('programs')
+      .select('id, machine_no, order_item_id, status')
+      .neq('status', 'completed')
+      .order('created_at', { ascending: false })
+      .limit(100)
+    const itemIds = [...new Set((progs ?? []).map((p) => p.order_item_id).filter(Boolean))] as string[]
+    const meta = new Map<string, { design_no: string; colour: string }>()
+    if (itemIds.length) {
+      const { data: items } = await supabase
+        .from('order_book_items')
+        .select('id, design_no, colour')
+        .in('id', itemIds)
+      for (const it of items ?? []) {
+        meta.set(it.id, { design_no: it.design_no || '—', colour: it.colour || '—' })
+      }
+    }
+    const opts: ProgramOpt[] = []
+    for (const p of progs ?? []) {
+      const m = p.order_item_id ? meta.get(p.order_item_id) : null
+      const target = await programTargetMeter(p.id)
+      opts.push({
+        id: p.id,
+        dno: m?.design_no || '—',
+        colour: m?.colour || '—',
+        machine_no: p.machine_no || MACHINES[0],
+        total_meter: target,
+        label: `${m?.design_no || '—'} · ${m?.colour || '—'} · ${p.machine_no || '—'} · ${target.toFixed(1)}m (${p.status})`,
+      })
+    }
+    setProgramOpts(opts)
+
+    const { data: jobs } = await supabase
+      .from('job_cards')
+      .select('job_card_no')
+      .order('created_at', { ascending: false })
+      .limit(200)
+    setJobCardNo(nextDocNo('JC-', (jobs ?? []).map((j) => j.job_card_no || '')))
   }, [])
 
   const loadReport = useCallback(async () => {
@@ -70,12 +126,35 @@ export function ProductionScreen({ initialSub = 'job' }: Props) {
   }, [loadOps])
 
   useEffect(() => {
+    if (sub === 'job' || sub === 'entry') void loadPrograms().catch((e: Error) => setError(e.message))
+  }, [sub, loadPrograms])
+
+  useEffect(() => {
     if (sub === 'report') void loadReport().catch((e: Error) => setError(e.message))
   }, [sub, loadReport])
 
   useEffect(() => {
     if (initialSub) setSub(initialSub)
   }, [initialSub])
+
+  useEffect(() => {
+    if (!programId || manualMode) return
+    const p = programOpts.find((x) => x.id === programId)
+    if (!p) return
+    setDno(p.dno)
+    setJobColour(p.colour)
+    setMachine(p.machine_no)
+    setJobTotalMeter(String(p.total_meter))
+    setColours([
+      {
+        colour: p.colour,
+        matching: '',
+        pick: '',
+        program_meter: String(p.total_meter),
+        fut_panel: '',
+      },
+    ])
+  }, [programId, programOpts, manualMode])
 
   const dayEntries = useMemo(() => entries.filter((e) => e.shift === 'Day'), [entries])
   const nightEntries = useMemo(() => entries.filter((e) => e.shift === 'Night'), [entries])
@@ -85,13 +164,48 @@ export function ProductionScreen({ initialSub = 'job' }: Props) {
   )
 
   function jobSummaryText() {
-    const lines = colours
+    return `Job Card ${jobCardNo}\nDno ${dno}\nMachine ${machine} · Colour ${jobColour}\nTotal ${jobTotalMeter}m · Op ${operator}`
+  }
+
+  function printJobSheet(cards: JobCard[]) {
+    const slots = [...cards]
+    while (slots.length < 4) {
+      slots.push({
+        id: `blank-${slots.length}`,
+        dno: '',
+        machine_no: null,
+        operator_name: null,
+        created_at: '',
+        program_id: null,
+        job_card_no: '',
+        issued_at: null,
+        colour: null,
+        total_meter: null,
+      })
+    }
+    const cells = slots
+      .slice(0, 4)
       .map(
-        (c, i) =>
-          `#${i + 1} ${c.colour} | match ${c.matching} | pick ${c.pick} | ${c.program_meter}m | ${c.fut_panel || '-'}`,
+        (c) => `<div class="jc">
+  <div class="jc-no">${c.job_card_no || '—'}</div>
+  <div><b>Dno</b> ${c.dno || '—'}</div>
+  <div><b>Machine</b> ${c.machine_no || '—'}</div>
+  <div><b>Colour</b> ${c.colour || '—'}</div>
+  <div><b>Total m</b> ${c.total_meter ?? '—'}</div>
+  <div><b>Op</b> ${c.operator_name || '—'}</div>
+</div>`,
       )
-      .join('\n')
-    return `Job Card Dno ${dno}\nMachine ${machine} · Op ${operator}\n${lines}`
+      .join('')
+    printSummary(
+      'Job Cards (A4 2×2)',
+      `<style>
+@page{size:A4;margin:12mm}
+.grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:10mm;height:260mm}
+.jc{border:1px solid #333;padding:10px;border-radius:4px;font-size:13px}
+.jc-no{font-size:16px;font-weight:700;margin-bottom:8px}
+@media print{body{padding:0}.grid{height:270mm}}
+</style><div class="grid">${cells}</div>`,
+    )
   }
 
   async function saveJob(e: React.FormEvent) {
@@ -101,7 +215,17 @@ export function ProductionScreen({ initialSub = 'job' }: Props) {
     setError(null)
     setMessage(null)
     try {
-      const payload = { dno: dno.trim(), machine_no: machine, operator_name: operator.trim() || null }
+      const payload = {
+        dno: dno.trim(),
+        machine_no: machine,
+        operator_name: operator.trim() || null,
+        program_id: programId || null,
+        job_card_no: jobCardNo,
+        colour: jobColour.trim() || colours[0]?.colour || null,
+        total_meter: Number(jobTotalMeter) || Number(colours[0]?.program_meter) || null,
+        issued_at: new Date().toISOString(),
+      }
+      let saved: JobCard | null = null
       const result = await applyOrQueue({
         isCeo,
         userId: profile.id,
@@ -113,9 +237,10 @@ export function ProductionScreen({ initialSub = 'job' }: Props) {
           const { data, error: iErr } = await supabase
             .from('job_cards')
             .insert(payload)
-            .select('id')
+            .select('*')
             .single()
           if (iErr) throw iErr
+          saved = data as JobCard
           const rows = colours
             .filter((c) => c.colour.trim())
             .map((c) => ({
@@ -130,10 +255,18 @@ export function ProductionScreen({ initialSub = 'job' }: Props) {
             const { error: cErr } = await supabase.from('job_card_colours').insert(rows)
             if (cErr) throw cErr
           }
+          if (programId) {
+            await supabase
+              .from('programs')
+              .update({ status: 'running' })
+              .eq('id', programId)
+              .eq('status', 'pending')
+          }
         },
       })
-      setMessage(result === 'applied' ? 'Job card saved' : 'Sent to approval queue')
-      setColours([{ colour: '', matching: '', pick: '', program_meter: '', fut_panel: '' }])
+      setMessage(result === 'applied' ? 'Job card issued' : 'Sent to approval queue')
+      if (saved) setPrintCards((prev) => [saved!, ...prev].slice(0, 4))
+      await loadPrograms()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed')
     } finally {
@@ -155,6 +288,7 @@ export function ProductionScreen({ initialSub = 'job' }: Props) {
         operator_name: entryOp.trim() || null,
         working_hour: wh,
         total_meter: Number(totalMeter) || 0,
+        program_id: entryProgramId || null,
       }
       const result = await applyOrQueue({
         isCeo,
@@ -166,6 +300,7 @@ export function ProductionScreen({ initialSub = 'job' }: Props) {
         apply: async () => {
           const { error: iErr } = await supabase.from('production_entries').insert(payload)
           if (iErr) throw iErr
+          if (entryProgramId) await maybeCompleteProgramFromProduction(entryProgramId)
         },
       })
       setMessage(result === 'applied' ? 'Production entry saved' : 'Sent to approval queue')
@@ -214,93 +349,142 @@ export function ProductionScreen({ initialSub = 'job' }: Props) {
 
       {sub === 'job' ? (
         <form className="form-stack" onSubmit={(e) => void saveJob(e)}>
+          <label className="check-row">
+            <input
+              type="checkbox"
+              checked={manualMode}
+              onChange={(e) => setManualMode(e.target.checked)}
+            />
+            Manual entry (no program link)
+          </label>
+          {!manualMode ? (
+            <label className="field">
+              <span className="text-muted">Program</span>
+              <select
+                value={programId}
+                onChange={(e) => setProgramId(e.target.value)}
+                required={!manualMode}
+              >
+                <option value="">Select program</option>
+                {programOpts.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          <label className="field">
+            <span className="text-muted">Job Card No.</span>
+            <input value={jobCardNo} onChange={(e) => setJobCardNo(e.target.value)} required />
+          </label>
           <label className="field">
             <span className="text-muted">Dno</span>
             <input value={dno} onChange={(e) => setDno(e.target.value)} required />
           </label>
-          {colours.map((c, idx) => (
-            <fieldset key={idx} className="colour-block surface">
-              <legend>Colour {idx + 1}</legend>
-              <label className="field">
-                <span className="text-muted">Colour</span>
-                <input
-                  value={c.colour}
-                  onChange={(e) => {
-                    const next = [...colours]
-                    next[idx] = { ...c, colour: e.target.value }
-                    setColours(next)
-                  }}
-                  required
-                />
-              </label>
-              <label className="field">
-                <span className="text-muted">Matching</span>
-                <input
-                  value={c.matching}
-                  onChange={(e) => {
-                    const next = [...colours]
-                    next[idx] = { ...c, matching: e.target.value }
-                    setColours(next)
-                  }}
-                />
-              </label>
-              <label className="field">
-                <span className="text-muted">Pick</span>
-                <input
-                  className="num"
-                  type="number"
-                  value={c.pick}
-                  onChange={(e) => {
-                    const next = [...colours]
-                    next[idx] = { ...c, pick: e.target.value }
-                    setColours(next)
-                  }}
-                />
-              </label>
-              <label className="field">
-                <span className="text-muted">Program Meter</span>
-                <input
-                  className="num"
-                  type="number"
-                  step="0.01"
-                  value={c.program_meter}
-                  onChange={(e) => {
-                    const next = [...colours]
-                    next[idx] = { ...c, program_meter: e.target.value }
-                    setColours(next)
-                  }}
-                />
-              </label>
-              <label className="field">
-                <span className="text-muted">Fut / Panel (optional)</span>
-                <input
-                  value={c.fut_panel}
-                  onChange={(e) => {
-                    const next = [...colours]
-                    next[idx] = { ...c, fut_panel: e.target.value }
-                    setColours(next)
-                  }}
-                />
-              </label>
-            </fieldset>
-          ))}
-          <button
-            type="button"
-            className="btn-warp"
-            onClick={() =>
-              setColours([
-                ...colours,
-                { colour: '', matching: '', pick: '', program_meter: '', fut_panel: '' },
-              ])
-            }
-          >
-            + Add Colour
-          </button>
+          <label className="field">
+            <span className="text-muted">Colour</span>
+            <input value={jobColour} onChange={(e) => setJobColour(e.target.value)} />
+          </label>
+          <label className="field">
+            <span className="text-muted">Total Meter</span>
+            <input
+              className="num"
+              type="number"
+              step="0.01"
+              value={jobTotalMeter}
+              onChange={(e) => setJobTotalMeter(e.target.value)}
+            />
+          </label>
+          {manualMode
+            ? colours.map((c, idx) => (
+                <fieldset key={idx} className="colour-block surface">
+                  <legend>Colour {idx + 1}</legend>
+                  <label className="field">
+                    <span className="text-muted">Colour</span>
+                    <input
+                      value={c.colour}
+                      onChange={(e) => {
+                        const next = [...colours]
+                        next[idx] = { ...c, colour: e.target.value }
+                        setColours(next)
+                      }}
+                      required
+                    />
+                  </label>
+                  <label className="field">
+                    <span className="text-muted">Matching</span>
+                    <input
+                      value={c.matching}
+                      onChange={(e) => {
+                        const next = [...colours]
+                        next[idx] = { ...c, matching: e.target.value }
+                        setColours(next)
+                      }}
+                    />
+                  </label>
+                  <label className="field">
+                    <span className="text-muted">Pick</span>
+                    <input
+                      className="num"
+                      type="number"
+                      value={c.pick}
+                      onChange={(e) => {
+                        const next = [...colours]
+                        next[idx] = { ...c, pick: e.target.value }
+                        setColours(next)
+                      }}
+                    />
+                  </label>
+                  <label className="field">
+                    <span className="text-muted">Program Meter</span>
+                    <input
+                      className="num"
+                      type="number"
+                      step="0.01"
+                      value={c.program_meter}
+                      onChange={(e) => {
+                        const next = [...colours]
+                        next[idx] = { ...c, program_meter: e.target.value }
+                        setColours(next)
+                      }}
+                    />
+                  </label>
+                  <label className="field">
+                    <span className="text-muted">Fut / Panel (optional)</span>
+                    <input
+                      value={c.fut_panel}
+                      onChange={(e) => {
+                        const next = [...colours]
+                        next[idx] = { ...c, fut_panel: e.target.value }
+                        setColours(next)
+                      }}
+                    />
+                  </label>
+                </fieldset>
+              ))
+            : null}
+          {manualMode ? (
+            <button
+              type="button"
+              className="btn-warp"
+              onClick={() =>
+                setColours([
+                  ...colours,
+                  { colour: '', matching: '', pick: '', program_meter: '', fut_panel: '' },
+                ])
+              }
+            >
+              + Add Colour
+            </button>
+          ) : null}
           <label className="field">
             <span className="text-muted">Machine</span>
             <select value={machine} onChange={(e) => setMachine(e.target.value)}>
               {MACHINES.map((m) => (
-                <option key={m} value={m}>{m}</option>
+                <option key={m} value={m}>
+                  {m}
+                </option>
               ))}
             </select>
           </label>
@@ -317,34 +501,70 @@ export function ProductionScreen({ initialSub = 'job' }: Props) {
             disabled={busy || !dno}
             onWhatsApp={() => shareWhatsApp(jobSummaryText())}
             onPrint={() =>
-              printSummary(
-                `Job Card ${dno}`,
-                rowsToHtml([
-                  ['Dno', dno],
-                  ['Machine', machine],
-                  ['Operator', operator],
-                  ...colours.flatMap((c, i) => [
-                    [`Colour ${i + 1}`, c.colour],
-                    ['Matching', c.matching],
-                    ['Pick', c.pick],
-                    ['Program m', c.program_meter],
-                    ['Fut/Panel', c.fut_panel],
-                  ] as Array<[string, string]>),
-                ]),
-              )
+              printCards.length
+                ? printJobSheet(printCards)
+                : printSummary(
+                    `Job Card ${jobCardNo}`,
+                    rowsToHtml([
+                      ['Job Card No', jobCardNo],
+                      ['Dno', dno],
+                      ['Machine', machine],
+                      ['Colour', jobColour],
+                      ['Total m', jobTotalMeter],
+                      ['Operator', operator],
+                    ]),
+                  )
             }
           />
-          <button type="submit" className="primary-save" disabled={busy}>Save Job Card</button>
+          <button type="submit" className="primary-save" disabled={busy}>
+            Issue Job Card
+          </button>
+
+          {printCards.length ? (
+            <section className="job-print-preview">
+              <h2 className="section-title">Print sheet (A4 2×2)</h2>
+              <div className="job-card-grid">
+                {[0, 1, 2, 3].map((i) => {
+                  const c = printCards[i]
+                  return (
+                    <article key={i} className="job-card-tile surface">
+                      <strong>{c?.job_card_no || '—'}</strong>
+                      <div className="text-muted">Dno {c?.dno || '—'}</div>
+                      <div className="text-muted">Machine {c?.machine_no || '—'}</div>
+                      <div className="text-muted">Colour {c?.colour || '—'}</div>
+                      <div className="num">{c?.total_meter ?? '—'} m</div>
+                    </article>
+                  )
+                })}
+              </div>
+              <button type="button" className="btn-warp" onClick={() => printJobSheet(printCards)}>
+                Print 2×2 sheet
+              </button>
+            </section>
+          ) : null}
         </form>
       ) : null}
 
       {sub === 'entry' ? (
         <form className="form-stack" onSubmit={(e) => void saveEntry(e)}>
           <label className="field">
+            <span className="text-muted">Link Program (optional)</span>
+            <select value={entryProgramId} onChange={(e) => setEntryProgramId(e.target.value)}>
+              <option value="">—</option>
+              {programOpts.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
             <span className="text-muted">Machine No</span>
             <select value={entryMachine} onChange={(e) => setEntryMachine(e.target.value)}>
               {MACHINES.map((m) => (
-                <option key={m} value={m}>{m}</option>
+                <option key={m} value={m}>
+                  {m}
+                </option>
               ))}
             </select>
           </label>
@@ -399,7 +619,9 @@ export function ProductionScreen({ initialSub = 'job' }: Props) {
               required
             />
           </label>
-          <button type="submit" className="primary-save" disabled={busy}>Save Entry</button>
+          <button type="submit" className="primary-save" disabled={busy}>
+            Save Entry
+          </button>
         </form>
       ) : null}
 
