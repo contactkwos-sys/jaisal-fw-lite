@@ -77,7 +77,13 @@ async function suggestWeftRate(itemColour: string): Promise<number | null> {
   return Number(row.rate)
 }
 
-export function DesignScreen({ onBroadcast }: { onBroadcast?: () => void }) {
+export function DesignScreen({
+  onBroadcast,
+  onOpenDesignCosting,
+}: {
+  onBroadcast?: () => void
+  onOpenDesignCosting?: (dno?: string) => void
+}) {
   const { profile } = useAuth()
   const [dno, setDno] = useState('')
   const [designDate, setDesignDate] = useState(todayISO())
@@ -89,6 +95,7 @@ export function DesignScreen({ onBroadcast }: { onBroadcast?: () => void }) {
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [savedFinalCost, setSavedFinalCost] = useState<number | null>(null)
 
   useEffect(() => {
     void (async () => {
@@ -108,6 +115,30 @@ export function DesignScreen({ onBroadcast }: { onBroadcast?: () => void }) {
       setDno(String(next))
     })()
   }, [])
+
+  useEffect(() => {
+    const trimmed = dno.trim()
+    if (!trimmed) {
+      setSavedFinalCost(null)
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      const { data } = await supabase
+        .from('design_costing')
+        .select('final_cost_per_mtr')
+        .eq('din_number', trimmed)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (!cancelled) {
+        setSavedFinalCost(data?.final_cost_per_mtr != null ? Number(data.final_cost_per_mtr) : null)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [dno])
 
   useEffect(() => {
     if (!imageFile) {
@@ -278,6 +309,18 @@ export function DesignScreen({ onBroadcast }: { onBroadcast?: () => void }) {
       <header className="screen-header design-costing-header">
         <h1>Design Master</h1>
         <p className="text-muted design-costing-sub">Factory costing register</p>
+        {savedFinalCost != null ? (
+          <span className="dwc-cost-badge">Final ₹{savedFinalCost.toFixed(2)}/mtr</span>
+        ) : null}
+        {onOpenDesignCosting ? (
+          <button
+            type="button"
+            className="btn-warp"
+            onClick={() => onOpenDesignCosting(dno.trim() || undefined)}
+          >
+            Design Wise Costing
+          </button>
+        ) : null}
         {onBroadcast ? (
           <button type="button" className="btn-wa" onClick={() => onBroadcast()}>
             Broadcast
