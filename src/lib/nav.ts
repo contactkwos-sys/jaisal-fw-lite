@@ -15,6 +15,7 @@ export type AppScreen =
   | 'broadcast'
   | 'parties'
   | 'beam-remaining'
+  | 'design-wise-costing'
 
 export type PurchaseSub = 'general' | 'weft' | 'maint_in' | 'repair_inv' | 'report'
 export type ProductionSub = 'job' | 'entry' | 'report'
@@ -59,6 +60,7 @@ export type NavItemId =
   | 'admin-master'
   | 'payroll'
   | 'beam-remaining'
+  | 'design-wise-costing'
 
 export type NavItem = {
   id: NavItemId
@@ -83,6 +85,7 @@ export const PRIMARY_NAV: NavItem[] = [
   { id: 'folding', label: 'Folding', screen: 'dispatch', sub: 'folding' },
   { id: 'dispatch', label: 'Dispatch & Gate Pass', screen: 'dispatch', sub: 'challan' },
   { id: 'design', label: 'Design & Job Card', screen: 'design' },
+  { id: 'design-wise-costing', label: 'Design Wise Costing', screen: 'design-wise-costing' },
   { id: 'broadcast', label: 'Design Broadcast', screen: 'broadcast' },
   { id: 'security-gate', label: 'Security Gate', screen: 'security', sub: 'inward' },
 ]
@@ -116,6 +119,7 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   broadcast: 'Design Broadcast',
   parties: 'Party Master',
   'beam-remaining': 'Beam Remaining Report',
+  'design-wise-costing': 'Design Wise Costing',
 }
 
 /** Resolve which nav row is highlighted for the current screen/sub. */
