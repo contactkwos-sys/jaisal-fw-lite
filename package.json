@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
+    "smoke:prod": "node scripts/prod-nav-smoke.mjs",
     "start": "node scripts/serve-app.mjs",
     "functions:local": "node scripts/local-functions-server.mjs"
   },
