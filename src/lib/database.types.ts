@@ -58,6 +58,9 @@ export type Design = {
   colour: string | null
   image_url: string | null
   design_date: string
+  cost_per_meter?: number | null
+  matching_cost?: number | null
+  total_cost?: number | null
   created_at: string
 }
 
