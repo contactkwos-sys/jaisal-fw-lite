@@ -57,10 +57,36 @@ export type Design = {
   dno: string
   colour: string | null
   image_url: string | null
-  warp_rate: number
-  weft_rate: number
-  selling_rate: number
-  conversion_charge: number
+  design_date: string
+  created_at: string
+}
+
+export type DesignWarp = {
+  id: string
+  design_id: string
+  item_colour: string | null
+  denier: number | null
+  tar: number | null
+  length: number | null
+  rate: number | null
+  weight_kg: number | null
+  amount: number | null
+  conversion_rate: number | null
+  created_at: string
+}
+
+export type DesignWeft = {
+  id: string
+  design_id: string
+  item_colour: string | null
+  denier: number | null
+  pic: number | null
+  width: number | null
+  length: number | null
+  rate: number | null
+  weight_kg: number | null
+  amount: number | null
+  conversion_rate: number | null
   created_at: string
 }
 

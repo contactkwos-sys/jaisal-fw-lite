@@ -1,0 +1,252 @@
+/* Design Master costing — light palette scoped to this screen only */
+
+.design-costing {
+  --bg: #f7f6f3;
+  --surface: #ffffff;
+  --red: #c1362b;
+  --red-soft: #f6e2df;
+  --blue: #4a7fc4;
+  --blue-soft: #eef3fb;
+  --text: #221f1c;
+  --muted: #75706a;
+  --sage: #3f7d52;
+  --line: #e4e0d8;
+
+  margin: -0.25rem -0.35rem;
+  padding: 0.75rem 0.5rem 1.5rem;
+  border-radius: 12px;
+  background:
+    radial-gradient(900px 320px at 0% 0%, rgba(193, 54, 43, 0.06), transparent 55%),
+    radial-gradient(700px 280px at 100% 10%, rgba(74, 127, 196, 0.08), transparent 50%),
+    var(--bg);
+  color: var(--text);
+}
+
+.design-costing .text-muted {
+  color: var(--muted);
+}
+
+.design-costing-header h1 {
+  color: var(--text);
+  margin-bottom: 0.15rem;
+}
+
+.design-costing-sub {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.design-costing-card,
+.design-section,
+.design-summary {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.design-costing .field {
+  display: grid;
+  gap: 0.3rem;
+  margin-bottom: 0.65rem;
+}
+
+.design-costing .field span {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.design-costing .field input {
+  width: 100%;
+  border-radius: 6px;
+  padding: 0.55rem 0.7rem;
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+}
+
+.design-costing .field-manual span {
+  color: var(--red);
+}
+
+.design-costing .field-manual input {
+  background: var(--red-soft);
+  border-color: color-mix(in srgb, var(--red) 45%, var(--line));
+}
+
+.design-costing .field-auto span {
+  color: var(--blue);
+}
+
+.design-costing .field-auto input,
+.design-costing .summary-row.field-auto {
+  background: var(--blue-soft);
+  border-color: color-mix(in srgb, var(--blue) 40%, var(--line));
+}
+
+.design-costing .field-auto input {
+  color: var(--blue);
+  font-weight: 600;
+}
+
+.design-costing-preview {
+  margin-top: 0.5rem;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  max-height: 220px;
+}
+
+.design-costing-preview img {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+  object-fit: cover;
+}
+
+.design-costing-hint {
+  margin: 0.5rem 0 0;
+  font-size: 0.92rem;
+}
+
+.design-section h2,
+.design-summary h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.section-note {
+  margin: 0.15rem 0 0.75rem;
+  font-size: 0.82rem;
+}
+
+.section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.design-row-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem 0.65rem;
+}
+
+@media (min-width: 640px) {
+  .design-row-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.design-weft-block {
+  border-top: 1px dashed var(--line);
+  padding-top: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+.weft-block-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.btn-add-weft,
+.btn-remove-weft,
+.btn-save-design {
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+}
+
+.btn-add-weft {
+  background: var(--red);
+  color: #fff;
+  padding: 0.45rem 0.85rem;
+  white-space: nowrap;
+}
+
+.btn-remove-weft {
+  background: transparent;
+  color: var(--red);
+  border: 1px solid color-mix(in srgb, var(--red) 40%, transparent);
+  padding: 0.3rem 0.65rem;
+  font-size: 0.85rem;
+}
+
+.btn-save-design {
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0.85rem 1rem;
+  background: var(--red);
+  color: #fff;
+  font-size: 1.05rem;
+}
+
+.btn-save-design:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.summary-grid {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.75rem 0 1rem;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.55rem 0.75rem;
+  border-radius: 6px;
+  border: 1.5px solid transparent;
+}
+
+.summary-row span {
+  color: var(--blue);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.final-cost {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 1rem 1rem 1.1rem;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--sage) 12%, var(--surface));
+  border: 2px solid var(--sage);
+}
+
+.final-cost span {
+  color: var(--sage);
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.final-cost strong {
+  color: var(--sage);
+  font-size: 1.85rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.design-costing .form-error {
+  color: var(--red);
+}
+
+.design-costing .form-ok {
+  color: var(--sage);
+}

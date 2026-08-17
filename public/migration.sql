@@ -60,18 +60,42 @@ create table public.weft_yarn_stock (
   updated_at timestamptz not null default now()
 );
 
--- designs (conversion_charge generated)
+-- designs (structured warp/weft rows in design_warp / design_weft)
 create table public.designs (
   id uuid primary key default gen_random_uuid(),
   dno text not null,
   colour text,
   image_url text,
-  warp_rate numeric not null default 0,
-  weft_rate numeric not null default 0,
-  selling_rate numeric not null default 0,
-  conversion_charge numeric generated always as (
-    selling_rate - ((warp_rate + weft_rate) * 0.08)
-  ) stored,
+  design_date date not null default current_date,
+  created_at timestamptz not null default now()
+);
+
+create table public.design_warp (
+  id uuid primary key default gen_random_uuid(),
+  design_id uuid not null references public.designs (id) on delete cascade,
+  item_colour text,
+  denier numeric,
+  tar numeric,
+  length numeric,
+  rate numeric,
+  weight_kg numeric generated always as (denier * tar * length / 9000000.0) stored,
+  amount numeric generated always as ((denier * tar * length / 9000000.0) * rate) stored,
+  conversion_rate numeric,
+  created_at timestamptz not null default now()
+);
+
+create table public.design_weft (
+  id uuid primary key default gen_random_uuid(),
+  design_id uuid not null references public.designs (id) on delete cascade,
+  item_colour text,
+  denier numeric,
+  pic numeric,
+  width numeric,
+  length numeric,
+  rate numeric,
+  weight_kg numeric generated always as (denier * pic * width * length / 9000000.0) stored,
+  amount numeric generated always as ((denier * pic * width * length / 9000000.0) * rate) stored,
+  conversion_rate numeric,
   created_at timestamptz not null default now()
 );
 
@@ -95,6 +119,8 @@ alter table public.attendance enable row level security;
 alter table public.beam_pipe_stock enable row level security;
 alter table public.weft_yarn_stock enable row level security;
 alter table public.designs enable row level security;
+alter table public.design_warp enable row level security;
+alter table public.design_weft enable row level security;
 alter table public.approval_queue enable row level security;
 
 create policy "roles_authenticated_all"
@@ -123,6 +149,14 @@ create policy "weft_yarn_stock_authenticated_all"
 
 create policy "designs_authenticated_all"
   on public.designs for all to authenticated
+  using (true) with check (true);
+
+create policy "design_warp_authenticated_all"
+  on public.design_warp for all to authenticated
+  using (true) with check (true);
+
+create policy "design_weft_authenticated_all"
+  on public.design_weft for all to authenticated
   using (true) with check (true);
 
 create policy "approval_queue_authenticated_all"

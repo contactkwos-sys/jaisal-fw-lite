@@ -7,6 +7,8 @@ begin;
 -- Drop in dependency order (ignore if missing)
 drop table if exists public.approval_queue cascade;
 drop table if exists public.attendance cascade;
+drop table if exists public.design_warp cascade;
+drop table if exists public.design_weft cascade;
 drop table if exists public.designs cascade;
 drop table if exists public.beam_pipe_stock cascade;
 drop table if exists public.weft_yarn_stock cascade;
@@ -83,12 +85,36 @@ create table public.designs (
   dno text not null,
   colour text,
   image_url text,
-  warp_rate numeric not null default 0,
-  weft_rate numeric not null default 0,
-  selling_rate numeric not null default 0,
-  conversion_charge numeric generated always as (
-    selling_rate - ((warp_rate + weft_rate) * 0.08)
-  ) stored,
+  design_date date not null default current_date,
+  created_at timestamptz not null default now()
+);
+
+create table public.design_warp (
+  id uuid primary key default gen_random_uuid(),
+  design_id uuid not null references public.designs (id) on delete cascade,
+  item_colour text,
+  denier numeric,
+  tar numeric,
+  length numeric,
+  rate numeric,
+  weight_kg numeric generated always as (denier * tar * length / 9000000.0) stored,
+  amount numeric generated always as ((denier * tar * length / 9000000.0) * rate) stored,
+  conversion_rate numeric,
+  created_at timestamptz not null default now()
+);
+
+create table public.design_weft (
+  id uuid primary key default gen_random_uuid(),
+  design_id uuid not null references public.designs (id) on delete cascade,
+  item_colour text,
+  denier numeric,
+  pic numeric,
+  width numeric,
+  length numeric,
+  rate numeric,
+  weight_kg numeric generated always as (denier * pic * width * length / 9000000.0) stored,
+  amount numeric generated always as ((denier * pic * width * length / 9000000.0) * rate) stored,
+  conversion_rate numeric,
   created_at timestamptz not null default now()
 );
 
@@ -110,6 +136,8 @@ alter table public.attendance enable row level security;
 alter table public.beam_pipe_stock enable row level security;
 alter table public.weft_yarn_stock enable row level security;
 alter table public.designs enable row level security;
+alter table public.design_warp enable row level security;
+alter table public.design_weft enable row level security;
 alter table public.approval_queue enable row level security;
 
 drop policy if exists "roles_authenticated_all" on public.roles;
@@ -119,6 +147,8 @@ drop policy if exists "attendance_authenticated_all" on public.attendance;
 drop policy if exists "beam_pipe_stock_authenticated_all" on public.beam_pipe_stock;
 drop policy if exists "weft_yarn_stock_authenticated_all" on public.weft_yarn_stock;
 drop policy if exists "designs_authenticated_all" on public.designs;
+drop policy if exists "design_warp_authenticated_all" on public.design_warp;
+drop policy if exists "design_weft_authenticated_all" on public.design_weft;
 drop policy if exists "approval_queue_authenticated_all" on public.approval_queue;
 
 create policy "roles_authenticated_all"
@@ -147,6 +177,14 @@ create policy "weft_yarn_stock_authenticated_all"
 
 create policy "designs_authenticated_all"
   on public.designs for all to authenticated
+  using (true) with check (true);
+
+create policy "design_warp_authenticated_all"
+  on public.design_warp for all to authenticated
+  using (true) with check (true);
+
+create policy "design_weft_authenticated_all"
+  on public.design_weft for all to authenticated
   using (true) with check (true);
 
 create policy "approval_queue_authenticated_all"

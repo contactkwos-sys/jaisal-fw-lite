@@ -12,8 +12,8 @@ type Props = { initialSub?: Sub }
 
 /**
  * Yarn consumption proxy (assumed):
- * avg(warp_rate + weft_rate) across designs × today's production meters × 0.08
- * (same 8% factor used in design conversion charge).
+ * average yarn amount across design_warp + design_weft rows × today's production meters.
+ * (Design Master no longer stores flat warp_rate/weft_rate; see design_warp / design_weft.)
  */
 export function CostingScreen({ initialSub = 'summary' }: Props) {
   const { isCeo, profile } = useAuth()
@@ -45,7 +45,8 @@ export function CostingScreen({ initialSub = 'summary' }: Props) {
       { data: rates },
       { data: workers },
       { data: prod },
-      { data: designs },
+      { data: warps },
+      { data: wefts },
       { data: elec },
       { data: maint },
       { data: repair },
@@ -55,7 +56,8 @@ export function CostingScreen({ initialSub = 'summary' }: Props) {
       supabase.from('payroll_rates').select('*'),
       supabase.from('workers').select('id, role_id, department'),
       supabase.from('production_entries').select('total_meter').eq('entry_date', date),
-      supabase.from('designs').select('warp_rate, weft_rate'),
+      supabase.from('design_warp').select('amount'),
+      supabase.from('design_weft').select('amount'),
       supabase.from('electricity_entries').select('*').eq('entry_date', date),
       supabase.from('maintenance_requests').select('cost').gte('created_at', `${date}T00:00:00`).lte('created_at', `${date}T23:59:59`),
       supabase.from('repairing_tracker').select('cost').gte('created_at', `${date}T00:00:00`).lte('created_at', `${date}T23:59:59`),
@@ -86,13 +88,12 @@ export function CostingScreen({ initialSub = 'summary' }: Props) {
     setSalary(sal)
 
     const meters = (prod ?? []).reduce((s, p) => s + Number(p.total_meter || 0), 0)
-    const designRows = designs ?? []
+    const yarnRows = [...(warps ?? []), ...(wefts ?? [])]
     const avgYarn =
-      designRows.length
-        ? designRows.reduce((s, d) => s + Number(d.warp_rate || 0) + Number(d.weft_rate || 0), 0) /
-          designRows.length
+      yarnRows.length
+        ? yarnRows.reduce((s, d) => s + Number(d.amount || 0), 0) / yarnRows.length
         : 0
-    setYarnCost(avgYarn * meters * 0.08)
+    setYarnCost(avgYarn * meters)
 
     const elecSum = (elec ?? []).reduce((s, e) => s + Number(e.total || 0), 0)
     setElectricity(elecSum)

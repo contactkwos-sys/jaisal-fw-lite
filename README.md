@@ -14,7 +14,8 @@ Design tokens: [`styles/theme.css`](styles/theme.css) (imported via [`styles/bas
 2. Apply migrations in order:
    - `supabase/migrations/20260816000100_initial_schema.sql` (Phase 1)
    - `supabase/migrations/20260816000200_phases_2_to_8.sql` (Phases 2–8)
-   - Mobile helpers: `public/migration.sql`, `public/migration-phases-2-8.sql`, `public/grants.sql`
+   - `supabase/migrations/20260817000100_design_warp_weft_costing.sql` (Design Master structured costing)
+   - Mobile helpers: `public/migration.sql`, `public/migration-phases-2-8.sql`, `public/migration-design-costing.sql`, `public/grants.sql`
 3. Deploy edge functions with **`verify_jwt = false`** (see list below).
 4. Run `supabase/seed.sql` (or create matching `auth.users` + `public.users`). Demo PIN: `1234`.
 5. `npm install` && `npm run dev`
@@ -56,8 +57,23 @@ Also mirrored under `public/functions/` for copy/paste deploy.
 | 6 | Built | Roles & PIN, Payroll (live query), Approval Queue (CEO) |
 | 7 | Built | CEO Dashboard (KPIs, quick access, alerts, flow, inline stock edit) |
 | 8 | Built | Daily Costing, Electricity Entry, Expense vs Billing / Profit |
+| 9 | Not built | OCR / image-reading to auto-extract Design No. and Pick count from uploaded design photos |
 
 CEO login lands on **Home** dashboard. Other roles land on Attendance (Phase 1 behaviour). Bottom nav is scrollable and grows with modules.
+
+## Design Master costing (live)
+
+Replaces the old placeholder `Selling Rate − ((Warp Rate + Weft Rate) × 0.08)`.
+
+- **Warp weight** = `(Denier × TAR × Length) / 9_000_000`
+- **Weft weight** = `(Denier × Pic × Width × Length) / 9_000_000`
+- **Amount** = Weight × Rate
+- **Wastage** = Total Yarn Cost × `WASTAGE_PCT` (`0.05` in `src/lib/designCosting.ts`)
+- **Final Cost / Meter** = Total Yarn Cost + Wastage + Total Conversion
+- Weft Rate auto-suggest: latest `design_weft` row with same Item/Colour (case-insensitive)
+- Screen uses a light palette scoped in `src/styles/design-costing.css` (does not change global theme)
+
+Verified example: Denier 155, TAR 8900, Length 110, Rate 121 → Warp Weight ≈ 16.86, Amount ≈ 2040.
 
 ## Assumptions (review)
 
@@ -66,7 +82,8 @@ CEO login lands on **Home** dashboard. Other roles land on Attendance (Phase 1 b
 - **Weft purchase → stock:** match on `supplier` + `colour_name` (= quality); else insert new `weft_yarn_stock` row.
 - **Beam filled flag:** additive `beam_pipe_stock.is_filled` (does not break Phase 1 UI).
 - **Payroll:** no snapshot table — payable = `rate_per_day × present days` for the selected month (Present / On Break / Completed). Worker rate via `workers.role_id`, else `department` matching role name, else average rate fallback for costing.
-- **Yarn consumption (costing):** `avg(warp_rate + weft_rate) × today's production meters × 0.08` (same 8% factor as design conversion).
+- **Yarn consumption (costing paper):** average yarn `amount` across `design_warp` + `design_weft` × today's production meters.
+- **Design Master wastage:** `WASTAGE_PCT = 0.05` in `src/lib/designCosting.ts`.
 - **Program pending alert:** today's job cards minus distinct machines with production today.
 - **Challan / gatepass numbers:** auto-increment prefixes `CH-` / `DG-` / repair `GP-`.
 - **Photo uploads:** `factory-uploads` storage bucket.
@@ -76,3 +93,4 @@ CEO login lands on **Home** dashboard. Other roles land on Attendance (Phase 1 b
 
 1. Optionally map each worker to `role_id` for accurate payroll.
 2. If PIN reset fails after a dashboard re-deploy, re-run `supabase functions deploy pin-reset --no-verify-jwt` (and `roles-gate`).
+3. **Phase 9 — not built:** OCR/image-reading to auto-extract Design No. and Pick count from uploaded design photos (TODO left at image upload in Design Master).
