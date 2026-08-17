@@ -1003,3 +1003,32 @@ body.drawer-open {
     grid-column: 1 / -1;
   }
 }
+
+/* Beam Remaining Report */
+.beam-remaining-screen {
+  display: grid;
+  gap: 1rem;
+}
+
+.beam-load-panel {
+  padding: 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+}
+
+.beam-load-panel .form-stack {
+  margin-top: 0.75rem;
+}
+
+.beam-remain-table tbody tr.beam-row-urgent {
+  background: rgba(201, 106, 90, 0.18);
+}
+
+.beam-remain-table tbody tr.beam-row-warn {
+  background: rgba(217, 164, 65, 0.14);
+}
+
+.beam-remain-table tfoot .beam-total-row td {
+  border-top: 1px solid var(--line);
+  padding-top: 0.75rem;
+}
