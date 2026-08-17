@@ -19,6 +19,7 @@ import { PurchaseScreen } from './screens/PurchaseScreen'
 import { SecurityGateScreen } from './screens/SecurityGateScreen'
 import { StockScreen } from './screens/StockScreen'
 import { BeamRemainingReport } from './pages/BeamRemainingReport'
+import { DesignWiseCosting } from './pages/DesignWiseCosting'
 
 function AuthenticatedApp() {
   const { session, loading, isCeo } = useAuth()
@@ -69,7 +70,7 @@ function AuthenticatedApp() {
         />
       ) : null}
       {tab === 'design' ? (
-        <DesignScreen onBroadcast={() => go('broadcast')} />
+        <DesignScreen onOpenDesignCosting={(dno) => go('design-wise-costing', undefined, dno)} />
       ) : null}
       {tab === 'broadcast' ? <DesignBroadcastScreen initialDesignId={filter} /> : null}
       {tab === 'parties' ? <PartyMasterScreen /> : null}
@@ -104,6 +105,9 @@ function AuthenticatedApp() {
         <CostingScreen initialSub={(sub as 'summary' | 'electricity') || 'summary'} />
       ) : null}
       {tab === 'beam-remaining' ? <BeamRemainingReport /> : null}
+      {tab === 'design-wise-costing' ? (
+        <DesignWiseCosting initialDin={filter || ''} />
+      ) : null}
     </AppShell>
   )
 }
