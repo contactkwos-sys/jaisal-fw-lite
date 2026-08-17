@@ -49,7 +49,8 @@ Also mirrored under `public/functions/` for copy/paste deploy.
 
 - PR https://github.com/contactkwos-sys/jaisal-fw-lite/pull/8 merged to `main` (`58dd22b`)
 - Netlify production redeployed; live bundle includes `app-sidebar` / `1024px` breakpoint / `kpi-grid-5` (no bottom tabs)
-- Smoke test `node scripts/prod-nav-smoke.mjs`: **16/16 PASS** (mobile drawer + desktop fixed sidebar, CEO login PIN `1234`, dashboard KPIs/flow/tables, Production / Dispatch / Design reachable)
+- Smoke test `npm run smoke:prod`: **16/16 PASS** ×2 (mobile drawer + desktop fixed sidebar, CEO login PIN `1234`, dashboard KPIs/flow/tables, Production / Dispatch / Design reachable)
+- Follow-up PR https://github.com/contactkwos-sys/jaisal-fw-lite/pull/10 merged (`83c146b`): CEO Dashboard/Costing nav visibility when roles join is null — live as `index-CY6oslKs.js`
 
 
 ## Screens by phase
