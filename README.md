@@ -16,7 +16,8 @@ Design tokens: [`styles/theme.css`](styles/theme.css) (imported via [`styles/bas
    - `supabase/migrations/20260816000200_phases_2_to_8.sql` (Phases 2–8)
    - `supabase/migrations/20260817000100_design_warp_weft_costing.sql` (Design Master structured costing)
    - `supabase/migrations/20260817000200_purchase_inward_rebuild.sql` (Purchase & Inward rebuild)
-   - Mobile helpers: `public/migration.sql`, `public/migration-phases-2-8.sql`, `public/migration-design-costing.sql`, `public/migration-purchase-inward.sql`, `public/grants.sql`
+   - `supabase/migrations/20260817000300_order_program_dispatch.sql` (Order Book → Program → Job Card → Dispatch)
+   - Mobile helpers: `public/migration.sql`, `public/migration-phases-2-8.sql`, `public/migration-design-costing.sql`, `public/migration-purchase-inward.sql`, `public/migration-order-program.sql`, `public/grants.sql`
 3. Deploy edge functions with **`verify_jwt = false`** (see list below).
 4. Run `supabase/seed.sql` (or create matching `auth.users` + `public.users`). Demo PIN: `1234`.
 5. `npm install` && `npm run dev`
@@ -52,6 +53,11 @@ Also mirrored under `public/functions/` for copy/paste deploy.
 - Smoke test `npm run smoke:prod`: **16/16 PASS** ×2 (mobile drawer + desktop fixed sidebar, CEO login PIN `1234`, dashboard KPIs/flow/tables, Production / Dispatch / Design reachable)
 - Follow-up PR https://github.com/contactkwos-sys/jaisal-fw-lite/pull/10 merged (`83c146b`): CEO Dashboard/Costing nav visibility when roles join is null — live as `index-CY6oslKs.js`
 
+## Deploy confirmation (Order Book → Program → Dispatch)
+
+- Migration `20260817000300_order_program_dispatch.sql` applied on live project `doitrzsyvcipugmrzykx` (tables `order_book`, `order_book_items`, `programs`, `program_petty`, `adjustment_notes` + job/challan/program columns)
+- Screens: Order Book (+ Party Delivery Report + Adjust), Program Card / Pending Tracker, Job Card Issue (A4 2×2 print), Security Gate consolidated logs, Dispatch links job/program and completes on dual-signed gatepass
+
 
 ## Screens by phase
 
@@ -66,6 +72,7 @@ Also mirrored under `public/functions/` for copy/paste deploy.
 | 7 | Built | CEO Dashboard (KPIs, quick access, alerts, flow, inline stock edit) |
 | 8 | Built | Daily Costing, Electricity Entry, Expense vs Billing / Profit |
 | 9 | Not built | OCR / image-reading to auto-extract Design No. and Pick count from uploaded design photos |
+| 10 | Built | Order Book → Program → Job Card Issue → Dispatch completion + Party-wise Delivery Report + Adjust |
 
 CEO login lands on **Home** dashboard. Other roles land on Attendance (Phase 1 behaviour). Navigation uses a shared `AppShell`: mobile (<1024px) left drawer with hamburger; desktop/iPad (≥1024px) fixed left sidebar (never collapsed).
 

@@ -10,8 +10,11 @@ import { DesignScreen } from './screens/DesignScreen'
 import { DispatchScreen } from './screens/DispatchScreen'
 import { LoginScreen } from './screens/LoginScreen'
 import { MaintenanceScreen } from './screens/MaintenanceScreen'
+import { OrderBookScreen } from './screens/OrderBookScreen'
 import { ProductionScreen } from './screens/ProductionScreen'
+import { ProgramScreen } from './screens/ProgramScreen'
 import { PurchaseScreen } from './screens/PurchaseScreen'
+import { SecurityGateScreen } from './screens/SecurityGateScreen'
 import { StockScreen } from './screens/StockScreen'
 
 function AuthenticatedApp() {
@@ -20,7 +23,6 @@ function AuthenticatedApp() {
   const [sub, setSub] = useState<string | undefined>()
   const [filter, setFilter] = useState<string | undefined>()
 
-  // CEO lands on dashboard; others keep Phase 1 attendance home
   useEffect(() => {
     if (!session) return
     setTab(isCeo ? 'home' : 'attendance')
@@ -67,6 +69,9 @@ function AuthenticatedApp() {
       {tab === 'purchase' ? (
         <PurchaseScreen initialSub={sub || 'general'} />
       ) : null}
+      {tab === 'orders' ? <OrderBookScreen initialSub={sub || 'entry'} /> : null}
+      {tab === 'programs' ? <ProgramScreen initialSub={sub || 'create'} /> : null}
+      {tab === 'security' ? <SecurityGateScreen initialSub={sub || 'inward'} /> : null}
       {tab === 'production' ? (
         <ProductionScreen
           initialSub={(sub as 'job' | 'entry' | 'report') || 'job'}

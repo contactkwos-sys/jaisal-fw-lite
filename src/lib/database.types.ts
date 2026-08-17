@@ -207,6 +207,11 @@ export type JobCard = {
   machine_no: string | null
   operator_name: string | null
   created_at: string
+  program_id: string | null
+  job_card_no: string | null
+  issued_at: string | null
+  colour: string | null
+  total_meter: number | null
 }
 
 export type JobCardColour = {
@@ -229,6 +234,53 @@ export type ProductionEntry = {
   total_meter: number
   shift_diff: number
   efficiency_pct: number
+  created_at: string
+  program_id: string | null
+}
+
+export type OrderBook = {
+  id: string
+  party_name: string
+  order_date: string
+  payment_days: number | null
+  discount_pct: number | null
+  created_at: string
+}
+
+export type OrderBookItem = {
+  id: string
+  order_id: string
+  design_no: string | null
+  colour: string | null
+  qty_meter: number
+  rate: number
+  amount: number
+  settled: boolean
+}
+
+export type Program = {
+  id: string
+  order_item_id: string | null
+  machine_no: string | null
+  status: string
+  dispatched_meter: number
+  created_at: string
+}
+
+export type ProgramPetty = {
+  id: string
+  program_id: string
+  petty_label: string | null
+  item_name: string | null
+  meter: number
+}
+
+export type AdjustmentNote = {
+  id: string
+  order_item_id: string | null
+  adjustment_type: string
+  reason: string | null
+  meter: number | null
   created_at: string
 }
 
@@ -276,6 +328,8 @@ export type Challan = {
   gst_pct: number
   total: number
   created_at: string
+  program_id: string | null
+  job_card_id: string | null
 }
 
 export type Gatepass = {
