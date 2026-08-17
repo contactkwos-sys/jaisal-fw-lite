@@ -18,6 +18,8 @@ import { ProgramScreen } from './screens/ProgramScreen'
 import { PurchaseScreen } from './screens/PurchaseScreen'
 import { SecurityGateScreen } from './screens/SecurityGateScreen'
 import { StockScreen } from './screens/StockScreen'
+import { SampleJobCard } from './pages/SampleJobCard'
+import { SampleRegister } from './pages/SampleRegister'
 import { BeamRemainingReport } from './pages/BeamRemainingReport'
 import { DesignWiseCosting } from './pages/DesignWiseCosting'
 
@@ -104,6 +106,8 @@ function AuthenticatedApp() {
       {tab === 'costing' ? (
         <CostingScreen initialSub={(sub as 'summary' | 'electricity') || 'summary'} />
       ) : null}
+      {tab === 'sample-job-card' ? <SampleJobCard /> : null}
+      {tab === 'sample-register' ? <SampleRegister /> : null}
       {tab === 'beam-remaining' ? <BeamRemainingReport /> : null}
       {tab === 'design-wise-costing' ? (
         <DesignWiseCosting initialDin={filter || ''} />
