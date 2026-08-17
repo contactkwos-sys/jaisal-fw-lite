@@ -51,7 +51,7 @@ Also mirrored under `public/functions/` for copy/paste deploy.
 | Phase | Status | Screens |
 |---|---|---|
 | 1 | Live | Login, Attendance, Stock, Design |
-| 2 | Built | Weft Purchase (scan/manual/photo), Beam Pipe Out/In, Warp Yarn Inward |
+| 2 | Built | Purchase & Inward: General Purchase, Weft Yarn (multi-item), Maintenance Inward, Repair Invoice, Purchase Report |
 | 3 | Built | Job Card (+ multi colour), Machine Production Entry, Daily Report |
 | 4 | Built | Maintenance Request, Repairing Out/In + gatepass |
 | 5 | Built | Folding, Challan/Invoice/Bill, Delivery Gatepass + signature pad |
