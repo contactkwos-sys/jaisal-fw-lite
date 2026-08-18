@@ -113,9 +113,12 @@ export function CrmCustomersScreen() {
       const result = await syncCrmFromKmos()
       setMessage(
         `KMOS sync: +${result.inserted} new, ${result.updated} updated, ` +
-          `${result.skipped_no_phone} skipped (no phone), ` +
-          `${result.skipped_manual_conflict} kept manual. ` +
-          `Mapped name=${result.mapped_name_field || '—'} phone=${result.mapped_phone_field || '—'}.`,
+          `${result.skipped_no_phone} skipped (no phone)` +
+          (result.skipped_no_name ? `, ${result.skipped_no_name} skipped (no name)` : '') +
+          `, ${result.skipped_manual_conflict} kept manual` +
+          ` · ${result.total_kmos} from KMOS` +
+          (result.kmos_table ? ` (${result.kmos_table})` : '') +
+          `.`,
       )
       await load()
     } catch (err) {
