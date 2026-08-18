@@ -111,11 +111,16 @@ export function CrmCustomersScreen() {
     setMessage(null)
     try {
       const result = await syncCrmFromKmos()
+      const cols =
+        result.columns_seen && result.columns_seen.length
+          ? ` Columns: ${result.columns_seen.join(', ')}.`
+          : ''
       setMessage(
         `KMOS sync: +${result.inserted} new, ${result.updated} updated, ` +
           `${result.skipped_no_phone} skipped (no phone), ` +
-          `${result.skipped_manual_conflict} kept manual. ` +
-          `Mapped name=${result.mapped_name_field || '—'} phone=${result.mapped_phone_field || '—'}.`,
+          `${result.skipped_manual_conflict} kept manual ` +
+          `(of ${result.total_kmos} KMOS rows). ` +
+          `Mapped name=${result.mapped_name_field || '—'} phone=${result.mapped_phone_field || '—'}.${cols}`,
       )
       await load()
     } catch (err) {

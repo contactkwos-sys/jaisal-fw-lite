@@ -73,13 +73,26 @@ export type KmosSyncResult = {
   total_kmos: number
   mapped_name_field: string | null
   mapped_phone_field: string | null
+  columns_seen?: string[]
   error?: string
 }
 
 export async function syncCrmFromKmos(): Promise<KmosSyncResult> {
   const { data, error } = await supabase.functions.invoke('crm-sync-kmos', { body: {} })
   if (error) {
-    const bodyError = (data as { error?: string } | null)?.error
+    let bodyError = (data as { error?: string } | null)?.error
+    // Non-2xx often leaves data null; try to read JSON from the FunctionsHttpError context.
+    if (!bodyError && error && typeof error === 'object' && 'context' in error) {
+      try {
+        const ctx = (error as { context?: Response }).context
+        if (ctx && typeof ctx.json === 'function') {
+          const body = (await ctx.json()) as { error?: string }
+          bodyError = body?.error
+        }
+      } catch {
+        /* ignore parse errors */
+      }
+    }
     throw new Error(bodyError || error.message || 'KMOS sync failed')
   }
   if (data?.error) throw new Error(String(data.error))

@@ -70,7 +70,7 @@ export type DesignCatalog = {
   design_no: number
   jfg_no: string
   design_image_url: string
-  matching_image_url: string
+  matching_image_url: string | null
   notes: string | null
   created_at: string
   created_by: string | null
