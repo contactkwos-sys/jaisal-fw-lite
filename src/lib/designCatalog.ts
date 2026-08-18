@@ -1,0 +1,127 @@
+import {
+  mergeImagesSideBySide,
+  urlToImageFile,
+  type BroadcastShareResult,
+} from './designBroadcast'
+import { supabase } from './supabase'
+import type { DesignCatalog } from './database.types'
+
+/** Phase-1 CRM stub — wire to customer master in a follow-up. */
+export type CatalogCustomerStub = {
+  id: string
+  name: string
+  whatsapp: string
+}
+
+/** Empty until CRM customer list is connected. */
+export const CATALOG_CUSTOMERS_PLACEHOLDER: CatalogCustomerStub[] = []
+
+export function catalogShareCaption(designNo: number, jfgNo: string) {
+  return `Design No. ${designNo} | JFG ${jfgNo}`
+}
+
+export async function fetchDesignCatalog(): Promise<DesignCatalog[]> {
+  const { data, error } = await supabase
+    .from('design_catalog')
+    .select('*')
+    .order('design_no', { ascending: false })
+  if (error) throw error
+  return (data as DesignCatalog[]) ?? []
+}
+
+/** Next suggested design_no = max existing + 1 (falls back to sequence default of 1). */
+export async function nextCatalogDesignNo(): Promise<number> {
+  const { data, error } = await supabase
+    .from('design_catalog')
+    .select('design_no')
+    .order('design_no', { ascending: false })
+    .limit(1)
+  if (error) throw error
+  const max = data?.[0]?.design_no
+  return typeof max === 'number' ? max + 1 : 1
+}
+
+export async function uploadCatalogImage(
+  file: File,
+  kind: 'design' | 'matching',
+): Promise<string> {
+  const ext = file.name.split('.').pop() || 'jpg'
+  const path = `${kind}/${Date.now()}-${crypto.randomUUID()}.${ext}`
+  const { error } = await supabase.storage.from('design-catalog-images').upload(path, file, {
+    upsert: false,
+    contentType: file.type || undefined,
+  })
+  if (error) throw error
+  const { data } = supabase.storage.from('design-catalog-images').getPublicUrl(path)
+  return data.publicUrl
+}
+
+export async function insertDesignCatalog(row: {
+  design_no: number
+  jfg_no: string
+  design_image_url: string
+  matching_image_url: string
+  notes: string | null
+  created_by: string | null
+}): Promise<void> {
+  const { error } = await supabase.from('design_catalog').insert(row)
+  if (error) throw error
+}
+
+/**
+ * Share both catalog images + caption via Web Share API.
+ * Optional phone opens wa.me text fallback when native file share is unavailable.
+ */
+export async function shareCatalogDesign(args: {
+  caption: string
+  designImageUrl: string
+  matchingImageUrl: string
+  phone?: string | null
+}): Promise<BroadcastShareResult> {
+  const { caption, designImageUrl, matchingImageUrl, phone } = args
+  const phoneDigits = phone ? phone.replace(/\D/g, '') : ''
+  const waTextUrl = phoneDigits
+    ? `https://wa.me/${phoneDigits}?text=${encodeURIComponent(caption)}`
+    : `https://wa.me/?text=${encodeURIComponent(caption)}`
+
+  if (!navigator.share) {
+    window.open(waTextUrl, '_blank', 'noopener,noreferrer')
+    return 'fallback-text'
+  }
+
+  try {
+    const files = await Promise.all([
+      urlToImageFile(designImageUrl, 'design.jpg'),
+      urlToImageFile(matchingImageUrl, 'matching.jpg'),
+    ])
+    const dual = { title: 'Design Catalog', text: caption, files }
+    if (navigator.canShare?.(dual)) {
+      await navigator.share(dual)
+      return 'shared'
+    }
+
+    const combined = await mergeImagesSideBySide(
+      designImageUrl,
+      matchingImageUrl,
+      'design-catalog.jpg',
+    )
+    const one = { title: 'Design Catalog', text: caption, files: [combined] }
+    if (navigator.canShare?.(one)) {
+      await navigator.share(one)
+      return 'shared'
+    }
+
+    await navigator.share({ title: 'Design Catalog', text: caption })
+    return 'fallback-text'
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') return 'cancelled'
+    try {
+      await navigator.share({ title: 'Design Catalog', text: caption })
+      return 'fallback-text'
+    } catch (e2) {
+      if (e2 instanceof DOMException && e2.name === 'AbortError') return 'cancelled'
+      window.open(waTextUrl, '_blank', 'noopener,noreferrer')
+      return 'unsupported'
+    }
+  }
+}

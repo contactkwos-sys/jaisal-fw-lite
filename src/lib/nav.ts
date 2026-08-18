@@ -18,6 +18,7 @@ export type AppScreen =
   | 'sample-register'
   | 'beam-remaining'
   | 'design-wise-costing'
+  | 'design-catalog'
 
 export type PurchaseSub = 'general' | 'weft' | 'maint_in' | 'repair_inv' | 'report'
 export type ProductionSub = 'job' | 'entry' | 'report'
@@ -52,6 +53,7 @@ export type NavItemId =
   | 'folding'
   | 'dispatch'
   | 'design'
+  | 'design-catalog'
   | 'broadcast'
   | 'security-gate'
   | 'maintenance'
@@ -89,6 +91,7 @@ export const PRIMARY_NAV: NavItem[] = [
   { id: 'folding', label: 'Folding', screen: 'dispatch', sub: 'folding' },
   { id: 'dispatch', label: 'Dispatch & Gate Pass', screen: 'dispatch', sub: 'challan' },
   { id: 'design', label: 'Design & Job Card', screen: 'design' },
+  { id: 'design-catalog', label: 'Design Catalog', screen: 'design-catalog' },
   { id: 'sample-job-card', label: 'Sample Job Card', screen: 'sample-job-card' },
   { id: 'design-wise-costing', label: 'Design Wise Costing', screen: 'design-wise-costing' },
   { id: 'broadcast', label: 'Design Broadcast', screen: 'broadcast' },
@@ -128,6 +131,7 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   'sample-register': 'Sample Register',
   'beam-remaining': 'Beam Remaining Report',
   'design-wise-costing': 'Design Wise Costing',
+  'design-catalog': 'Design Catalog',
 }
 
 /** Resolve which nav row is highlighted for the current screen/sub. */

@@ -22,6 +22,7 @@ import { SampleJobCard } from './pages/SampleJobCard'
 import { SampleRegister } from './pages/SampleRegister'
 import { BeamRemainingReport } from './pages/BeamRemainingReport'
 import { DesignWiseCosting } from './pages/DesignWiseCosting'
+import { DesignCatalogScreen } from './screens/DesignCatalogScreen'
 
 function AuthenticatedApp() {
   const { session, loading, isCeo } = useAuth()
@@ -75,6 +76,7 @@ function AuthenticatedApp() {
         <DesignScreen onOpenDesignCosting={(dno) => go('design-wise-costing', undefined, dno)} />
       ) : null}
       {tab === 'broadcast' ? <DesignBroadcastScreen initialDesignId={filter} /> : null}
+      {tab === 'design-catalog' ? <DesignCatalogScreen /> : null}
       {tab === 'parties' ? <PartyMasterScreen /> : null}
       {tab === 'purchase' ? (
         <PurchaseScreen initialSub={sub || 'general'} />
