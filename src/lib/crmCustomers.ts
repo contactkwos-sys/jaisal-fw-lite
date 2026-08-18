@@ -69,10 +69,12 @@ export type KmosSyncResult = {
   inserted: number
   updated: number
   skipped_no_phone: number
+  skipped_no_name?: number
   skipped_manual_conflict: number
   total_kmos: number
   mapped_name_field: string | null
   mapped_phone_field: string | null
+  kmos_table?: string
   columns_seen?: string[]
   error?: string
 }

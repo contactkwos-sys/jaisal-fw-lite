@@ -117,9 +117,12 @@ export function CrmCustomersScreen() {
           : ''
       setMessage(
         `KMOS sync: +${result.inserted} new, ${result.updated} updated, ` +
-          `${result.skipped_no_phone} skipped (no phone), ` +
-          `${result.skipped_manual_conflict} kept manual ` +
-          `(of ${result.total_kmos} KMOS rows). ` +
+          `${result.skipped_no_phone} skipped (no phone)` +
+          (result.skipped_no_name ? `, ${result.skipped_no_name} skipped (no name)` : '') +
+          `, ${result.skipped_manual_conflict} kept manual ` +
+          `(of ${result.total_kmos} KMOS rows` +
+          (result.kmos_table ? ` from ${result.kmos_table}` : '') +
+          `). ` +
           `Mapped name=${result.mapped_name_field || '—'} phone=${result.mapped_phone_field || '—'}.${cols}`,
       )
       await load()
