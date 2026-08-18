@@ -19,6 +19,7 @@ export type AppScreen =
   | 'beam-remaining'
   | 'design-wise-costing'
   | 'design-catalog'
+  | 'crm'
 
 export type PurchaseSub = 'general' | 'weft' | 'maint_in' | 'repair_inv' | 'report'
 export type ProductionSub = 'job' | 'entry' | 'report'
@@ -67,6 +68,7 @@ export type NavItemId =
   | 'sample-register'
   | 'beam-remaining'
   | 'design-wise-costing'
+  | 'crm'
 
 export type NavItem = {
   id: NavItemId
@@ -81,6 +83,7 @@ export const PRIMARY_NAV: NavItem[] = [
   { id: 'attendance', label: 'Attendance', screen: 'attendance' },
   { id: 'order-book', label: 'Order Book', screen: 'orders', sub: 'entry' },
   { id: 'party-master', label: 'Party Master', screen: 'parties' },
+  { id: 'crm', label: 'CRM', screen: 'crm' },
   { id: 'inward', label: 'Inward', screen: 'purchase', sub: 'general' },
   { id: 'yarn', label: 'Yarn Management', screen: 'stock', sub: 'weft' },
   { id: 'warp-beam', label: 'Warp Beam', screen: 'stock', sub: 'beam' },
@@ -132,6 +135,7 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   'beam-remaining': 'Beam Remaining Report',
   'design-wise-costing': 'Design Wise Costing',
   'design-catalog': 'Design Catalog',
+  crm: 'CRM',
 }
 
 /** Resolve which nav row is highlighted for the current screen/sub. */

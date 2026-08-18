@@ -2,10 +2,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../lib/auth'
 import type { DesignCatalog } from '../lib/database.types'
 import {
-  CATALOG_CUSTOMERS_PLACEHOLDER,
+  downloadTextFile,
+  exportCustomersCsv,
+  fetchCrmCustomers,
+} from '../lib/crmCustomers'
+import {
   catalogShareCaption,
   fetchDesignCatalog,
   insertDesignCatalog,
+  loadCatalogCustomers,
   nextCatalogDesignNo,
   shareCatalogDesign,
   uploadCatalogImage,
@@ -49,18 +54,29 @@ export function DesignCatalogScreen() {
   const [shareMode, setShareMode] = useState<ShareMode>('one')
   const [customerQuery, setCustomerQuery] = useState('')
   const [selectedCustomerId, setSelectedCustomerId] = useState('')
-  const [manualPhone, setManualPhone] = useState('')
-
-  const customers = CATALOG_CUSTOMERS_PLACEHOLDER
+  const [customers, setCustomers] = useState<CatalogCustomerStub[]>([])
+  const [broadcastIndex, setBroadcastIndex] = useState(0)
+  const [broadcastActive, setBroadcastActive] = useState(false)
 
   const load = useCallback(async () => {
     const data = await fetchDesignCatalog()
     setRows(data)
   }, [])
 
+  const loadCustomers = useCallback(async () => {
+    const list = await loadCatalogCustomers()
+    setCustomers(list)
+  }, [])
+
   useEffect(() => {
     void load().catch((e: Error) => setError(e.message))
   }, [load])
+
+  useEffect(() => {
+    void loadCustomers().catch(() => {
+      /* share modal will show empty */
+    })
+  }, [loadCustomers])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -78,12 +94,20 @@ export function DesignCatalogScreen() {
     return customers.filter(
       (c) =>
         c.name.toLowerCase().includes(q) ||
-        c.whatsapp.includes(q),
+        c.whatsapp.includes(q) ||
+        c.whatsapp.replace(/\D/g, '').includes(q.replace(/\D/g, '')),
     )
   }, [customers, customerQuery])
 
   const selectedCustomer: CatalogCustomerStub | null =
     customers.find((c) => c.id === selectedCustomerId) ?? null
+
+  const broadcastTargets = useMemo(
+    () => customers.filter((c) => c.whatsapp.replace(/\D/g, '').length >= 10),
+    [customers],
+  )
+
+  const broadcastCurrent = broadcastTargets[broadcastIndex] ?? null
 
   async function openAddForm() {
     setError(null)
@@ -151,21 +175,32 @@ export function DesignCatalogScreen() {
     setShareMode('one')
     setCustomerQuery('')
     setSelectedCustomerId('')
-    setManualPhone('')
+    setBroadcastActive(false)
+    setBroadcastIndex(0)
     setError(null)
     setMessage(null)
+    void loadCustomers().catch(() => undefined)
   }
 
   async function handleShareSubmit() {
     if (!shareRow) return
 
     if (shareMode === 'broadcast') {
-      // Phase 1: CRM broadcast list not connected yet.
-      setMessage('Broadcast to all — customer list TODO (CRM phase). No recipients yet.')
+      if (broadcastTargets.length === 0) {
+        setMessage('No CRM customers with WhatsApp numbers yet.')
+        return
+      }
+      setBroadcastActive(true)
+      setBroadcastIndex(0)
+      setMessage(null)
       return
     }
 
-    const phone = selectedCustomer?.whatsapp || manualPhone.trim() || null
+    if (!selectedCustomer) {
+      setError('Select a customer from CRM')
+      return
+    }
+
     setBusy(true)
     setError(null)
     setMessage(null)
@@ -175,18 +210,16 @@ export function DesignCatalogScreen() {
         caption,
         designImageUrl: shareRow.design_image_url,
         matchingImageUrl: shareRow.matching_image_url,
-        phone,
+        phone: selectedCustomer.whatsapp,
       })
       if (result === 'shared') {
-        setMessage('Share sheet opened — pick WhatsApp / WhatsApp Business')
+        setMessage(`Shared to ${selectedCustomer.name}`)
         setShareRow(null)
       } else if (result === 'cancelled') {
         setMessage('Share cancelled')
       } else if (result === 'fallback-text') {
         setMessage(
-          phone
-            ? 'Opened WhatsApp with caption — attach both images if the browser could not share files.'
-            : 'Browser could not attach images. Caption shared — attach Design + Matching manually if needed.',
+          'Opened WhatsApp with caption — attach both images if the browser could not share files.',
         )
       } else {
         setMessage('Opened WhatsApp text fallback')
@@ -196,6 +229,48 @@ export function DesignCatalogScreen() {
     } finally {
       setBusy(false)
     }
+  }
+
+  async function shareBroadcastCurrent() {
+    if (!shareRow || !broadcastCurrent) return
+    setBusy(true)
+    setError(null)
+    try {
+      const caption = catalogShareCaption(shareRow.design_no, shareRow.jfg_no)
+      await shareCatalogDesign({
+        caption,
+        designImageUrl: shareRow.design_image_url,
+        matchingImageUrl: shareRow.matching_image_url,
+        phone: broadcastCurrent.whatsapp,
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Share failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function advanceBroadcast(skip = false) {
+    if (!skip) {
+      /* already shared via shareBroadcastCurrent */
+    }
+    const next = broadcastIndex + 1
+    if (next >= broadcastTargets.length) {
+      setBroadcastActive(false)
+      setMessage(`Broadcast finished — ${broadcastTargets.length} customers`)
+      setShareRow(null)
+      return
+    }
+    setBroadcastIndex(next)
+  }
+
+  async function exportBroadcastCsv() {
+    if (!shareRow) return
+    const full = await fetchCrmCustomers()
+    const caption = catalogShareCaption(shareRow.design_no, shareRow.jfg_no)
+    const csv = exportCustomersCsv(full, caption)
+    downloadTextFile(`design-${shareRow.design_no}-broadcast.csv`, csv)
+    setMessage('CSV downloaded')
   }
 
   return (
@@ -397,7 +472,7 @@ export function DesignCatalogScreen() {
             {shareMode === 'one' ? (
               <div className="dna-customer-pick">
                 <label className="field">
-                  <span className="text-muted">Customer (CRM placeholder)</span>
+                  <span className="text-muted">Customer (CRM)</span>
                   <input
                     type="search"
                     placeholder="Search saved customers…"
@@ -407,7 +482,7 @@ export function DesignCatalogScreen() {
                 </label>
                 {filteredCustomers.length === 0 ? (
                   <p className="text-muted2">
-                    No customers yet — CRM customer list will connect in the next phase.
+                    No CRM customers yet — add them under CRM, or Sync from KMOS.
                   </p>
                 ) : (
                   <select
@@ -422,31 +497,68 @@ export function DesignCatalogScreen() {
                     ))}
                   </select>
                 )}
-                <label className="field">
-                  <span className="text-muted">Or WhatsApp number (optional)</span>
-                  <input
-                    type="tel"
-                    inputMode="tel"
-                    placeholder="e.g. 919876543210"
-                    value={manualPhone}
-                    onChange={(e) => setManualPhone(e.target.value)}
-                  />
-                </label>
+              </div>
+            ) : broadcastActive && broadcastCurrent ? (
+              <div className="dna-broadcast-stub">
+                <p className="text-muted">
+                  Sharing {broadcastIndex + 1} of {broadcastTargets.length}
+                </p>
+                <p>
+                  <strong>{broadcastCurrent.name}</strong>
+                  <br />
+                  <span className="text-muted2">{broadcastCurrent.whatsapp}</span>
+                </p>
+                <div className="dna-modal-actions" style={{ justifyContent: 'flex-start' }}>
+                  <button
+                    type="button"
+                    className="btn-wa"
+                    disabled={busy}
+                    onClick={() => void shareBroadcastCurrent()}
+                  >
+                    {busy ? 'Opening…' : 'Share to this customer'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    disabled={busy}
+                    onClick={() => advanceBroadcast(true)}
+                  >
+                    Skip
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    disabled={busy}
+                    onClick={() => advanceBroadcast(false)}
+                  >
+                    Next
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="dna-broadcast-stub">
                 <p className="text-muted2">
-                  Broadcast will send to all CRM customers with WhatsApp numbers. List is empty
-                  until the CRM phase.
+                  Sequential share to {broadcastTargets.length} CRM customers with WhatsApp
+                  numbers (one share sheet at a time). Or export a CSV list.
                 </p>
-                <button
-                  type="button"
-                  className="btn-wa"
-                  disabled={busy}
-                  onClick={() => void handleShareSubmit()}
-                >
-                  Broadcast to all
-                </button>
+                <div className="dna-modal-actions" style={{ justifyContent: 'flex-start' }}>
+                  <button
+                    type="button"
+                    className="btn-wa"
+                    disabled={busy || broadcastTargets.length === 0}
+                    onClick={() => void handleShareSubmit()}
+                  >
+                    Start broadcast
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    disabled={busy}
+                    onClick={() => void exportBroadcastCsv()}
+                  >
+                    Export CSV
+                  </button>
+                </div>
               </div>
             )}
 
@@ -455,7 +567,10 @@ export function DesignCatalogScreen() {
                 type="button"
                 className="btn-ghost"
                 disabled={busy}
-                onClick={() => setShareRow(null)}
+                onClick={() => {
+                  setShareRow(null)
+                  setBroadcastActive(false)
+                }}
               >
                 Cancel
               </button>
@@ -463,7 +578,7 @@ export function DesignCatalogScreen() {
                 <button
                   type="button"
                   className="btn-wa"
-                  disabled={busy}
+                  disabled={busy || !selectedCustomerId}
                   onClick={() => void handleShareSubmit()}
                 >
                   {busy ? 'Opening…' : 'Open WhatsApp'}

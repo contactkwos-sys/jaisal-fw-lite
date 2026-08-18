@@ -6,6 +6,7 @@ import './styles/design-costing.css'
 import './styles/sample-job-card.css'
 import './styles/design-wise-costing.css'
 import './styles/design-catalog.css'
+import './styles/crm-customers.css'
 import App from './App.tsx'
 
 createRoot(document.getElementById('root')!).render(

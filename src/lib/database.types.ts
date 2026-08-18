@@ -76,6 +76,17 @@ export type DesignCatalog = {
   created_by: string | null
 }
 
+/** CRM customer master (WhatsApp share targets — separate from Order Book party_master) */
+export type CrmCustomer = {
+  id: string
+  name: string
+  whatsapp_number: string
+  source: 'jaisal_manual' | 'kmos_sync'
+  kmos_party_id: string | null
+  notes: string | null
+  created_at: string
+}
+
 export type DesignWarp = {
   id: string
   design_id: string

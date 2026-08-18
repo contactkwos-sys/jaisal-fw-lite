@@ -23,6 +23,7 @@ import { SampleRegister } from './pages/SampleRegister'
 import { BeamRemainingReport } from './pages/BeamRemainingReport'
 import { DesignWiseCosting } from './pages/DesignWiseCosting'
 import { DesignCatalogScreen } from './screens/DesignCatalogScreen'
+import { CrmCustomersScreen } from './screens/CrmCustomersScreen'
 
 function AuthenticatedApp() {
   const { session, loading, isCeo } = useAuth()
@@ -77,6 +78,7 @@ function AuthenticatedApp() {
       ) : null}
       {tab === 'broadcast' ? <DesignBroadcastScreen initialDesignId={filter} /> : null}
       {tab === 'design-catalog' ? <DesignCatalogScreen /> : null}
+      {tab === 'crm' ? <CrmCustomersScreen /> : null}
       {tab === 'parties' ? <PartyMasterScreen /> : null}
       {tab === 'purchase' ? (
         <PurchaseScreen initialSub={sub || 'general'} />
