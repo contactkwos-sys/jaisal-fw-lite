@@ -1,0 +1,267 @@
+/* Design Catalog (DNA) — scoped styles */
+
+.dna-screen {
+  display: grid;
+  gap: 1rem;
+}
+
+.dna-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+}
+
+.dna-header h1 {
+  margin: 0;
+}
+
+.dna-add-btn {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.dna-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1.25rem;
+}
+
+.dna-search {
+  flex: 1 1 16rem;
+  min-width: 12rem;
+}
+
+.dna-count {
+  margin: 0 0 0.35rem;
+}
+
+.dna-empty {
+  margin: 0.5rem 0 0;
+}
+
+.dna-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16.5rem, 1fr));
+  gap: 1rem;
+}
+
+.dna-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.dna-card-images {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  background: var(--line);
+}
+
+.dna-thumb {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  background: var(--surface2);
+  overflow: hidden;
+}
+
+.dna-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.dna-thumb-label {
+  position: absolute;
+  left: 0.4rem;
+  bottom: 0.4rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text);
+  background: rgba(20, 23, 28, 0.72);
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+}
+
+.dna-card-body {
+  padding: 0.75rem 0.85rem 0.9rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.dna-card-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.dna-card-notes {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.dna-share-btn {
+  justify-self: start;
+  margin-top: 0.15rem;
+}
+
+.dna-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.dna-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(8, 10, 14, 0.72);
+}
+
+.dna-modal-panel {
+  position: relative;
+  z-index: 1;
+  width: min(36rem, 100%);
+  max-height: min(92vh, 52rem);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 1.1rem 1.15rem 1.25rem;
+}
+
+.dna-modal-panel h2 {
+  margin: 0 0 0.85rem;
+  font-size: 1.15rem;
+}
+
+.dna-form {
+  margin: 0;
+}
+
+.dna-upload-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.dna-upload-slot input[type='file'] {
+  font-size: 0.8rem;
+}
+
+.dna-upload-preview,
+.dna-upload-placeholder {
+  margin-top: 0.5rem;
+  aspect-ratio: 3 / 4;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+  overflow: hidden;
+}
+
+.dna-upload-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.dna-upload-placeholder {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 0.5rem;
+}
+
+.dna-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  margin-top: 0.35rem;
+}
+
+.dna-share-caption {
+  margin: 0 0 0.85rem;
+  font-size: 0.95rem;
+}
+
+.dna-share-modes {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.65rem 0.75rem 0.75rem;
+  margin: 0 0 0.85rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.dna-share-modes legend {
+  padding: 0 0.25rem;
+}
+
+.dna-radio {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.dna-customer-pick,
+.dna-broadcast-stub {
+  display: grid;
+  gap: 0.65rem;
+  margin-bottom: 0.85rem;
+}
+
+.dna-customer-pick select {
+  width: 100%;
+  background: var(--surface2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.55rem 0.65rem;
+  font: inherit;
+}
+
+.dna-form textarea {
+  width: 100%;
+  background: var(--surface2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.65rem 0.75rem;
+  font: inherit;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+@media (max-width: 520px) {
+  .dna-upload-pair {
+    grid-template-columns: 1fr;
+  }
+
+  .dna-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .dna-add-btn {
+    width: 100%;
+  }
+}

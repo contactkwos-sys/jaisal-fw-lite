@@ -64,6 +64,18 @@ export type Design = {
   created_at: string
 }
 
+/** Design Catalog (DNA) — shareable design + matching photo pairs */
+export type DesignCatalog = {
+  id: string
+  design_no: number
+  jfg_no: string
+  design_image_url: string
+  matching_image_url: string
+  notes: string | null
+  created_at: string
+  created_by: string | null
+}
+
 export type DesignWarp = {
   id: string
   design_id: string
