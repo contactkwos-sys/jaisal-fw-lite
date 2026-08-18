@@ -106,67 +106,70 @@ export function LoginScreen() {
 
   return (
     <div className="screen login-screen">
-      <header className="screen-header">
-        <h1>Jaisal FW Lite</h1>
-        <p className="text-muted">Select role and enter PIN</p>
-      </header>
+      <div className="login-card">
+        <header className="login-brand">
+          <p className="login-eyebrow">Fashionweave Industries</p>
+          <h1>JAISAL FW</h1>
+          <p className="text-muted">Select your role and enter PIN</p>
+        </header>
 
-      <section className="role-chips" aria-label="Roles">
-        {chipRoles.map((role) => (
-          <button
-            key={role.id}
-            type="button"
-            className={selectedId === role.id ? 'chip chip-active' : 'chip'}
-            onClick={() => {
-              setSelectedId(role.id)
-              setPin('')
-              setError(null)
-            }}
-          >
-            {role.role_name}
-          </button>
-        ))}
-        {!adding ? (
-          <button type="button" className="chip chip-add" onClick={() => setAdding(true)}>
-            + Add
-          </button>
-        ) : (
-          <div className="add-role-row">
-            <input
-              value={customName}
-              onChange={(e) => setCustomName(e.target.value)}
-              placeholder="Custom role"
-              aria-label="Custom role name"
-            />
-            <button type="button" disabled={busy} onClick={() => void handleAddRole()}>
-              Save
-            </button>
+        <section className="role-chips" aria-label="Roles">
+          {chipRoles.map((role) => (
             <button
+              key={role.id}
               type="button"
-              className="btn-ghost"
+              className={selectedId === role.id ? 'chip chip-active' : 'chip'}
               onClick={() => {
-                setAdding(false)
-                setCustomName('')
+                setSelectedId(role.id)
+                setPin('')
+                setError(null)
               }}
             >
-              Cancel
+              {role.role_name}
             </button>
-          </div>
-        )}
-      </section>
+          ))}
+          {!adding ? (
+            <button type="button" className="chip chip-add" onClick={() => setAdding(true)}>
+              + Add
+            </button>
+          ) : (
+            <div className="add-role-row">
+              <input
+                value={customName}
+                onChange={(e) => setCustomName(e.target.value)}
+                placeholder="Custom role"
+                aria-label="Custom role name"
+              />
+              <button type="button" disabled={busy} onClick={() => void handleAddRole()}>
+                Save
+              </button>
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={() => {
+                  setAdding(false)
+                  setCustomName('')
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+        </section>
 
-      <PinPad value={pin} onChange={setPin} disabled={busy} />
+        <PinPad value={pin} onChange={setPin} disabled={busy} />
 
-      {error ? <p className="form-error text-danger">{error}</p> : null}
+        {error ? <p className="form-error text-danger">{error}</p> : null}
 
-      <button
-        type="button"
-        className="login-btn"
-        disabled={busy || !selected || pin.length !== 4}
-        onClick={() => void handleLogin()}
-      >
-        Login as {selected?.role_name ?? 'Role'}
-      </button>
+        <button
+          type="button"
+          className="login-btn"
+          disabled={busy || !selected || pin.length !== 4}
+          onClick={() => void handleLogin()}
+        >
+          {busy ? 'Signing in…' : `Login as ${selected?.role_name ?? 'Role'}`}
+        </button>
+      </div>
     </div>
   )
 }

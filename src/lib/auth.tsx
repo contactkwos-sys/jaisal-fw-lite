@@ -114,6 +114,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginWithPin = useCallback(
     async (role: Role, pin: string) => {
+      // Local UI smoke only — never enabled in production builds without the env flag.
+      if (import.meta.env.VITE_SMOKE_BYPASS === '1') {
+        const mockUser = {
+          id: `smoke-${role.id}`,
+          full_name: role.role_name,
+          role_id: role.id,
+          pin_hash: '',
+          is_active: true,
+          created_at: new Date().toISOString(),
+          roles: role,
+        }
+        setProfile(mockUser)
+        setSession({
+          access_token: 'smoke',
+          refresh_token: 'smoke',
+          expires_in: 3600,
+          token_type: 'bearer',
+          user: {
+            id: mockUser.id,
+            app_metadata: {},
+            user_metadata: {
+              full_name: role.role_name,
+              role_name: role.role_name,
+              role_id: role.id,
+            },
+            aud: 'authenticated',
+            created_at: mockUser.created_at,
+          },
+        } as Session)
+        return
+      }
       const { data, error } = await supabase.functions.invoke('pin-login', {
         body: { role_id: role.id, role_name: role.role_name, pin },
       })

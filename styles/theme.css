@@ -1,24 +1,51 @@
 /**
- * Jaisal FW Lite — design tokens
- * Textile-inspired palette: warp (blue), weft (gold), greige (neutral yarn)
+ * JAISAL FW — premium textile mill design tokens
+ * Light industrial SaaS: teal primary, mint selected, amber accent
  */
 :root {
-  --bg: #14171c;
-  --surface: #1c2027;
-  --surface2: #232833;
-  --line: #2d323d;
+  /* Surfaces */
+  --bg: #f3f5f6;
+  --surface: #ffffff;
+  --surface2: #eef1f3;
+  --line: #dde3e6;
 
-  --warp: #5b7fb0; /* blue accent — warp yarn */
-  --warp-soft: #3a4a63;
-  --weft: #d9a441; /* gold accent — weft yarn, primary buttons */
-  --weft-soft: #4a3f26;
-  --greige: #b8ad98;
-  --sage: #7a9a7f; /* success / positive numbers */
+  /* Brand — deep industrial teal (primary) */
+  --teal: #0d6b6e;
+  --teal-deep: #0a5558;
+  --teal-soft: #e4f3f3;
+  --mint: #3fa88a;
+  --mint-soft: #e6f6f0;
 
-  --text: #ede9e2;
-  --muted: #9096a1;
-  --muted2: #6b7280;
+  /* Accents */
+  --amber: #c49a3c;
+  --amber-soft: #f7f0de;
+  --purple-soft: #efeaf8;
+  --orange-soft: #f8eee6;
+  --blue-soft: #e8f0f8;
 
-  --danger: #c96a5a;
-  --wa: #5fb583; /* WhatsApp button green */
+  /* Legacy aliases (existing screens use these names) */
+  --warp: var(--teal);
+  --warp-soft: var(--teal-soft);
+  --weft: var(--amber);
+  --weft-soft: var(--amber-soft);
+  --greige: #6e7874;
+  --sage: var(--mint);
+
+  /* Text */
+  --text: #1a2332;
+  --muted: #5a6577;
+  --muted2: #8a94a3;
+
+  /* Status */
+  --danger: #c45a4a;
+  --danger-soft: #f8eae7;
+  --wa: #25a366;
+
+  /* Elevation */
+  --shadow-sm: 0 1px 2px rgba(26, 35, 50, 0.04), 0 1px 3px rgba(26, 35, 50, 0.06);
+  --shadow-md: 0 2px 8px rgba(26, 35, 50, 0.06), 0 1px 2px rgba(26, 35, 50, 0.04);
+  --radius: 10px;
+  --radius-sm: 8px;
+  --sidebar-w: 15.5rem;
+  --sidebar-collapsed: 4.25rem;
 }
