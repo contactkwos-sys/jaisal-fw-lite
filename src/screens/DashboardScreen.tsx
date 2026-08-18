@@ -366,49 +366,66 @@ export function DashboardScreen({ onNavigate }: Props) {
     }
   }
 
-  const quick: Array<{ label: string; screen: AppScreen; sub?: string }> = [
-    { label: 'Attendance', screen: 'attendance' },
-    { label: 'Inward', screen: 'purchase', sub: 'general' },
-    { label: 'Weft Issue', screen: 'purchase', sub: 'weft' },
-    { label: 'Production', screen: 'production', sub: 'entry' },
-    { label: 'Folding', screen: 'dispatch', sub: 'folding' },
-    { label: 'Dispatch', screen: 'dispatch', sub: 'challan' },
+  const quick: Array<{ label: string; screen: AppScreen; sub?: string; module?: import('../lib/nav').MainModuleId }> = [
+    { label: 'Production Entry', screen: 'production', sub: 'entry', module: 'production' },
+    { label: 'Job Card Issue', screen: 'production', sub: 'job', module: 'orders' },
+    { label: 'Program Card', screen: 'programs', sub: 'create', module: 'orders' },
+    { label: 'Weft Issue', screen: 'purchase', sub: 'weft', module: 'production' },
+    { label: 'Folding', screen: 'dispatch', sub: 'folding', module: 'production' },
+    { label: 'Dispatch', screen: 'dispatch', sub: 'challan', module: 'production' },
+    { label: 'Inward', screen: 'purchase', sub: 'general', module: 'inventory' },
+    { label: 'Attendance', screen: 'attendance', module: 'reports' },
   ]
 
   const alertRows = (
     [
-      [`Beam Return Pending (${alerts.beamPending})`, { screen: 'purchase' as AppScreen, sub: 'report', filter: 'pending' }],
-      [`Weft Low Stock <${WEFT_LOW_STOCK_KG}kg (${alerts.weftLow})`, { screen: 'stock' as AppScreen, sub: 'weft' }],
-      [`Repair Out Pending (${alerts.repairOut})`, { screen: 'maintenance' as AppScreen, sub: 'repair' }],
-      [`Program Pending (${alerts.programPending})`, { screen: 'production' as AppScreen, sub: 'job' }],
-      [`Gatepass Pending Sign (${alerts.gatepassPending})`, { screen: 'dispatch' as AppScreen, sub: 'gatepass' }],
+      [`Beam Return Pending (${alerts.beamPending})`, { screen: 'purchase' as AppScreen, sub: 'report', filter: 'pending', module: 'inventory' as const }],
+      [`Weft Low Stock <${WEFT_LOW_STOCK_KG}kg (${alerts.weftLow})`, { screen: 'stock' as AppScreen, sub: 'weft', module: 'inventory' as const }],
+      [`Repair Out Pending (${alerts.repairOut})`, { screen: 'maintenance' as AppScreen, sub: 'repair', module: 'maintenance' as const }],
+      [`Program Pending (${alerts.programPending})`, { screen: 'programs' as AppScreen, sub: 'pending', module: 'orders' as const }],
+      [`Gatepass Pending Sign (${alerts.gatepassPending})`, { screen: 'dispatch' as AppScreen, sub: 'gatepass', module: 'production' as const }],
     ] as const
   ).filter((row) => !row[0].includes('(0)'))
 
+  const alertCount = alertRows.length
+
   const flowSteps = [
-    ['Warp Issue', `${flow.warpIn.toFixed(1)} kg`],
-    ['Weft Issue', `${flow.weftBuy.toFixed(1)} kg`],
-    ['Production', `${flow.production.toFixed(1)} m`],
-    ['Folding', `${flow.folding.toFixed(1)} m`],
-    ['Dispatch', `${flow.dispatch.toFixed(1)} m`],
+    ['Warp Issue', `${flow.warpIn.toFixed(1)} kg`, 'warp'],
+    ['Weft Issue', `${flow.weftBuy.toFixed(1)} kg`, 'weft'],
+    ['Production', `${flow.production.toFixed(1)} m`, 'prod'],
+    ['Folding', `${flow.folding.toFixed(1)} m`, 'fold'],
+    ['Dispatch', `${flow.dispatch.toFixed(1)} m`, 'disp'],
   ] as const
+
+  const stockTotal =
+    beams.reduce((s, b) => s + Number(b.quantity_pcs || 0), 0) +
+    yarns.reduce((s, y) => s + Number(y.stock_kg || 0), 0)
 
   return (
     <div className="screen dashboard-screen">
-      <section className="kpi-grid kpi-grid-5">
+      <section className="dash-hero">
+        <div className="dash-hero-copy">
+          <p className="dash-hero-eyebrow">Fashionweave Industries</p>
+          <h2 className="dash-hero-title">Mill overview</h2>
+          <p className="dash-hero-sub text-muted">Live floor KPIs for management</p>
+        </div>
+      </section>
+
+      <section className="kpi-grid kpi-grid-6">
         {(
           [
-            ['Attendance Today', kpis.attendanceToday, { screen: 'attendance' as AppScreen }],
-            ['Warp Beam Stock', kpis.warpBeamStock, { screen: 'stock' as AppScreen, sub: 'beam' }],
-            ['Weft Yarn Stock', `${kpis.weftYarnStock.toFixed(1)} kg`, { screen: 'stock' as AppScreen, sub: 'weft' }],
-            ['Greige / Prod Today', `${kpis.greigeToday.toFixed(1)} m`, { screen: 'production' as AppScreen, sub: 'report' }],
-            ['Dispatch Today', `${kpis.dispatchToday.toFixed(1)} m`, { screen: 'dispatch' as AppScreen, sub: 'challan' }],
+            ['Attendance Today', kpis.attendanceToday, 'att', { screen: 'attendance' as AppScreen, module: 'reports' as const }],
+            ['Warp Beam Stock', `${kpis.warpBeamStock} Beams`, 'beam', { screen: 'stock' as AppScreen, sub: 'beam', module: 'inventory' as const }],
+            ['Weft Yarn Stock', `${kpis.weftYarnStock.toFixed(0)} kg`, 'yarn', { screen: 'stock' as AppScreen, sub: 'weft', module: 'inventory' as const }],
+            ['Greige Production', `${kpis.greigeToday.toFixed(0)} m`, 'greige', { screen: 'production' as AppScreen, sub: 'report', module: 'production' as const }],
+            ['Dispatch Today', `${kpis.dispatchToday.toFixed(0)} m`, 'dispatch', { screen: 'dispatch' as AppScreen, sub: 'challan', module: 'production' as const }],
+            ['Alerts & Reminders', `${alertCount} Alert${alertCount === 1 ? '' : 's'}`, 'alerts', { screen: 'home' as AppScreen, module: 'dashboard' as const }],
           ] as const
-        ).map(([label, value, nav]) => (
+        ).map(([label, value, tone, nav]) => (
           <button
             key={label}
             type="button"
-            className="kpi-card surface"
+            className={`kpi-card surface kpi-tone-${tone}`}
             onClick={() => onNavigate(nav)}
           >
             <span className="text-muted">{label}</span>
@@ -417,42 +434,12 @@ export function DashboardScreen({ onNavigate }: Props) {
         ))}
       </section>
 
-      <div className="dash-split">
-        <section className="dash-panel">
-          <h2 className="section-title">Quick Access</h2>
-          <div className="quick-grid quick-grid-6">
-            {quick.map((q) => (
-              <button
-                key={q.label}
-                type="button"
-                className="quick-tile surface2"
-                onClick={() => onNavigate({ screen: q.screen, sub: q.sub })}
-              >
-                {q.label}
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <section className="dash-panel">
-          <h2 className="section-title">Alerts & Reminders</h2>
-          <div className="list alert-list">
-            {alertRows.map(([label, nav]) => (
-              <button key={label} type="button" className="alert-row surface" onClick={() => onNavigate(nav)}>
-                {label}
-              </button>
-            ))}
-            {alertRows.length === 0 ? <p className="text-sage">No alerts</p> : null}
-          </div>
-        </section>
-      </div>
-
-      <section>
-        <h2 className="section-title">Today&apos;s Summary Flow</h2>
+      <section className="dash-panel">
+        <h2 className="section-title">Today&apos;s Production Flow</h2>
         <div className="flow-row flow-row-h">
-          {flowSteps.map(([label, val], idx) => (
+          {flowSteps.map(([label, val, tone], idx) => (
             <div key={label} className="flow-step">
-              <div className="flow-card surface2">
+              <div className={`flow-card surface flow-tone-${tone}`}>
                 <span className="text-muted2">{label}</span>
                 <strong className="num">{val}</strong>
               </div>
@@ -468,6 +455,45 @@ export function DashboardScreen({ onNavigate }: Props) {
 
       <div className="dash-split dash-split-tables">
         <section className="dash-panel dash-panel-wide">
+          <h2 className="section-title">Top Machines (Today)</h2>
+          <div className="dash-table-wrap surface">
+            <table className="dash-table">
+              <thead>
+                <tr>
+                  <th>Machine</th>
+                  <th className="num">Meters</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {topMachines.length === 0 ? (
+                  <tr>
+                    <td colSpan={3} className="text-muted">
+                      No production today
+                    </td>
+                  </tr>
+                ) : (
+                  topMachines.map((row) => (
+                    <tr key={row.machine}>
+                      <td>
+                        {row.machine} — Airjet Loom
+                      </td>
+                      <td className="num">{row.meters.toFixed(1)}</td>
+                      <td>
+                        <span className="machine-status running">
+                          <span className="status-dot" aria-hidden="true" />
+                          Running
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="dash-panel">
           <h2 className="section-title">Recent Inward</h2>
           <div className="dash-table-wrap surface">
             <table className="dash-table">
@@ -498,39 +524,68 @@ export function DashboardScreen({ onNavigate }: Props) {
             </table>
           </div>
         </section>
+      </div>
+
+      <div className="dash-split">
+        <section className="dash-panel">
+          <h2 className="section-title">Stock Summary</h2>
+          <div className="stock-summary surface">
+            <div className="stock-donut" aria-hidden="true">
+              <div className="stock-donut-ring" />
+              <div className="stock-donut-center">
+                <strong className="num">{stockTotal.toFixed(0)}</strong>
+                <span className="text-muted2">total</span>
+              </div>
+            </div>
+            <ul className="stock-legend">
+              <li>
+                <span className="legend-swatch swatch-yarn" /> Yarn{' '}
+                <span className="num">{kpis.weftYarnStock.toFixed(0)}</span>
+              </li>
+              <li>
+                <span className="legend-swatch swatch-beam" /> Beams{' '}
+                <span className="num">{kpis.warpBeamStock}</span>
+              </li>
+              <li>
+                <span className="legend-swatch swatch-greige" /> Greige{' '}
+                <span className="num">{kpis.greigeToday.toFixed(0)}</span>
+              </li>
+              <li>
+                <span className="legend-swatch swatch-other" /> Inward ₹{' '}
+                <span className="num">{flow.inwardSpend.toFixed(0)}</span>
+              </li>
+            </ul>
+          </div>
+        </section>
 
         <section className="dash-panel">
-          <h2 className="section-title">Top Machines</h2>
-          <div className="dash-table-wrap surface">
-            <table className="dash-table">
-              <thead>
-                <tr>
-                  <th>Machine</th>
-                  <th className="num">Meters</th>
-                  <th className="num">Entries</th>
-                </tr>
-              </thead>
-              <tbody>
-                {topMachines.length === 0 ? (
-                  <tr>
-                    <td colSpan={3} className="text-muted">
-                      No production today
-                    </td>
-                  </tr>
-                ) : (
-                  topMachines.map((row) => (
-                    <tr key={row.machine}>
-                      <td>{row.machine}</td>
-                      <td className="num">{row.meters.toFixed(1)}</td>
-                      <td className="num">{row.entries}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+          <h2 className="section-title">Alerts & Reminders</h2>
+          <div className="list alert-list">
+            {alertRows.map(([label, nav]) => (
+              <button key={label} type="button" className="alert-row surface" onClick={() => onNavigate(nav)}>
+                {label}
+              </button>
+            ))}
+            {alertRows.length === 0 ? <p className="text-sage">No alerts</p> : null}
           </div>
         </section>
       </div>
+
+      <section className="dash-panel">
+        <h2 className="section-title">Quick Actions</h2>
+        <div className="quick-grid quick-grid-8">
+          {quick.map((q) => (
+            <button
+              key={q.label}
+              type="button"
+              className="quick-tile"
+              onClick={() => onNavigate({ screen: q.screen, sub: q.sub, module: q.module })}
+            >
+              {q.label}
+            </button>
+          ))}
+        </div>
+      </section>
 
       {isCeo ? (
         <section className="dash-stock-edit">
@@ -543,8 +598,12 @@ export function DashboardScreen({ onNavigate }: Props) {
                   <div className="text-muted num">{b.quantity_pcs} pcs</div>
                 </div>
                 <div className="icon-actions">
-                  <button type="button" className="btn-ghost icon-btn" disabled={busy} onClick={() => void editBeam(b)}>✏️</button>
-                  <button type="button" className="btn-ghost icon-btn" disabled={busy} onClick={() => void deleteBeam(b)}>🗑️</button>
+                  <button type="button" className="btn-ghost icon-btn" disabled={busy} onClick={() => void editBeam(b)}>
+                    Edit
+                  </button>
+                  <button type="button" className="btn-ghost icon-btn" disabled={busy} onClick={() => void deleteBeam(b)}>
+                    Del
+                  </button>
                 </div>
               </article>
             ))}
@@ -555,8 +614,12 @@ export function DashboardScreen({ onNavigate }: Props) {
                   <div className="text-muted num">{y.stock_kg} kg</div>
                 </div>
                 <div className="icon-actions">
-                  <button type="button" className="btn-ghost icon-btn" disabled={busy} onClick={() => void editYarn(y)}>✏️</button>
-                  <button type="button" className="btn-ghost icon-btn" disabled={busy} onClick={() => void deleteYarn(y)}>🗑️</button>
+                  <button type="button" className="btn-ghost icon-btn" disabled={busy} onClick={() => void editYarn(y)}>
+                    Edit
+                  </button>
+                  <button type="button" className="btn-ghost icon-btn" disabled={busy} onClick={() => void deleteYarn(y)}>
+                    Del
+                  </button>
                 </div>
               </article>
             ))}

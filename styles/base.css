@@ -7,7 +7,7 @@
 }
 
 html {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 body {
@@ -15,34 +15,42 @@ body {
   min-height: 100vh;
   background: var(--bg);
   color: var(--text);
-  font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+  font-family: "DM Sans", "Segoe UI", "Helvetica Neue", sans-serif;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
 
-h1, h2, .screen-header h1, .section-title {
-  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+h1,
+h2,
+.screen-header h1,
+.section-title,
+.sidebar-brand-name,
+.content-page-title {
+  font-family: "Outfit", "DM Sans", "Segoe UI", sans-serif;
 }
 
-.num, input.num, .kpi-card strong, .kpi-total {
+.num,
+input.num,
+.kpi-card strong,
+.kpi-total {
   font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
 }
 
 a {
-  color: var(--warp);
+  color: var(--teal);
 }
 
 button,
 .btn {
   appearance: none;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 0.55rem 1rem;
   font: inherit;
   cursor: pointer;
-  background: var(--weft);
-  color: var(--bg);
+  background: var(--teal);
+  color: #fff;
 }
 
 button:hover,
@@ -50,14 +58,21 @@ button:hover,
   filter: brightness(1.05);
 }
 
+button:disabled,
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  filter: none;
+}
+
 .btn-warp {
-  background: var(--warp);
-  color: var(--text);
+  background: var(--teal);
+  color: #fff;
 }
 
 .btn-wa {
   background: var(--wa);
-  color: var(--bg);
+  color: #fff;
 }
 
 .btn-ghost {
@@ -69,6 +84,7 @@ button:hover,
 .surface {
   background: var(--surface);
   border: 1px solid var(--line);
+  box-shadow: var(--shadow-sm);
 }
 
 .surface2 {
@@ -97,9 +113,9 @@ button:hover,
 }
 
 .text-weft {
-  color: var(--weft);
+  color: var(--amber);
 }
 
 .text-warp {
-  color: var(--warp);
+  color: var(--teal);
 }

@@ -6,7 +6,9 @@ Lightweight factory floor app (Phases 1–8) on Vite + React + Supabase.
 
 ## Theme
 
-Design tokens: [`styles/theme.css`](styles/theme.css) (imported via [`styles/base.css`](styles/base.css)). Do not change the Phase 1 palette (warp `#5b7fb0`, weft `#d9a441`, dark surfaces). Headings use Space Grotesk; numeric fields use IBM Plex Mono.
+Design tokens: [`styles/theme.css`](styles/theme.css) (imported via [`styles/base.css`](styles/base.css)). Premium light industrial palette: deep teal primary, mint selected states, amber accent, white cards on light grey. Headings use Outfit; body uses DM Sans; numeric fields use IBM Plex Mono.
+
+Navigation is capped at **9 main modules** (Dashboard, Production, Inventory, Orders, Reports, Maintenance, Masters, Security, Settings). Existing screens are grouped as sub-items / module hubs. Role-based module access is configured under Security → Permissions (defaults by role; CEO can override).
 
 ## Setup
 

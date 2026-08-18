@@ -71,27 +71,19 @@ await shot(m, 'prod-mobile-drawer')
 const navText = await m.locator('.side-nav').innerText()
 const need = [
   'Dashboard',
-  'Attendance',
-  'Inward',
-  'Yarn Management',
-  'Warp Beam',
-  'Weft Issue',
   'Production',
-  'Folding',
-  'Dispatch & Gate Pass',
-  'Design & Job Card',
-  'ADMIN',
-  'Maintenance',
-  'Stock Reports',
+  'Inventory',
+  'Orders',
   'Reports',
-  'Costing',
-  'Admin Master',
-  'Payroll',
+  'Maintenance',
+  'Masters',
+  'Security',
+  'Settings',
 ]
 const missing = need.filter((n) => !navText.includes(n))
 record('nav modules present', missing.length === 0, { missing })
 
-await m.locator('.side-nav').getByRole('button', { name: 'Attendance', exact: true }).click()
+await m.locator('.side-nav').getByRole('button', { name: 'Production', exact: true }).click()
 await m.waitForTimeout(500)
 record('drawer closes on nav', (await m.locator('.app-shell.drawer-is-open').count()) === 0)
 await shot(m, 'prod-mobile-attendance')
@@ -126,16 +118,16 @@ record('desktop sidebar visible', await d.locator('.app-sidebar').isVisible())
 await d.locator('.side-nav').getByRole('button', { name: 'Dashboard', exact: true }).click()
 await d.waitForTimeout(1200)
 const kpiCount = await d.locator('.kpi-card').count()
-record('5 KPI cards', kpiCount === 5, { kpiCount })
+record('6 KPI cards', kpiCount === 6, { kpiCount })
 record('summary flow', (await d.locator('.flow-row-h').count()) >= 1)
 const tables = await d.locator('.dash-table').count()
 record('inward+machines tables', tables >= 2, { tables })
 await shot(d, 'prod-desktop-dashboard')
 
-for (const name of ['Production', 'Dispatch & Gate Pass', 'Design & Job Card']) {
+for (const name of ['Production', 'Orders', 'Inventory']) {
   await d.locator('.side-nav').getByRole('button', { name, exact: true }).click()
   await d.waitForTimeout(600)
-  record(`open ${name}`, (await d.locator('.screen, .app-main').count()) > 0)
+  record(`open ${name}`, (await d.locator('.screen, .app-main, .hub-card').count()) > 0)
 }
 await shot(d, 'prod-desktop-design')
 

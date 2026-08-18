@@ -1,7 +1,16 @@
 import { useEffect, useState } from 'react'
 import { AppShell } from './components/AppShell'
+import { ModuleHub } from './components/ModuleHub'
+import { PlaceholderScreen } from './components/PlaceholderScreen'
 import { AuthProvider, useAuth } from './lib/auth'
-import type { AppScreen } from './lib/nav'
+import {
+  moduleForScreen,
+  titleFor,
+  type AppScreen,
+  type MainModuleId,
+  type NavTarget,
+} from './lib/nav'
+import { firstAllowedLanding } from './lib/permissions'
 import { AdminScreen } from './screens/AdminScreen'
 import { AttendanceScreen } from './screens/AttendanceScreen'
 import { CostingScreen } from './screens/CostingScreen'
@@ -26,22 +35,29 @@ import { DesignCatalogScreen } from './screens/DesignCatalogScreen'
 import { CrmCustomersScreen } from './screens/CrmCustomersScreen'
 
 function AuthenticatedApp() {
-  const { session, loading, isCeo } = useAuth()
-  const [tab, setTab] = useState<AppScreen>('attendance')
+  const { session, loading, isCeo, profile } = useAuth()
+  const [tab, setTab] = useState<AppScreen>('home')
   const [sub, setSub] = useState<string | undefined>()
   const [filter, setFilter] = useState<string | undefined>()
+  const [activeModule, setActiveModule] = useState<MainModuleId>('dashboard')
 
   useEffect(() => {
     if (!session) return
-    setTab(isCeo ? 'home' : 'attendance')
-    setSub(undefined)
-    setFilter(undefined)
-  }, [session, isCeo])
+    const roleName = profile?.roles?.role_name || profile?.full_name || (isCeo ? 'CEO' : 'User')
+    const landing = firstAllowedLanding(roleName)
+    setTab(landing.screen)
+    setSub(landing.sub)
+    setFilter(landing.module === landing.sub ? landing.module : undefined)
+    setActiveModule(landing.module)
+  }, [session, isCeo, profile?.id, profile?.roles?.role_name, profile?.full_name])
 
   if (loading) {
     return (
       <div className="app-loading">
-        <p className="text-muted">Loading…</p>
+        <div className="loading-brand">
+          <strong>JAISAL FW</strong>
+          <p className="text-muted">Loading…</p>
+        </div>
       </div>
     )
   }
@@ -50,21 +66,32 @@ function AuthenticatedApp() {
     return <LoginScreen />
   }
 
-  function go(screen: AppScreen, nextSub?: string, nextFilter?: string) {
-    setTab(screen)
+  function go(t: NavTarget) {
+    const nextScreen = t.screen
+    const nextSub = t.hub || t.sub
+    const nextFilter = t.filter ?? (t.hub ? t.hub : undefined)
+    setTab(nextScreen)
     setSub(nextSub)
     setFilter(nextFilter)
+    setActiveModule(t.module || t.hub || moduleForScreen(nextScreen, nextSub, nextFilter))
   }
+
+  const hubModule = (sub as MainModuleId) || activeModule
 
   return (
     <AppShell
       active={tab}
       sub={sub}
-      isCeo={isCeo}
-      onNavigate={(t) => go(t.screen, t.sub, t.filter)}
+      filter={filter}
+      activeModule={activeModule}
+      onNavigate={go}
     >
-      {tab === 'home' ? (
-        <DashboardScreen onNavigate={(t) => go(t.screen, t.sub, t.filter)} />
+      {tab === 'home' ? <DashboardScreen onNavigate={go} /> : null}
+      {tab === 'module-hub' ? (
+        <ModuleHub moduleId={hubModule} onNavigate={go} />
+      ) : null}
+      {tab === 'placeholder' ? (
+        <PlaceholderScreen title={titleFor('placeholder', undefined, undefined, filter)} />
       ) : null}
       {tab === 'attendance' ? <AttendanceScreen /> : null}
       {tab === 'stock' ? (
@@ -74,15 +101,13 @@ function AuthenticatedApp() {
         />
       ) : null}
       {tab === 'design' ? (
-        <DesignScreen onOpenDesignCosting={(dno) => go('design-wise-costing', undefined, dno)} />
+        <DesignScreen onOpenDesignCosting={(dno) => go({ screen: 'design-wise-costing', filter: dno, module: 'orders' })} />
       ) : null}
       {tab === 'broadcast' ? <DesignBroadcastScreen initialDesignId={filter} /> : null}
       {tab === 'design-catalog' ? <DesignCatalogScreen /> : null}
       {tab === 'crm' ? <CrmCustomersScreen /> : null}
       {tab === 'parties' ? <PartyMasterScreen /> : null}
-      {tab === 'purchase' ? (
-        <PurchaseScreen initialSub={sub || 'general'} />
-      ) : null}
+      {tab === 'purchase' ? <PurchaseScreen initialSub={sub || 'general'} /> : null}
       {tab === 'orders' ? <OrderBookScreen initialSub={sub || 'entry'} /> : null}
       {tab === 'programs' ? <ProgramScreen initialSub={sub || 'create'} /> : null}
       {tab === 'security' ? <SecurityGateScreen initialSub={sub || 'inward'} /> : null}
@@ -105,7 +130,7 @@ function AuthenticatedApp() {
         />
       ) : null}
       {tab === 'admin' ? (
-        <AdminScreen initialSub={(sub as 'roles' | 'payroll' | 'approvals') || 'roles'} />
+        <AdminScreen initialSub={(sub as 'roles' | 'payroll' | 'approvals' | 'permissions') || 'roles'} />
       ) : null}
       {tab === 'costing' ? (
         <CostingScreen initialSub={(sub as 'summary' | 'electricity') || 'summary'} />
@@ -113,9 +138,7 @@ function AuthenticatedApp() {
       {tab === 'sample-job-card' ? <SampleJobCard /> : null}
       {tab === 'sample-register' ? <SampleRegister /> : null}
       {tab === 'beam-remaining' ? <BeamRemainingReport /> : null}
-      {tab === 'design-wise-costing' ? (
-        <DesignWiseCosting initialDin={filter || ''} />
-      ) : null}
+      {tab === 'design-wise-costing' ? <DesignWiseCosting initialDin={filter || ''} /> : null}
     </AppShell>
   )
 }

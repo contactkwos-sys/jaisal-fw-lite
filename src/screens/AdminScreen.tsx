@@ -4,10 +4,19 @@ import { SubTabs } from '../components/SubTabs'
 import { useAuth } from '../lib/auth'
 import type { ApprovalQueue, PayrollRate, Role, Worker } from '../lib/database.types'
 import { applyOrQueue } from '../lib/mutate'
+import type { MainModuleId } from '../lib/nav'
+import {
+  ALL_MODULE_OPTIONS,
+  clearRolePermissionOverride,
+  getDefaultPermissions,
+  getPermissionsForRole,
+  saveRolePermissions,
+  type ModulePermission,
+} from '../lib/permissions'
 import { printSummary, rowsToHtml, shareWhatsApp } from '../lib/share'
 import { supabase } from '../lib/supabase'
 
-type Sub = 'roles' | 'payroll' | 'approvals'
+type Sub = 'roles' | 'payroll' | 'approvals' | 'permissions'
 type Props = { initialSub?: Sub }
 
 type PayableRow = {
@@ -29,6 +38,9 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
   const [newPin, setNewPin] = useState<Record<string, string>>({})
   const [editName, setEditName] = useState<Record<string, string>>({})
   const [bulkPins, setBulkPins] = useState<Array<{ role: string; pin: string }> | null>(null)
+  const [permRoleId, setPermRoleId] = useState<string | null>(null)
+  const [permDraft, setPermDraft] = useState<ModulePermission[]>([])
+  const [permMsg, setPermMsg] = useState<string | null>(null)
 
   const [rates, setRates] = useState<PayrollRate[]>([])
   const [rateDraft, setRateDraft] = useState<Record<string, string>>({})
@@ -119,6 +131,14 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
   useEffect(() => {
     if (initialSub) setSub(initialSub)
   }, [initialSub])
+
+  useEffect(() => {
+    if (sub !== 'permissions') return
+    const role = roles.find((r) => r.id === permRoleId) || roles[0]
+    if (!role) return
+    if (!permRoleId) setPermRoleId(role.id)
+    setPermDraft(getPermissionsForRole(role.role_name))
+  }, [sub, roles, permRoleId])
 
   const monthTotal = useMemo(
     () => payables.reduce((s, p) => s + p.payable, 0),
@@ -314,23 +334,74 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
     }
   }
 
-  if (!isCeo && sub === 'approvals') {
+  if (!isCeo && (sub === 'approvals' || sub === 'permissions')) {
     return (
       <div className="screen">
-        <p className="text-danger">CEO only — approval queue</p>
+        <p className="text-danger">CEO / Admin only</p>
       </div>
     )
+  }
+
+  function toggleModule(moduleId: MainModuleId) {
+    setPermDraft((prev) => {
+      const exists = prev.find((p) => p.moduleId === moduleId)
+      if (exists) return prev.filter((p) => p.moduleId !== moduleId)
+      return [...prev, { moduleId }]
+    })
+  }
+
+  function toggleSub(moduleId: MainModuleId, subId: string) {
+    setPermDraft((prev) => {
+      const copy = prev.map((p) => ({ ...p, subIds: p.subIds ? [...p.subIds] : undefined }))
+      let row = copy.find((p) => p.moduleId === moduleId)
+      if (!row) {
+        row = { moduleId, subIds: [subId] }
+        copy.push(row)
+        return copy
+      }
+      const mod = ALL_MODULE_OPTIONS.find((m) => m.id === moduleId)
+      const allIds = mod?.items.map((i) => i.id) || []
+      const current = row.subIds && row.subIds.length ? row.subIds : allIds
+      if (current.includes(subId)) {
+        row.subIds = current.filter((id) => id !== subId)
+      } else {
+        row.subIds = [...current, subId]
+      }
+      if (row.subIds.length === 0) {
+        return copy.filter((p) => p.moduleId !== moduleId)
+      }
+      if (row.subIds.length === allIds.length) {
+        row.subIds = undefined
+      }
+      return copy
+    })
+  }
+
+  function savePermissions() {
+    const role = roles.find((r) => r.id === permRoleId)
+    if (!role) return
+    saveRolePermissions(role.role_name, permDraft)
+    setPermMsg(`Saved module access for ${role.role_name}`)
+  }
+
+  function resetPermissions() {
+    const role = roles.find((r) => r.id === permRoleId)
+    if (!role) return
+    clearRolePermissionOverride(role.role_name)
+    setPermDraft(getDefaultPermissions(role.role_name))
+    setPermMsg(`Reset ${role.role_name} to default access`)
   }
 
   return (
     <div className="screen">
       <header className="screen-header">
-        <h1>Master / Admin</h1>
+        <h1>Security / Admin</h1>
         <SubTabs
           value={sub}
           onChange={(id) => setSub(id as Sub)}
           options={[
             { id: 'roles', label: 'Roles & PIN' },
+            { id: 'permissions', label: 'Permissions' },
             { id: 'payroll', label: 'Payroll' },
             ...(isCeo ? [{ id: 'approvals', label: 'Approvals' }] : []),
           ]}
@@ -413,6 +484,75 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
               )}
             </article>
           ))}
+        </div>
+      ) : null}
+
+      {sub === 'permissions' && isCeo ? (
+        <div className="form-stack perm-panel">
+          <label className="field">
+            <span className="text-muted">Role</span>
+            <select
+              value={permRoleId ?? ''}
+              onChange={(e) => {
+                setPermRoleId(e.target.value)
+                setPermMsg(null)
+              }}
+            >
+              {roles.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.role_name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="text-muted2">
+            Choose exactly which modules and sub-functions this role can open. Unauthorized tabs stay hidden.
+          </p>
+          <div className="perm-module-list">
+            {ALL_MODULE_OPTIONS.map((mod) => {
+              const enabled = permDraft.some((p) => p.moduleId === mod.id)
+              const perm = permDraft.find((p) => p.moduleId === mod.id)
+              return (
+                <article key={mod.id} className="card-row surface perm-module-card">
+                  <label className="check-row">
+                    <input
+                      type="checkbox"
+                      checked={enabled}
+                      onChange={() => toggleModule(mod.id as MainModuleId)}
+                    />
+                    <strong>{mod.label}</strong>
+                  </label>
+                  {enabled && mod.items.length ? (
+                    <div className="perm-sub-grid">
+                      {mod.items.map((item) => {
+                        const allOn = !perm?.subIds || perm.subIds.length === 0
+                        const on = allOn || (perm?.subIds || []).includes(item.id)
+                        return (
+                          <label key={item.id} className="check-row perm-sub-check">
+                            <input
+                              type="checkbox"
+                              checked={on}
+                              onChange={() => toggleSub(mod.id as MainModuleId, item.id)}
+                            />
+                            <span>{item.label}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  ) : null}
+                </article>
+              )
+            })}
+          </div>
+          <div className="share-actions">
+            <button type="button" onClick={savePermissions}>
+              Save permissions
+            </button>
+            <button type="button" className="btn-ghost" onClick={resetPermissions}>
+              Reset to defaults
+            </button>
+          </div>
+          {permMsg ? <p className="form-ok text-sage">{permMsg}</p> : null}
         </div>
       ) : null}
 
