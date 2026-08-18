@@ -1,0 +1,183 @@
+/* CRM Customer Master — scoped styles */
+
+.crm-screen {
+  display: grid;
+  gap: 1rem;
+}
+
+.crm-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+}
+
+.crm-header h1 {
+  margin: 0;
+}
+
+.crm-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.crm-header-actions .primary-save,
+.crm-header-actions .btn-ghost {
+  width: auto;
+  margin: 0;
+}
+
+.crm-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1.25rem;
+}
+
+.crm-search {
+  flex: 1 1 16rem;
+  min-width: 12rem;
+}
+
+.crm-count {
+  margin: 0 0 0.35rem;
+}
+
+.crm-table-wrap {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: auto;
+}
+
+.crm-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.crm-table th,
+.crm-table td {
+  text-align: left;
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+.crm-table th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.crm-mono {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.crm-tag {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  font-size: 0.75rem;
+}
+
+.crm-tag-kmos {
+  background: color-mix(in srgb, var(--warp) 22%, var(--surface));
+  border-color: color-mix(in srgb, var(--warp) 40%, var(--line));
+}
+
+.crm-row-actions {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.crm-row-actions .btn-ghost {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.82rem;
+}
+
+.crm-del {
+  color: var(--danger);
+}
+
+.crm-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.crm-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(8, 10, 14, 0.72);
+}
+
+.crm-modal-panel {
+  position: relative;
+  z-index: 1;
+  width: min(28rem, 100%);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 1.1rem 1.15rem 1.25rem;
+}
+
+.crm-modal-panel h2 {
+  margin: 0 0 0.85rem;
+  font-size: 1.15rem;
+}
+
+.crm-form.form-stack {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.crm-form textarea {
+  width: 100%;
+  background: var(--surface2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.65rem 0.75rem;
+  font: inherit;
+  resize: vertical;
+}
+
+.crm-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+
+.crm-modal-actions .primary-save,
+.crm-modal-actions .btn-ghost {
+  width: auto;
+  margin: 0;
+}
+
+@media (max-width: 720px) {
+  .crm-table th:nth-child(4),
+  .crm-table td:nth-child(4) {
+    display: none;
+  }
+
+  .crm-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .crm-header-actions .primary-save,
+  .crm-header-actions .btn-ghost {
+    flex: 1;
+  }
+}
