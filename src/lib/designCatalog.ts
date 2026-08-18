@@ -67,7 +67,7 @@ export async function insertDesignCatalog(row: {
   design_no: number
   jfg_no: string
   design_image_url: string
-  matching_image_url: string
+  matching_image_url: string | null
   notes: string | null
   created_by: string | null
 }): Promise<void> {
@@ -76,13 +76,14 @@ export async function insertDesignCatalog(row: {
 }
 
 /**
- * Share both catalog images + caption via Web Share API.
+ * Share catalog image(s) + caption via Web Share API.
  * Optional phone opens wa.me text fallback when native file share is unavailable.
+ * Matching image may be null for bulk-added designs.
  */
 export async function shareCatalogDesign(args: {
   caption: string
   designImageUrl: string
-  matchingImageUrl: string
+  matchingImageUrl: string | null
   phone?: string | null
 }): Promise<BroadcastShareResult> {
   const { caption, designImageUrl, matchingImageUrl, phone } = args
@@ -97,25 +98,31 @@ export async function shareCatalogDesign(args: {
   }
 
   try {
-    const files = await Promise.all([
-      urlToImageFile(designImageUrl, 'design.jpg'),
-      urlToImageFile(matchingImageUrl, 'matching.jpg'),
-    ])
-    const dual = { title: 'Design Catalog', text: caption, files }
-    if (navigator.canShare?.(dual)) {
-      await navigator.share(dual)
-      return 'shared'
-    }
+    const designFile = await urlToImageFile(designImageUrl, 'design.jpg')
+    if (matchingImageUrl) {
+      const matchingFile = await urlToImageFile(matchingImageUrl, 'matching.jpg')
+      const dual = { title: 'Design Catalog', text: caption, files: [designFile, matchingFile] }
+      if (navigator.canShare?.(dual)) {
+        await navigator.share(dual)
+        return 'shared'
+      }
 
-    const combined = await mergeImagesSideBySide(
-      designImageUrl,
-      matchingImageUrl,
-      'design-catalog.jpg',
-    )
-    const one = { title: 'Design Catalog', text: caption, files: [combined] }
-    if (navigator.canShare?.(one)) {
-      await navigator.share(one)
-      return 'shared'
+      const combined = await mergeImagesSideBySide(
+        designImageUrl,
+        matchingImageUrl,
+        'design-catalog.jpg',
+      )
+      const one = { title: 'Design Catalog', text: caption, files: [combined] }
+      if (navigator.canShare?.(one)) {
+        await navigator.share(one)
+        return 'shared'
+      }
+    } else {
+      const one = { title: 'Design Catalog', text: caption, files: [designFile] }
+      if (navigator.canShare?.(one)) {
+        await navigator.share(one)
+        return 'shared'
+      }
     }
 
     await navigator.share({ title: 'Design Catalog', text: caption })

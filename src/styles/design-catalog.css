@@ -1,8 +1,122 @@
-/* Design Catalog (DNA) — scoped styles */
+/* Design Catalog (DNA) — light palette scoped to this screen only
+   (same approach as .design-costing). Global :root stays dark; these
+   local custom properties win for all descendants of .dna-screen. */
+
+/* Fill the content column (not sidebar) when Catalog is active */
+.app-shell[data-screen='design-catalog'] .app-content,
+.app-shell[data-screen='design-catalog'] .app-main {
+  background: #f7f6f3;
+}
+
+.app-shell[data-screen='design-catalog'] .content-topbar {
+  background: #f7f6f3;
+  border-bottom: 1px solid #e4e0d8;
+}
+
+.app-shell[data-screen='design-catalog'] .content-page-title,
+.app-shell[data-screen='design-catalog'] .content-meta {
+  color: #221f1c;
+}
+
+.app-shell[data-screen='design-catalog'] .content-meta {
+  color: #75706a;
+}
+
+.app-shell[data-screen='design-catalog'] .mobile-topbar {
+  background: #f7f6f3;
+  border-bottom: 1px solid #e4e0d8;
+  color: #221f1c;
+}
+
+.app-shell[data-screen='design-catalog'] .mobile-topbar-title {
+  color: #221f1c;
+}
+
+.app-shell[data-screen='design-catalog'] .hamburger {
+  color: #221f1c;
+}
 
 .dna-screen {
+  --bg: #f7f6f3;
+  --surface: #ffffff;
+  --surface2: #f1eee8;
+  --line: #e4e0d8;
+  --text: #221f1c;
+  --muted: #75706a;
+  --muted2: #8a847c;
+  --warp-soft: #dfe8f5;
+  --weft-soft: #f3ead2;
+  --danger: #c1362b;
+  --sage: #3f7d52;
+  --wa: #2f9e6a;
+
   display: grid;
   gap: 1rem;
+  margin: 0;
+  padding: 0.25rem 0 1rem;
+  border-radius: 0;
+  background:
+    radial-gradient(900px 320px at 0% 0%, rgba(193, 54, 43, 0.05), transparent 55%),
+    radial-gradient(700px 280px at 100% 10%, rgba(74, 127, 196, 0.07), transparent 50%),
+    var(--bg);
+  color: var(--text);
+  min-height: 100%;
+}
+
+.dna-screen .text-muted,
+.dna-screen .text-muted2 {
+  color: var(--muted);
+}
+
+.dna-screen .text-danger {
+  color: var(--danger);
+}
+
+.dna-screen .text-sage,
+.dna-screen .form-ok {
+  color: var(--sage);
+}
+
+.dna-screen .surface,
+.dna-screen .dna-card,
+.dna-screen .dna-modal-panel {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--line);
+}
+
+.dna-screen .field span {
+  color: var(--muted);
+}
+
+.dna-screen .field input,
+.dna-screen .field textarea,
+.dna-screen .field select,
+.dna-screen .dna-customer-pick select,
+.dna-screen .dna-form textarea {
+  background: var(--surface);
+  color: var(--text);
+  border: 1.5px solid var(--line);
+}
+
+.dna-screen .field input:focus,
+.dna-screen .field textarea:focus,
+.dna-screen .field select:focus,
+.dna-screen .dna-customer-pick select:focus,
+.dna-screen .dna-form textarea:focus {
+  outline: 2px solid color-mix(in srgb, var(--weft) 55%, transparent);
+  outline-offset: 1px;
+}
+
+.dna-screen .btn-ghost {
+  color: var(--text);
+  border-color: var(--line);
+  background: var(--surface);
+}
+
+.dna-screen .dna-share-modes {
+  background: var(--surface);
+  border-color: var(--line);
 }
 
 .dna-header {
@@ -15,6 +129,14 @@
 
 .dna-header h1 {
   margin: 0;
+  color: var(--text);
+}
+
+.dna-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.65rem;
+  align-items: center;
 }
 
 .dna-add-btn {
@@ -23,6 +145,18 @@
   width: auto;
   flex: 0 0 auto;
   align-self: center;
+}
+
+.dna-thumb-empty {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-align: center;
+  padding: 0.5rem;
+  background: var(--surface2);
 }
 
 .dna-toolbar {
@@ -87,8 +221,8 @@
   font-size: 0.68rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--text);
-  background: rgba(20, 23, 28, 0.72);
+  color: #fff;
+  background: rgba(34, 31, 28, 0.62);
   padding: 0.15rem 0.4rem;
   border-radius: 3px;
 }
@@ -150,6 +284,7 @@
 .dna-modal-panel h2 {
   margin: 0 0 0.85rem;
   font-size: 1.15rem;
+  color: var(--text);
 }
 
 .dna-form {
@@ -276,12 +411,142 @@
   resize: vertical;
 }
 
+.dna-bulk-panel {
+  width: min(44rem, 100%);
+  max-height: min(94vh, 56rem);
+  display: flex;
+  flex-direction: column;
+}
+
+.dna-bulk-hint {
+  margin: 0 0 0.85rem;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.dna-bulk-pick {
+  margin-bottom: 0.75rem;
+}
+
+.dna-bulk-count {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+}
+
+.dna-bulk-list {
+  list-style: none;
+  margin: 0 0 0.85rem;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+  overflow: auto;
+  flex: 1 1 auto;
+  max-height: min(52vh, 28rem);
+}
+
+.dna-bulk-row {
+  display: grid;
+  grid-template-columns: 4.5rem 5.5rem minmax(0, 1fr) auto;
+  gap: 0.55rem 0.65rem;
+  align-items: end;
+  padding: 0.55rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.dna-bulk-thumb {
+  width: 4.5rem;
+  height: 4.5rem;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+}
+
+.dna-bulk-no input {
+  background: var(--surface2) !important;
+}
+
+.dna-bulk-jfg input {
+  min-height: 2.5rem;
+  font-size: 1rem;
+}
+
+.dna-bulk-remove {
+  width: 2.5rem;
+  min-width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  align-self: end;
+}
+
+.dna-bulk-progress {
+  margin: 0 0 0.75rem;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.dna-bulk-progress-bar {
+  height: 0.45rem;
+  border-radius: 999px;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.dna-bulk-progress-fill {
+  height: 100%;
+  background: var(--weft, #d9a441);
+  transition: width 0.2s ease;
+}
+
+.dna-bulk-footer {
+  position: sticky;
+  bottom: 0;
+  padding-top: 0.35rem;
+  background: var(--surface);
+  margin-top: auto;
+}
+
+@media (max-width: 640px) {
+  .dna-bulk-row {
+    grid-template-columns: 4rem 1fr auto;
+    grid-template-areas:
+      'thumb no remove'
+      'thumb jfg jfg';
+  }
+
+  .dna-bulk-thumb {
+    grid-area: thumb;
+    width: 4rem;
+    height: 4rem;
+  }
+
+  .dna-bulk-no {
+    grid-area: no;
+  }
+
+  .dna-bulk-jfg {
+    grid-area: jfg;
+  }
+
+  .dna-bulk-remove {
+    grid-area: remove;
+  }
+}
+
 @media (max-width: 520px) {
   .dna-upload-pair {
     grid-template-columns: 1fr;
   }
 
   .dna-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .dna-header-actions {
     flex-direction: column;
     align-items: stretch;
   }

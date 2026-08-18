@@ -73,6 +73,7 @@ export type KmosSyncResult = {
   total_kmos: number
   mapped_name_field: string | null
   mapped_phone_field: string | null
+  columns_seen?: string[]
   error?: string
 }
 
