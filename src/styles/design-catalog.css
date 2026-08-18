@@ -20,6 +20,9 @@
 .dna-add-btn {
   margin: 0;
   white-space: nowrap;
+  width: auto;
+  flex: 0 0 auto;
+  align-self: center;
 }
 
 .dna-toolbar {
@@ -151,6 +154,20 @@
 
 .dna-form {
   margin: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+/* Avoid global .form-stack 2-col desktop grid inside the modal */
+.dna-form.form-stack {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 1024px) {
+  .dna-form.form-stack > * {
+    grid-column: 1 / -1;
+  }
 }
 
 .dna-upload-pair {
@@ -193,8 +210,16 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
+  align-items: center;
   gap: 0.6rem;
   margin-top: 0.35rem;
+}
+
+.dna-modal-actions .primary-save,
+.dna-modal-actions .btn-wa,
+.dna-modal-actions .btn-ghost {
+  width: auto;
+  margin: 0;
 }
 
 .dna-share-caption {
