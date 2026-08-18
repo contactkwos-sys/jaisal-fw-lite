@@ -83,7 +83,7 @@ export function AppShell({ active, sub, isCeo, onNavigate, children }: Props) {
   }
 
   return (
-    <div className={drawerOpen ? 'app-shell drawer-is-open' : 'app-shell'}>
+    <div className={drawerOpen ? 'app-shell drawer-is-open' : 'app-shell'} data-screen={active}>
       <header className="mobile-topbar">
         <button
           type="button"

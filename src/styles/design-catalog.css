@@ -2,6 +2,40 @@
    (same approach as .design-costing). Global :root stays dark; these
    local custom properties win for all descendants of .dna-screen. */
 
+/* Fill the content column (not sidebar) when Catalog is active */
+.app-shell[data-screen='design-catalog'] .app-content,
+.app-shell[data-screen='design-catalog'] .app-main {
+  background: #f7f6f3;
+}
+
+.app-shell[data-screen='design-catalog'] .content-topbar {
+  background: #f7f6f3;
+  border-bottom: 1px solid #e4e0d8;
+}
+
+.app-shell[data-screen='design-catalog'] .content-page-title,
+.app-shell[data-screen='design-catalog'] .content-meta {
+  color: #221f1c;
+}
+
+.app-shell[data-screen='design-catalog'] .content-meta {
+  color: #75706a;
+}
+
+.app-shell[data-screen='design-catalog'] .mobile-topbar {
+  background: #f7f6f3;
+  border-bottom: 1px solid #e4e0d8;
+  color: #221f1c;
+}
+
+.app-shell[data-screen='design-catalog'] .mobile-topbar-title {
+  color: #221f1c;
+}
+
+.app-shell[data-screen='design-catalog'] .hamburger {
+  color: #221f1c;
+}
+
 .dna-screen {
   --bg: #f7f6f3;
   --surface: #ffffff;
@@ -18,14 +52,15 @@
 
   display: grid;
   gap: 1rem;
-  margin: -0.25rem -0.35rem;
-  padding: 0.75rem 0.5rem 1.5rem;
-  border-radius: 12px;
+  margin: 0;
+  padding: 0.25rem 0 1rem;
+  border-radius: 0;
   background:
     radial-gradient(900px 320px at 0% 0%, rgba(193, 54, 43, 0.05), transparent 55%),
     radial-gradient(700px 280px at 100% 10%, rgba(74, 127, 196, 0.07), transparent 50%),
     var(--bg);
   color: var(--text);
+  min-height: 100%;
 }
 
 .dna-screen .text-muted,
