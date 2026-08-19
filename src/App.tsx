@@ -45,6 +45,9 @@ import { CheckingScreen } from './screens/CheckingScreen'
 import { CtrStockScreen } from './screens/CtrStockScreen'
 import { ProgramBookScreen } from './screens/ProgramBookScreen'
 import { LotSettingsScreen } from './screens/LotSettingsScreen'
+import { SampleProgramCardScreen } from './screens/SampleProgramCardScreen'
+import { PhotoCatalogueScreen } from './screens/PhotoCatalogueScreen'
+import { SalesTrackerScreen } from './screens/SalesTrackerScreen'
 
 function AuthenticatedApp() {
   const { session, loading, isCeo, isManager, profile } = useAuth()
@@ -145,6 +148,9 @@ function AuthenticatedApp() {
       {tab === 'ctr-stock' ? <CtrStockScreen /> : null}
       {tab === 'program-book' ? <ProgramBookScreen /> : null}
       {tab === 'lot-settings' ? <LotSettingsScreen /> : null}
+      {tab === 'sample-program-card' ? <SampleProgramCardScreen /> : null}
+      {tab === 'photo-catalogue' ? <PhotoCatalogueScreen /> : null}
+      {tab === 'sales-tracker' ? <SalesTrackerScreen /> : null}
       {tab === 'parties' ? <PartyMasterScreen /> : null}
       {tab === 'purchase' ? <PurchaseScreen initialSub={sub || 'general'} /> : null}
       {tab === 'orders' ? <OrderBookScreen initialSub={sub || 'entry'} /> : null}

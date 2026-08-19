@@ -61,6 +61,9 @@ export type Design = {
   cost_per_meter?: number | null
   matching_cost?: number | null
   total_cost?: number | null
+  rate_per_meter?: number | null
+  sell_rate?: number | null
+  gst_percent?: number | null
   created_at: string
 }
 
