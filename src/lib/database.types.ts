@@ -431,6 +431,22 @@ export type CashBookEntry = {
   edited_by: string | null
   edit_approved_by: string | null
   edit_approved_at: string | null
+  /** Joined line items (optional) */
+  items?: CashBookEntryItem[]
+}
+
+export type CashBookEntryItem = {
+  id: string
+  entry_id: string
+  item_name: string
+  amount: number
+  created_at?: string
+}
+
+export type CashBookItemMaster = {
+  id: string
+  item_name: string
+  created_at: string
 }
 
 export type WarpBeamPipe = {
