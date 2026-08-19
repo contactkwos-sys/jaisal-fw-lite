@@ -4,7 +4,17 @@ import { useAuth } from '../lib/auth'
 import type { Role } from '../lib/database.types'
 import { supabase } from '../lib/supabase'
 
-const DEFAULT_NAMES = ['CEO', 'Programmer', 'Security', 'Operator']
+const DEFAULT_NAMES = [
+  'CEO',
+  'Manager',
+  'Machine Supervisor',
+  'Salesman',
+  'Checker & Dispatch',
+  'Program Supervisor',
+  'Programmer',
+  'Security',
+  'Operator',
+]
 
 export function LoginScreen() {
   const { loginWithPin } = useAuth()

@@ -17,6 +17,7 @@ type AuthState = {
   profile: Profile | null
   loading: boolean
   isCeo: boolean
+  isManager: boolean
   loginWithPin: (role: Role, pin: string) => Promise<void>
   logout: () => Promise<void>
   refreshProfile: () => Promise<void>
@@ -191,11 +192,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     roleName === 'CEO' ||
     profile?.full_name === 'CEO' ||
     (session?.user?.user_metadata as { full_name?: string } | undefined)?.full_name === 'CEO'
-
+  const isManager =
+    roleName === 'Manager' ||
+    profile?.full_name === 'Manager' ||
+    (session?.user?.user_metadata as { full_name?: string } | undefined)?.full_name === 'Manager'
 
   return (
     <AuthContext.Provider
-      value={{ session, profile, loading, isCeo, loginWithPin, logout, refreshProfile }}
+      value={{ session, profile, loading, isCeo, isManager, loginWithPin, logout, refreshProfile }}
     >
       {children}
     </AuthContext.Provider>

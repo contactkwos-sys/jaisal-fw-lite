@@ -1,14 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { PinPad } from '../components/PinPad'
 import { SubTabs } from '../components/SubTabs'
 import { useAuth } from '../lib/auth'
 import {
   buildPartyLedgers,
-  deleteCashBookEntry,
+  deleteCashBookEntryOrQueue,
   fetchCashBookEntries,
   insertCashBookEntry,
-  updateCashBookEntry,
-  verifyCeoPin,
+  updateCashBookEntryOrQueue,
 } from '../lib/cashBook'
 import {
   CASHBOOK_CATEGORIES,
@@ -18,6 +16,7 @@ import {
   type CashBookEntryType,
 } from '../lib/database.types'
 import { todayISO } from '../lib/mutate'
+import { isWithinEditWindow } from '../lib/pendingApprovals'
 
 type TabId = 'entry' | 'list' | 'ledger'
 
@@ -43,11 +42,6 @@ const emptyForm = (): FormState => ({
   amount: '',
 })
 
-type PinIntent =
-  | { kind: 'edit'; entry: CashBookEntry }
-  | { kind: 'delete'; entry: CashBookEntry }
-  | null
-
 function formFromEntry(row: CashBookEntry): FormState {
   return {
     entry_date: row.entry_date,
@@ -66,20 +60,14 @@ function formatMoney(n: number): string {
 }
 
 export function CashBookScreen() {
-  const { profile } = useAuth()
+  const { profile, isCeo } = useAuth()
   const [tab, setTab] = useState<TabId>('entry')
   const [rows, setRows] = useState<CashBookEntry[]>([])
   const [form, setForm] = useState<FormState>(emptyForm)
-  const [editId, setEditId] = useState<string | null>(null)
-  const [editApprover, setEditApprover] = useState<string | null>(null)
+  const [editEntry, setEditEntry] = useState<CashBookEntry | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
-
-  const [pinIntent, setPinIntent] = useState<PinIntent>(null)
-  const [pin, setPin] = useState('')
-  const [pinError, setPinError] = useState<string | null>(null)
-  const [pinBusy, setPinBusy] = useState(false)
 
   const enteredBy =
     profile?.full_name || profile?.roles?.role_name || profile?.id || 'Unknown'
@@ -98,8 +86,7 @@ export function CashBookScreen() {
 
   function resetForm() {
     setForm(emptyForm())
-    setEditId(null)
-    setEditApprover(null)
+    setEditEntry(null)
   }
 
   function validateForm(): string | null {
@@ -125,25 +112,28 @@ export function CashBookScreen() {
     setMessage(null)
     try {
       const amount = Number(form.amount)
-      if (editId) {
-        if (!editApprover) {
-          setError('CEO PIN approval required to edit')
-          return
-        }
-        await updateCashBookEntry(editId, {
-          entry_date: form.entry_date,
-          entry_type: form.entry_type,
-          party_name: form.party_name,
-          contact_number: form.contact_number,
-          category: form.category,
-          machine_number: form.machine_number,
-          purpose_notes: form.purpose_notes,
-          amount,
-          edited_by: enteredBy,
-          edit_approved_by: editApprover,
-          edit_approved_at: new Date().toISOString(),
+      if (editEntry) {
+        const result = await updateCashBookEntryOrQueue({
+          entry: editEntry,
+          isCeo,
+          requestedBy: enteredBy,
+          payload: {
+            entry_date: form.entry_date,
+            entry_type: form.entry_type,
+            party_name: form.party_name,
+            contact_number: form.contact_number,
+            category: form.category,
+            machine_number: form.machine_number,
+            purpose_notes: form.purpose_notes,
+            amount,
+            edited_by: enteredBy,
+          },
         })
-        setMessage('Entry updated (CEO approved)')
+        setMessage(
+          result === 'applied'
+            ? 'Entry updated'
+            : 'Edit queued for CEO approval (record older than 7 days)',
+        )
       } else {
         await insertCashBookEntry({
           entry_date: form.entry_date,
@@ -168,57 +158,46 @@ export function CashBookScreen() {
     }
   }
 
-  function requestEdit(row: CashBookEntry) {
-    setPinIntent({ kind: 'edit', entry: row })
-    setPin('')
-    setPinError(null)
+  function startEdit(row: CashBookEntry) {
+    setEditEntry(row)
+    setForm(formFromEntry(row))
+    setTab('entry')
+    setMessage(
+      isCeo || isWithinEditWindow(row.created_at)
+        ? 'Editing entry'
+        : 'This record is older than 7 days — save will queue CEO approval',
+    )
   }
 
-  function requestDelete(row: CashBookEntry) {
-    setPinIntent({ kind: 'delete', entry: row })
-    setPin('')
-    setPinError(null)
-  }
-
-  function closePinModal() {
-    if (pinBusy) return
-    setPinIntent(null)
-    setPin('')
-    setPinError(null)
-  }
-
-  async function confirmPin() {
-    if (!pinIntent || !profile) return
-    setPinBusy(true)
-    setPinError(null)
+  async function handleDelete(row: CashBookEntry) {
+    if (!profile) return
+    const needsApproval = !isCeo && !isWithinEditWindow(row.created_at)
+    const ok = window.confirm(
+      needsApproval
+        ? `Record is older than 7 days. Send delete request to CEO for ${row.party_name}?`
+        : `Delete entry for ${row.party_name}?`,
+    )
+    if (!ok) return
+    setBusy(true)
+    setError(null)
+    setMessage(null)
     try {
-      const { approver } = await verifyCeoPin(pin)
-      if (pinIntent.kind === 'edit') {
-        setEditId(pinIntent.entry.id)
-        setEditApprover(approver)
-        setForm(formFromEntry(pinIntent.entry))
-        setTab('entry')
-        setMessage('CEO PIN verified — edit and save')
-        setPinIntent(null)
-        setPin('')
-      } else {
-        if (!window.confirm(`Delete entry for ${pinIntent.entry.party_name}?`)) {
-          return
-        }
-        await deleteCashBookEntry(pinIntent.entry.id, {
-          edited_by: enteredBy,
-          edit_approved_by: approver,
-        })
-        setMessage('Entry deleted (CEO approved)')
-        if (editId === pinIntent.entry.id) resetForm()
-        setPinIntent(null)
-        setPin('')
-        await load()
-      }
+      const result = await deleteCashBookEntryOrQueue({
+        entry: row,
+        isCeo,
+        requestedBy: enteredBy,
+      })
+      setMessage(
+        result === 'applied'
+          ? 'Entry deleted'
+          : 'Delete queued for CEO approval (record older than 7 days)',
+      )
+      if (editEntry?.id === row.id) resetForm()
+      await load()
     } catch (err) {
-      setPinError(err instanceof Error ? err.message : 'PIN verification failed')
+      setError(err instanceof Error ? err.message : 'Delete failed')
     } finally {
-      setPinBusy(false)
+      setBusy(false)
     }
   }
 
@@ -231,7 +210,7 @@ export function CashBookScreen() {
           value={tab}
           onChange={(id) => setTab(id as TabId)}
           options={[
-            { id: 'entry', label: editId ? 'Edit Entry' : 'New Entry' },
+            { id: 'entry', label: editEntry ? 'Edit Entry' : 'New Entry' },
             { id: 'list', label: 'Entries' },
             { id: 'ledger', label: 'Party Ledger' },
           ]}
@@ -243,10 +222,9 @@ export function CashBookScreen() {
 
       {tab === 'entry' ? (
         <form className="form-stack cashbook-form" onSubmit={(e) => void handleSave(e)}>
-          {editId ? (
+          {editEntry ? (
             <p className="text-muted2">
-              Editing entry — approved by <strong>{editApprover || 'CEO'}</strong>
-              {' · '}
+              Editing ·{' '}
               <button type="button" className="btn-ghost cashbook-link-btn" onClick={resetForm}>
                 Cancel edit
               </button>
@@ -302,11 +280,11 @@ export function CashBookScreen() {
           </label>
 
           <label className="field">
-            <span>Contact number (optional)</span>
+            <span>Contact number</span>
             <input
               value={form.contact_number}
               onChange={(e) => setForm((f) => ({ ...f, contact_number: e.target.value }))}
-              placeholder="Phone"
+              placeholder="Optional"
               inputMode="tel"
             />
           </label>
@@ -315,14 +293,13 @@ export function CashBookScreen() {
             <span>Category</span>
             <select
               value={form.category}
-              onChange={(e) => {
-                const category = e.target.value as CashBookCategory
+              onChange={(e) =>
                 setForm((f) => ({
                   ...f,
-                  category,
-                  machine_number: category === 'Machine Repair' ? f.machine_number : '',
+                  category: e.target.value as CashBookCategory,
+                  machine_number: e.target.value === 'Machine Repair' ? f.machine_number : '',
                 }))
-              }}
+              }
             >
               {CASHBOOK_CATEGORIES.map((c) => (
                 <option key={c} value={c}>
@@ -355,8 +332,7 @@ export function CashBookScreen() {
             <textarea
               value={form.purpose_notes}
               onChange={(e) => setForm((f) => ({ ...f, purpose_notes: e.target.value }))}
-              rows={3}
-              placeholder="Why was this cash moved?"
+              rows={2}
             />
           </label>
 
@@ -373,160 +349,69 @@ export function CashBookScreen() {
             />
           </label>
 
-          <button type="submit" className="primary-save" disabled={busy}>
-            {busy ? 'Saving…' : editId ? 'Save changes' : 'Save entry'}
+          <button type="submit" disabled={busy}>
+            {busy ? 'Saving…' : editEntry ? 'Update entry' : 'Save entry'}
           </button>
         </form>
       ) : null}
 
       {tab === 'list' ? (
-        <div className="list cashbook-list">
-          {rows.length === 0 ? (
-            <p className="text-muted">No cash book entries yet.</p>
-          ) : (
-            rows.map((row) => (
-              <article
-                key={row.id}
-                className={
-                  row.entry_type === 'credit'
-                    ? 'card-row surface cashbook-row credit'
-                    : 'card-row surface cashbook-row debit'
-                }
-              >
-                <div className="row-top">
-                  <div>
-                    <div className="cashbook-row-party">{row.party_name}</div>
-                    <div className="text-muted2 cashbook-row-meta">
-                      {row.entry_date} · {row.category}
-                      {row.machine_number ? ` · ${row.machine_number}` : ''}
-                    </div>
-                    {row.purpose_notes ? (
-                      <div className="text-muted cashbook-row-notes">{row.purpose_notes}</div>
-                    ) : null}
-                  </div>
-                  <div className="cashbook-row-right">
-                    <span
-                      className={
-                        row.entry_type === 'credit'
-                          ? 'cashbook-amount credit'
-                          : 'cashbook-amount debit'
-                      }
-                    >
-                      {row.entry_type === 'credit' ? '+' : '−'}
-                      {formatMoney(Number(row.amount))}
-                    </span>
-                    <span
-                      className={
-                        row.entry_type === 'credit'
-                          ? 'cashbook-type-chip credit'
-                          : 'cashbook-type-chip debit'
-                      }
-                    >
-                      {row.entry_type}
-                    </span>
-                  </div>
+        <div className="list">
+          {rows.map((row) => (
+            <article key={row.id} className="card-row surface row-top">
+              <div>
+                <strong className={row.entry_type === 'credit' ? 'text-sage' : 'text-danger'}>
+                  {row.entry_type === 'credit' ? '+' : '−'}₹{formatMoney(Number(row.amount))}
+                </strong>
+                <div>
+                  {row.party_name} · {row.category}
+                  {row.machine_number ? ` · ${row.machine_number}` : ''}
                 </div>
-                <div className="cashbook-row-actions">
-                  <span className="text-muted2">by {row.entered_by}</span>
-                  <div className="share-actions">
-                    <button
-                      type="button"
-                      className="btn-ghost"
-                      disabled={busy}
-                      onClick={() => requestEdit(row)}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-ghost"
-                      disabled={busy}
-                      onClick={() => requestDelete(row)}
-                    >
-                      Delete
-                    </button>
-                  </div>
+                <div className="text-muted2">
+                  {row.entry_date} · {row.entered_by}
+                  {!isWithinEditWindow(row.created_at) ? ' · needs approval to edit' : ''}
                 </div>
-              </article>
-            ))
-          )}
+              </div>
+              <div className="icon-actions">
+                <button type="button" className="btn-ghost icon-btn" disabled={busy} onClick={() => startEdit(row)}>
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  className="btn-ghost icon-btn"
+                  disabled={busy}
+                  onClick={() => void handleDelete(row)}
+                >
+                  Del
+                </button>
+              </div>
+            </article>
+          ))}
+          {!rows.length ? <p className="text-muted">No cash book entries yet</p> : null}
         </div>
       ) : null}
 
       {tab === 'ledger' ? (
-        <div className="list cashbook-ledger">
-          {ledgers.length === 0 ? (
-            <p className="text-muted">No parties yet — add entries first.</p>
-          ) : (
-            ledgers.map((ledger) => (
-              <section key={ledger.party_name} className="card-row surface cashbook-ledger-card">
-                <div className="row-top">
-                  <div>
-                    <strong>{ledger.party_name}</strong>
-                    <div className="text-muted2">
-                      Credit {formatMoney(ledger.credit_total)} · Debit{' '}
-                      {formatMoney(ledger.debit_total)}
-                    </div>
-                  </div>
-                  <strong
-                    className={
-                      ledger.balance >= 0 ? 'cashbook-amount credit' : 'cashbook-amount debit'
-                    }
-                  >
-                    Bal {formatMoney(ledger.balance)}
-                  </strong>
-                </div>
-                <ul className="cashbook-ledger-lines">
-                  {ledger.entries.map((row) => (
-                    <li key={row.id}>
-                      <span>
-                        {row.entry_date} · {row.category}
-                      </span>
-                      <span
-                        className={
-                          row.entry_type === 'credit'
-                            ? 'cashbook-amount credit'
-                            : 'cashbook-amount debit'
-                        }
-                      >
-                        {row.entry_type === 'credit' ? '+' : '−'}
-                        {formatMoney(Number(row.amount))}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ))
-          )}
-        </div>
-      ) : null}
-
-      {pinIntent ? (
-        <div className="cashbook-pin-modal" role="dialog" aria-modal="true" aria-labelledby="cashbook-pin-title">
-          <button type="button" className="cashbook-pin-backdrop" aria-label="Close" onClick={closePinModal} />
-          <div className="cashbook-pin-panel surface">
-            <div className="cashbook-pin-head">
-              <h2 id="cashbook-pin-title">CEO PIN required</h2>
+        <div className="list">
+          {ledgers.map((led) => (
+            <article key={led.party_name} className="surface dash-panel">
+              <h3>{led.party_name}</h3>
               <p className="text-muted">
-                Enter CEO PIN to {pinIntent.kind === 'edit' ? 'edit' : 'delete'} this entry
+                Credit ₹{formatMoney(led.credit_total)} · Debit ₹{formatMoney(led.debit_total)} ·{' '}
+                <strong className={led.balance >= 0 ? 'text-sage' : 'text-danger'}>
+                  Balance ₹{formatMoney(led.balance)}
+                </strong>
               </p>
-            </div>
-            {pinError ? <p className="form-error">{pinError}</p> : null}
-            <PinPad value={pin} onChange={setPin} disabled={pinBusy} />
-            <div className="share-actions">
-              <button type="button" className="btn-ghost" disabled={pinBusy} onClick={closePinModal}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="primary-save"
-                disabled={pinBusy || pin.length !== 4}
-                onClick={() => void confirmPin()}
-              >
-                {pinBusy ? 'Verifying…' : 'Verify & continue'}
-              </button>
-            </div>
-          </div>
+              <ul className="text-muted2">
+                {led.entries.map((e) => (
+                  <li key={e.id}>
+                    {e.entry_date} · {e.entry_type} ₹{formatMoney(Number(e.amount))} · {e.category}
+                  </li>
+                ))}
+              </ul>
+            </article>
+          ))}
+          {!ledgers.length ? <p className="text-muted">No ledger parties yet</p> : null}
         </div>
       ) : null}
     </div>

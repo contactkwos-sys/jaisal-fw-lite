@@ -24,6 +24,12 @@ export type AppScreen =
   | 'design-catalog'
   | 'crm'
   | 'cash-book'
+  | 'warp-beam-pipe'
+  | 'yarn-inward'
+  | 'maint-material'
+  | 'loan-tracker'
+  | 'geb-readings'
+  | 'orders-pending'
   | 'module-hub'
   | 'settings-hub'
   | 'placeholder'
@@ -108,6 +114,8 @@ export const MAIN_MODULES: MainModule[] = [
     items: [
       { id: 'yarn-stock', label: 'Yarn Stock', screen: 'stock', sub: 'weft', hint: 'Weft yarn balances' },
       { id: 'beam-stock', label: 'Warp Beam Stock', screen: 'stock', sub: 'beam', hint: 'Beam pipe stock' },
+      { id: 'warp-beam-pipe', label: 'Warp Beam Pipe', screen: 'warp-beam-pipe', hint: 'Pipe out / in tracking' },
+      { id: 'yarn-inward', label: 'Yarn Inward OCR', screen: 'yarn-inward', hint: 'Warp/Weft invoice OCR' },
       { id: 'greige-stock', label: 'Greige Stock', screen: 'production', sub: 'report', hint: 'Greige / production stock' },
       { id: 'consumables', label: 'Consumables', screen: 'purchase', sub: 'maint_in', hint: 'Maintenance inward' },
       { id: 'inward', label: 'Inward', screen: 'purchase', sub: 'general', hint: 'General purchase inward' },
@@ -124,12 +132,13 @@ export const MAIN_MODULES: MainModule[] = [
   },
   {
     id: 'orders',
-    label: 'Orders',
+    label: 'Orders & Pending',
     icon: 'orders',
     screen: 'module-hub',
     hasHub: true,
     mobileNav: true,
     items: [
+      { id: 'orders-pending', label: 'Orders & Pending', screen: 'orders-pending', hint: 'Raise & track pending orders' },
       { id: 'order-book', label: 'Order Book', screen: 'orders', sub: 'entry', hint: 'Party orders' },
       { id: 'program-card', label: 'Program Card', screen: 'programs', sub: 'create', hint: 'Program + petty meters' },
       { id: 'job-card', label: 'Job Card Issue', screen: 'production', sub: 'job', hint: 'Issue job cards' },
@@ -154,6 +163,8 @@ export const MAIN_MODULES: MainModule[] = [
       { id: 'beam-remaining', label: 'Beam Remaining', screen: 'beam-remaining', hint: 'Beam meters left' },
       { id: 'machine-report', label: 'Machine Report', screen: 'production', sub: 'report', filter: 'machine', hint: 'Machine output' },
       { id: 'costing-report', label: 'Costing Report', screen: 'costing', sub: 'summary', hint: 'Daily costing' },
+      { id: 'geb-readings', label: 'GEB Electricity', screen: 'geb-readings', hint: 'Daily meter units & cost' },
+      { id: 'loan-tracker', label: 'Loan Tracker', screen: 'loan-tracker', hint: 'Party-wise loan ledger' },
       { id: 'attendance-report', label: 'Attendance Report', screen: 'attendance', hint: 'Attendance today' },
       { id: 'sample-register', label: 'Sample Register', screen: 'sample-register', hint: 'Sample log' },
     ],
@@ -167,6 +178,7 @@ export const MAIN_MODULES: MainModule[] = [
     items: [
       { id: 'maint-request', label: 'Machine Maintenance', screen: 'maintenance', sub: 'request', hint: 'Maintenance requests' },
       { id: 'breakdown', label: 'Breakdown Entry', screen: 'maintenance', sub: 'repair', hint: 'Repair out / in' },
+      { id: 'maint-material', label: 'Material Out / In', screen: 'maint-material', hint: 'Material + auto gate pass' },
       { id: 'maint-schedule', label: 'Maintenance Schedule', screen: 'placeholder', filter: 'maint-schedule', hint: 'Schedule overview' },
       { id: 'service-history', label: 'Service History', screen: 'maintenance', sub: 'repair', hint: 'Repair tracker' },
       { id: 'spare-parts', label: 'Spare Parts', screen: 'purchase', sub: 'maint_in', hint: 'Parts inward' },
@@ -202,6 +214,8 @@ export const MAIN_MODULES: MainModule[] = [
       { id: 'pin-mgmt', label: 'Individual PIN Management', screen: 'admin', sub: 'roles', hint: 'Reset PINs' },
       { id: 'perm-mgmt', label: 'Permission Management', screen: 'admin', sub: 'permissions', hint: 'Module access by role' },
       { id: 'security-gate', label: 'Security Gate', screen: 'security', sub: 'inward', hint: 'Gate logs' },
+      { id: 'yarn-inward-sec', label: 'Yarn Inward OCR', screen: 'yarn-inward', hint: 'Invoice scan (Security)' },
+      { id: 'geb-sec', label: 'GEB Reading', screen: 'geb-readings', hint: 'Electricity meter entry' },
       { id: 'login-activity', label: 'Login Activity', screen: 'placeholder', filter: 'login-activity', hint: 'Recent sessions' },
       { id: 'payroll', label: 'Payroll', screen: 'admin', sub: 'payroll', hint: 'Rates & payables' },
       { id: 'approvals', label: 'Approvals', screen: 'admin', sub: 'approvals', hint: 'CEO approval queue' },
@@ -246,6 +260,12 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   'design-catalog': 'Design Catalog',
   crm: 'CRM',
   'cash-book': 'Cash Book',
+  'warp-beam-pipe': 'Warp Beam Pipe',
+  'yarn-inward': 'Yarn Inward OCR',
+  'maint-material': 'Maintenance Material',
+  'loan-tracker': 'Loan Tracker',
+  'geb-readings': 'GEB Electricity',
+  'orders-pending': 'Orders & Pending',
   'module-hub': 'Module',
   'settings-hub': 'Settings',
   placeholder: 'Coming Soon',
@@ -275,12 +295,14 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
     }
   }
 
-  // Fallbacks by screen family
   if (screen === 'production' || screen === 'dispatch') return 'production'
-  if (screen === 'stock' || screen === 'purchase') return 'inventory'
+  if (screen === 'stock' || screen === 'purchase' || screen === 'warp-beam-pipe' || screen === 'yarn-inward') {
+    return 'inventory'
+  }
   if (screen === 'cash-book') return 'cash-book'
   if (
     screen === 'orders' ||
+    screen === 'orders-pending' ||
     screen === 'programs' ||
     screen === 'design' ||
     screen === 'sample-job-card' ||
@@ -290,10 +312,17 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
   ) {
     return 'orders'
   }
-  if (screen === 'costing' || screen === 'beam-remaining' || screen === 'sample-register' || screen === 'attendance') {
+  if (
+    screen === 'costing' ||
+    screen === 'beam-remaining' ||
+    screen === 'sample-register' ||
+    screen === 'attendance' ||
+    screen === 'loan-tracker' ||
+    screen === 'geb-readings'
+  ) {
     return 'reports'
   }
-  if (screen === 'maintenance') return 'maintenance'
+  if (screen === 'maintenance' || screen === 'maint-material') return 'maintenance'
   if (screen === 'parties' || screen === 'crm') return 'masters'
   if (screen === 'admin' || screen === 'security') return 'security'
   if (screen === 'placeholder') {
@@ -348,7 +377,6 @@ export function titleFor(screen: AppScreen, sub?: string, moduleId?: MainModuleI
 export function isSubItemActive(item: SubItem, screen: AppScreen, sub?: string, filter?: string): boolean {
   if (item.screen !== screen) return false
   if (item.sub && (sub || '') !== item.sub) {
-    // allow related dispatch tabs under dispatch item
     if (item.screen === 'dispatch' && item.sub === 'challan') {
       return (sub || 'challan') === 'challan' || sub === 'gatepass'
     }

@@ -433,6 +433,114 @@ export type CashBookEntry = {
   edit_approved_at: string | null
 }
 
+export type WarpBeamPipe = {
+  id: string
+  entry_date: string
+  jobber_name: string
+  gp_number: string | null
+  beam_number: string | null
+  total_ends: number | null
+  yarn_count_denier: string | null
+  weight_kg: number | null
+  pipe_out_qty: number
+  pipe_in_qty: number
+  rate: number | null
+  remarks: string | null
+  status: 'out' | 'returned'
+  entered_by: string
+  created_at: string
+}
+
+export type YarnInward = {
+  id: string
+  yarn_type: 'warp' | 'weft'
+  supplier_name: string
+  item: string | null
+  qty: number | null
+  amount: number | null
+  invoice_image_url: string | null
+  entry_date: string
+  entered_by: string
+  created_at: string
+}
+
+export type MaintenanceMaterial = {
+  id: string
+  direction: 'out' | 'in'
+  material_name: string
+  purpose: string | null
+  sent_to: string | null
+  entry_date: string
+  entered_by: string
+  created_at: string
+}
+
+export type GatePassRecord = {
+  id: string
+  ref_type: string
+  ref_id: string | null
+  gp_number: string
+  generated_at: string
+}
+
+export type LoanEntry = {
+  id: string
+  party_name: string
+  direction: 'given' | 'received'
+  amount: number
+  purpose: string | null
+  entry_date: string
+  entered_by: string
+  created_at: string
+}
+
+export const LOAN_PARTY_DEFAULTS = ['Kiara Mills', 'Other'] as const
+
+export type GebReading = {
+  id: string
+  reading_date: string
+  meter_reading: number
+  previous_reading: number
+  unit_consumed: number
+  rate_per_unit: number
+  amount: number
+  entered_by: string
+  created_at: string
+}
+
+export const ORDER_TYPES = [
+  'Maintenance Material',
+  'Warp Yarn',
+  'Weft Yarn',
+  'Repair Call',
+  'Other',
+] as const
+
+export type OrderType = (typeof ORDER_TYPES)[number]
+
+export type AppOrder = {
+  id: string
+  order_type: OrderType
+  detail: string | null
+  raised_by: string
+  order_date: string
+  status: 'pending' | 'done'
+  created_at: string
+}
+
+export type PendingApprovalRow = {
+  id: string
+  table_name: string
+  record_id: string | null
+  action: 'edit' | 'delete'
+  requested_by: string
+  requested_at: string
+  new_data: Record<string, unknown> | null
+  status: 'pending' | 'approved' | 'rejected'
+  resolved_by: string | null
+  resolved_at: string | null
+}
+
 /** assumed: 6 looms labelled M1–M6 */
 export const MACHINES = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6'] as const
 

@@ -34,9 +34,15 @@ import { DesignWiseCosting } from './pages/DesignWiseCosting'
 import { DesignCatalogScreen } from './screens/DesignCatalogScreen'
 import { CrmCustomersScreen } from './screens/CrmCustomersScreen'
 import { CashBookScreen } from './screens/CashBookScreen'
+import { WarpBeamPipeScreen } from './screens/WarpBeamPipeScreen'
+import { YarnInwardScreen } from './screens/YarnInwardScreen'
+import { MaintenanceMaterialScreen } from './screens/MaintenanceMaterialScreen'
+import { LoanTrackerScreen } from './screens/LoanTrackerScreen'
+import { GebReadingScreen } from './screens/GebReadingScreen'
+import { OrdersPendingScreen } from './screens/OrdersPendingScreen'
 
 function AuthenticatedApp() {
-  const { session, loading, isCeo, profile } = useAuth()
+  const { session, loading, isCeo, isManager, profile } = useAuth()
   const [tab, setTab] = useState<AppScreen>('home')
   const [sub, setSub] = useState<string | undefined>()
   const [filter, setFilter] = useState<string | undefined>()
@@ -51,6 +57,18 @@ function AuthenticatedApp() {
     setFilter(landing.module === landing.sub ? landing.module : undefined)
     setActiveModule(landing.module)
   }, [session, isCeo, profile?.id, profile?.roles?.role_name, profile?.full_name])
+
+  // Hard-block Manager from CEO Dashboard route
+  useEffect(() => {
+    if (!session || !isManager) return
+    if (tab === 'home' || activeModule === 'dashboard') {
+      const landing = firstAllowedLanding('Manager')
+      setTab(landing.screen)
+      setSub(landing.sub)
+      setFilter(landing.module === landing.sub ? landing.module : undefined)
+      setActiveModule(landing.module)
+    }
+  }, [session, isManager, tab, activeModule])
 
   if (loading) {
     return (
@@ -68,6 +86,9 @@ function AuthenticatedApp() {
   }
 
   function go(t: NavTarget) {
+    if (isManager && (t.screen === 'home' || t.module === 'dashboard' || t.hub === 'dashboard')) {
+      return
+    }
     const nextScreen = t.screen
     const nextSub = t.hub || t.sub
     const nextFilter = t.filter ?? (t.hub ? t.hub : undefined)
@@ -108,6 +129,12 @@ function AuthenticatedApp() {
       {tab === 'design-catalog' ? <DesignCatalogScreen /> : null}
       {tab === 'crm' ? <CrmCustomersScreen /> : null}
       {tab === 'cash-book' ? <CashBookScreen /> : null}
+      {tab === 'warp-beam-pipe' ? <WarpBeamPipeScreen /> : null}
+      {tab === 'yarn-inward' ? <YarnInwardScreen /> : null}
+      {tab === 'maint-material' ? <MaintenanceMaterialScreen /> : null}
+      {tab === 'loan-tracker' ? <LoanTrackerScreen /> : null}
+      {tab === 'geb-readings' ? <GebReadingScreen /> : null}
+      {tab === 'orders-pending' ? <OrdersPendingScreen /> : null}
       {tab === 'parties' ? <PartyMasterScreen /> : null}
       {tab === 'purchase' ? <PurchaseScreen initialSub={sub || 'general'} /> : null}
       {tab === 'orders' ? <OrderBookScreen initialSub={sub || 'entry'} /> : null}
