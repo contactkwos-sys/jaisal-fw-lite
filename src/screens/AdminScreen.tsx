@@ -15,6 +15,11 @@ import {
   type ModulePermission,
 } from '../lib/permissions'
 import { printSummary, rowsToHtml, shareWhatsApp } from '../lib/share'
+import {
+  missingSystemRoleNames,
+  orderRolesBySystemList,
+  SYSTEM_ROLE_NAMES,
+} from '../lib/systemRoles'
 import { supabase } from '../lib/supabase'
 
 type Sub = 'roles' | 'payroll' | 'approvals' | 'permissions'
@@ -50,6 +55,8 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
 
   const [queue, setQueue] = useState<ApprovalQueue[]>([])
 
+  const pinRoles = useMemo(() => orderRolesBySystemList(roles), [roles])
+
   const loadRoles = useCallback(async () => {
     // Prefer direct table read (authenticated RLS). Edge `roles-gate` can fail with
     // browser "TypeError: Load failed" when the function gateway/network flakes.
@@ -57,17 +64,23 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
       .from('roles')
       .select('id, role_name, is_custom, created_at')
       .order('created_at', { ascending: true })
-    if (!error && data) {
-      setRoles(data as Role[])
-      return
+
+    let list = (!error && data ? (data as Role[]) : []) as Role[]
+
+    // Seed any missing system PIN roles (Machine Supervisor, Salesman, …) via roles-gate.
+    if (!list.length || missingSystemRoleNames(list).length) {
+      const { data: fnData, error: fnErr } = await supabase.functions.invoke('roles-gate', {
+        body: { action: 'ensure' },
+      })
+      if (!fnErr && !fnData?.error && fnData?.roles?.length) {
+        list = fnData.roles as Role[]
+      } else if (!list.length) {
+        if (fnErr) throw new Error(fnErr.message || error?.message || 'Load failed')
+        if (fnData?.error) throw new Error(fnData.error)
+      }
     }
 
-    const { data: fnData, error: fnErr } = await supabase.functions.invoke('roles-gate', {
-      body: { action: 'list' },
-    })
-    if (fnErr) throw new Error(fnErr.message || error?.message || 'Load failed')
-    if (fnData?.error) throw new Error(fnData.error)
-    setRoles((fnData?.roles ?? []) as Role[])
+    setRoles(orderRolesBySystemList(list))
   }, [])
 
   const loadPayroll = useCallback(async () => {
@@ -164,7 +177,7 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
       })
       if (fnErr) throw fnErr
       if (data?.error) throw new Error(data.error)
-      setMessage(`PIN reset for ${role.role_name}${data?.pin_hint ? ` (hint set)` : ''}`)
+      setMessage(`PIN set for ${role.role_name}${data?.pin_hint ? ` (hint set)` : ''}`)
       setNewPin((p) => ({ ...p, [role.id]: '' }))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'PIN reset failed')
@@ -187,12 +200,8 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
     setMessage(null)
     setBulkPins(null)
     try {
-      // CEO first, then remaining roles in stable name order
-      const ceoRole = roles.find((r) => r.role_name.toLowerCase() === 'ceo')
-      const others = roles
-        .filter((r) => r.role_name.toLowerCase() !== 'ceo')
-        .sort((a, b) => a.role_name.localeCompare(b.role_name))
-      const ordered = ceoRole ? [ceoRole, ...others] : others
+      // System PIN roles first (CEO → … → Operator), then any custom roles
+      const ordered = orderRolesBySystemList(roles)
 
       const assigned: Array<{ role: string; pin: string }> = []
       const pinByRoleId: Record<string, string> = {}
@@ -439,11 +448,17 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
               ) : null}
             </div>
           ) : null}
-          {roles.map((role) => (
+          {pinRoles.map((role) => (
             <article key={role.id} className="card-row surface form-stack">
               <div className="row-top">
                 <strong>{role.role_name}</strong>
-                <span className="text-muted2">{role.is_custom ? 'custom' : 'default'}</span>
+                <span className="text-muted2">
+                  {role.is_custom
+                    ? 'custom'
+                    : (SYSTEM_ROLE_NAMES as readonly string[]).includes(role.role_name)
+                      ? 'system'
+                      : 'default'}
+                </span>
               </div>
               {isCeo ? (
                 <>
@@ -477,11 +492,11 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
                     />
                   </label>
                   <button type="button" disabled={busy} onClick={() => void resetPin(role)}>
-                    Generate / Reset PIN
+                    Set PIN
                   </button>
                 </>
               ) : (
-                <p className="text-muted2">CEO can reset PINs</p>
+                <p className="text-muted2">CEO can set / reset PINs</p>
               )}
             </article>
           ))}
