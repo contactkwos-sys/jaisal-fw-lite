@@ -1644,3 +1644,155 @@ body.drawer-open {
   color: var(--text);
 }
 
+
+/* —— Cash Book items + ledger book —— */
+.cashbook-items-field {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.cashbook-items-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.cashbook-item-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 5.5rem auto;
+  gap: 0.4rem;
+  align-items: start;
+}
+
+.cashbook-item-ac {
+  position: relative;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.cashbook-item-ac input,
+.cashbook-item-amt,
+.cashbook-item-other {
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.cashbook-item-ac-list {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 0.25rem 0;
+  list-style: none;
+  max-height: 12rem;
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm, 6px);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--ink, #1a1a1a) 12%, transparent);
+}
+
+.cashbook-item-ac-list button {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  padding: 0.45rem 0.65rem;
+  font: inherit;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.cashbook-item-ac-list button:hover,
+.cashbook-item-ac-add {
+  background: var(--surface2);
+}
+
+.cashbook-item-ac-add {
+  color: var(--teal, var(--sage));
+  font-weight: 600;
+}
+
+.cashbook-ledger-book {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.cashbook-book-summary,
+.cashbook-book-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+}
+
+.cashbook-book-day {
+  padding: 0.75rem;
+  border-radius: 10px;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.cashbook-book-day-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-items: baseline;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 0.4rem;
+}
+
+.cashbook-book-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.cashbook-book-col h4 {
+  margin: 0 0 0.4rem;
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.cashbook-book-col.credit h4 {
+  color: var(--sage);
+}
+
+.cashbook-book-col.debit h4 {
+  color: var(--danger);
+}
+
+.cashbook-book-line {
+  padding: 0.4rem 0;
+  border-bottom: 1px dashed color-mix(in srgb, var(--line) 80%, transparent);
+  display: grid;
+  gap: 0.15rem;
+}
+
+.cashbook-book-line-main {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+@media (max-width: 720px) {
+  .cashbook-item-row {
+    grid-template-columns: 1fr;
+  }
+
+  .cashbook-book-cols {
+    grid-template-columns: 1fr;
+  }
+}
