@@ -392,6 +392,84 @@ body.drawer-open {
   display: none;
 }
 
+/* Production module hub — bordered cards + process-flow arrows */
+.module-hub-production .hub-grid-production {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.module-hub-production .hub-flow-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.5rem;
+}
+
+.module-hub-production .hub-flow-step {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1 1 9rem;
+  min-width: 0;
+}
+
+.module-hub-production .hub-flow-step .hub-card {
+  flex: 1;
+  min-width: 0;
+}
+
+.module-hub-production .hub-flow-arrow {
+  color: var(--weft);
+  font-size: 1.15rem;
+  font-weight: 600;
+  line-height: 1;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.module-hub-production .hub-rest-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+
+.module-hub-production .hub-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+  width: 100%;
+  margin: 0;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+  text-align: left;
+  filter: none;
+}
+
+.module-hub-production .hub-card:hover {
+  border-color: color-mix(in srgb, var(--teal) 45%, var(--line));
+  background: color-mix(in srgb, var(--teal-soft) 55%, var(--surface));
+  filter: none;
+}
+
+.module-hub-production .hub-card-label {
+  font-family: "Outfit", sans-serif;
+  font-weight: 650;
+  font-size: 0.98rem;
+  letter-spacing: -0.01em;
+  color: var(--teal-deep);
+}
+
+.module-hub-production .hub-card-hint {
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
 .login-screen {
   width: 100%;
   margin: 0 auto;
@@ -952,6 +1030,10 @@ body.drawer-open {
   .flow-arrow {
     display: none;
   }
+
+  .module-hub-production .hub-flow-arrow {
+    display: none;
+  }
 }
 
 /* Desktop / iPad: fixed sidebar, no hamburger / bottom nav */
@@ -1079,8 +1161,20 @@ body.drawer-open {
     margin-top: 0.5rem;
   }
 
-  .hub-grid {
+  .hub-grid:not(.hub-grid-production) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .module-hub-production .hub-rest-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .module-hub-production .hub-flow-row {
+    flex-wrap: nowrap;
+  }
+
+  .module-hub-production .hub-flow-step {
+    flex: 1 1 0;
   }
 
   .program-meta-grid,
@@ -1129,7 +1223,7 @@ body.drawer-open {
     grid-template-columns: repeat(8, minmax(0, 1fr));
   }
 
-  .hub-grid {
+  .hub-grid:not(.hub-grid-production) {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
