@@ -168,7 +168,7 @@ export function AppShell({ active, sub, filter, activeModule, onNavigate, childr
           <span className="hamburger-bars" aria-hidden="true" />
         </button>
         <div className="mobile-topbar-brand">
-          <span className="mobile-brand-name">JAISAL FW</span>
+          <span className="mobile-brand-name">KWOS | Jaisal Fashion Weave Industries</span>
           <span className="mobile-topbar-title">{pageTitle}</span>
         </div>
         <span className="mobile-role-chip">{roleName}</span>
@@ -179,9 +179,9 @@ export function AppShell({ active, sub, filter, activeModule, onNavigate, childr
       <aside id="app-sidebar" className="app-sidebar" aria-labelledby={brandId}>
         <div className="sidebar-brand">
           <div id={brandId} className="sidebar-brand-name">
-            JAISAL FW
+            KWOS | Jaisal Fashion Weave Industries
           </div>
-          <div className="sidebar-brand-sub">Fashionweave Industries</div>
+          <div className="sidebar-brand-sub">Jaisal Fashion Weave Industries</div>
         </div>
 
         <nav className="side-nav" aria-label="Main">
