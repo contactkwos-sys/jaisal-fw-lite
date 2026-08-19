@@ -1,5 +1,5 @@
 /**
- * Navigation — max 9 main modules. Existing screens live as sub-items.
+ * Navigation — main sidebar modules (Cash Book sits under Inventory).
  */
 export type AppScreen =
   | 'home'
@@ -23,6 +23,7 @@ export type AppScreen =
   | 'design-wise-costing'
   | 'design-catalog'
   | 'crm'
+  | 'cash-book'
   | 'module-hub'
   | 'settings-hub'
   | 'placeholder'
@@ -31,6 +32,7 @@ export type MainModuleId =
   | 'dashboard'
   | 'production'
   | 'inventory'
+  | 'cash-book'
   | 'orders'
   | 'reports'
   | 'maintenance'
@@ -112,6 +114,13 @@ export const MAIN_MODULES: MainModule[] = [
       { id: 'stock-adj', label: 'Stock Adjustment', screen: 'admin', sub: 'approvals', hint: 'Approval / adjust queue' },
       { id: 'stock-reports', label: 'Stock Reports', screen: 'purchase', sub: 'report', hint: 'Purchase & stock reports' },
     ],
+  },
+  {
+    id: 'cash-book',
+    label: 'Cash Book',
+    icon: 'cash-book',
+    screen: 'cash-book',
+    items: [],
   },
   {
     id: 'orders',
@@ -236,6 +245,7 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   'design-wise-costing': 'Design Wise Costing',
   'design-catalog': 'Design Catalog',
   crm: 'CRM',
+  'cash-book': 'Cash Book',
   'module-hub': 'Module',
   'settings-hub': 'Settings',
   placeholder: 'Coming Soon',
@@ -268,6 +278,7 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
   // Fallbacks by screen family
   if (screen === 'production' || screen === 'dispatch') return 'production'
   if (screen === 'stock' || screen === 'purchase') return 'inventory'
+  if (screen === 'cash-book') return 'cash-book'
   if (
     screen === 'orders' ||
     screen === 'programs' ||
