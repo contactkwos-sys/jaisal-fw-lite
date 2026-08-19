@@ -120,6 +120,59 @@ async function handleRoles(body) {
       })),
     }
   }
+  if (action === 'pin-status') {
+    const listedRoles = await handleRoles({ action: 'ensure' })
+    const roles = listedRoles.roles || []
+    const { data: dbUsers } = await admin
+      .from('users')
+      .select('id, role_id, pin_hash, is_active, created_at')
+      .eq('is_active', true)
+    const { data: listed } = await admin.auth.admin.listUsers({ perPage: 200 })
+    const authUsers = listed?.users || []
+    const byRoleId = new Map()
+    for (const u of dbUsers || []) {
+      const auth = authUsers.find((a) => a.id === u.id)
+      const meta = auth?.user_metadata || {}
+      const hint = meta.pin_hint && String(meta.pin_hint).length === 4 ? String(meta.pin_hint) : null
+      byRoleId.set(u.role_id, {
+        pin_hint: hint,
+        has_pin: Boolean(u.pin_hash),
+        last_updated: auth?.updated_at || u.created_at || null,
+      })
+    }
+    const status = roles.map((role) => {
+      const hit = byRoleId.get(role.id)
+      if (hit) {
+        return {
+          role_id: role.id,
+          role_name: role.role_name,
+          pin_hint: hit.pin_hint,
+          has_pin: hit.has_pin,
+          last_updated: hit.last_updated,
+        }
+      }
+      const byName = authUsers.find((a) => a.user_metadata?.role_name === role.role_name)
+      if (byName) {
+        const meta = byName.user_metadata || {}
+        const hint = meta.pin_hint && String(meta.pin_hint).length === 4 ? String(meta.pin_hint) : null
+        return {
+          role_id: role.id,
+          role_name: role.role_name,
+          pin_hint: hint,
+          has_pin: Boolean(meta.pin_hash || hint),
+          last_updated: byName.updated_at || null,
+        }
+      }
+      return {
+        role_id: role.id,
+        role_name: role.role_name,
+        pin_hint: null,
+        has_pin: false,
+        last_updated: null,
+      }
+    })
+    return { status }
+  }
   if (action === 'create') {
     const name = String(body.role_name || '').trim()
     if (!name) return { status: 400, body: { error: 'role_name required' } }

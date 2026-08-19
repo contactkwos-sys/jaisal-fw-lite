@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ApprovalsWidget } from '../components/ApprovalsWidget'
+import { PinOverviewTable } from '../components/PinOverviewTable'
 import { ShareActions } from '../components/ShareActions'
 import { SubTabs } from '../components/SubTabs'
 import { useAuth } from '../lib/auth'
@@ -54,6 +55,7 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
   const [payables, setPayables] = useState<PayableRow[]>([])
 
   const [queue, setQueue] = useState<ApprovalQueue[]>([])
+  const [pinOverviewKey, setPinOverviewKey] = useState(0)
 
   const pinRoles = useMemo(() => orderRolesBySystemList(roles), [roles])
 
@@ -179,6 +181,7 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
       if (data?.error) throw new Error(data.error)
       setMessage(`PIN set for ${role.role_name}${data?.pin_hint ? ` (hint set)` : ''}`)
       setNewPin((p) => ({ ...p, [role.id]: '' }))
+      setPinOverviewKey((k) => k + 1)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'PIN reset failed')
     } finally {
@@ -228,6 +231,7 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
       setBulkPins(assigned)
       setNewPin((prev) => ({ ...prev, ...pinByRoleId }))
       setMessage(`Auto-generated PINs for ${assigned.length} roles`)
+      setPinOverviewKey((k) => k + 1)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Bulk PIN generation failed')
     } finally {
@@ -420,6 +424,21 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
 
       {sub === 'roles' ? (
         <div className="list">
+          {isCeo ? (
+            <PinOverviewTable
+              roles={pinRoles}
+              isCeo={isCeo}
+              refreshKey={pinOverviewKey}
+              onMessage={(msg) => {
+                setMessage(msg)
+                if (msg) setError(null)
+              }}
+              onError={(msg) => {
+                setError(msg)
+                if (msg) setMessage(null)
+              }}
+            />
+          ) : null}
           {isCeo ? (
             <div className="form-stack">
               <button
