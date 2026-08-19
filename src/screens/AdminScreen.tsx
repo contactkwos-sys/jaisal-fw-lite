@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ApprovalsWidget } from '../components/ApprovalsWidget'
 import { ShareActions } from '../components/ShareActions'
 import { SubTabs } from '../components/SubTabs'
 import { useAuth } from '../lib/auth'
@@ -622,24 +623,28 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
       ) : null}
 
       {sub === 'approvals' && isCeo ? (
-        <div className="list">
-          {queue.map((q) => (
-            <article key={q.id} className="card-row surface form-stack">
-              <strong>
-                {q.action} · {q.table_name}
-              </strong>
-              <pre className="payload-preview">{JSON.stringify(q.payload, null, 2)}</pre>
-              <div className="share-actions">
-                <button type="button" disabled={busy} onClick={() => void resolveQueue(q, 'approved')}>
-                  Approve
-                </button>
-                <button type="button" className="btn-ghost" disabled={busy} onClick={() => void resolveQueue(q, 'rejected')}>
-                  Reject
-                </button>
-              </div>
-            </article>
-          ))}
-          {!queue.length ? <p className="text-muted">No pending approvals</p> : null}
+        <div className="form-stack">
+          <ApprovalsWidget />
+          <h2 className="section-title">Legacy approval queue</h2>
+          <div className="list">
+            {queue.map((q) => (
+              <article key={q.id} className="card-row surface form-stack">
+                <strong>
+                  {q.action} · {q.table_name}
+                </strong>
+                <pre className="payload-preview">{JSON.stringify(q.payload, null, 2)}</pre>
+                <div className="share-actions">
+                  <button type="button" disabled={busy} onClick={() => void resolveQueue(q, 'approved')}>
+                    Approve
+                  </button>
+                  <button type="button" className="btn-ghost" disabled={busy} onClick={() => void resolveQueue(q, 'rejected')}>
+                    Reject
+                  </button>
+                </div>
+              </article>
+            ))}
+            {!queue.length ? <p className="text-muted">No legacy queue items</p> : null}
+          </div>
         </div>
       ) : null}
 

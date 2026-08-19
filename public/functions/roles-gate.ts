@@ -8,7 +8,17 @@ const corsHeaders = {
   'Access-Control-Max-Age': '86400',
 }
 
-const DEFAULT_ROLES = ['CEO', 'Programmer', 'Security', 'Operator']
+const DEFAULT_ROLES = [
+  'CEO',
+  'Manager',
+  'Machine Supervisor',
+  'Salesman',
+  'Checker & Dispatch',
+  'Program Supervisor',
+  'Programmer',
+  'Security',
+  'Operator',
+]
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {

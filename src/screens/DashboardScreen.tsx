@@ -8,6 +8,8 @@ import {
 import { applyOrQueue, todayISO } from '../lib/mutate'
 import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
+import { ApprovalsWidget } from '../components/ApprovalsWidget'
+import { PendingOrdersWidget } from './OrdersPendingScreen'
 
 type Props = {
   onNavigate: (t: NavTarget) => void
@@ -586,6 +588,13 @@ export function DashboardScreen({ onNavigate }: Props) {
           ))}
         </div>
       </section>
+
+      {isCeo ? (
+        <div className="dash-split">
+          <ApprovalsWidget />
+          <PendingOrdersWidget />
+        </div>
+      ) : null}
 
       {isCeo ? (
         <section className="dash-stock-edit">

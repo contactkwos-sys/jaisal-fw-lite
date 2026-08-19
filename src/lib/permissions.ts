@@ -12,14 +12,20 @@ const STORAGE_KEY = 'jaisal_fw_role_permissions_v1'
 /** Default module access by role name (case-insensitive match / includes). */
 const ROLE_DEFAULTS: Record<string, MainModuleId[]> = {
   ceo: ['dashboard', 'production', 'inventory', 'cash-book', 'orders', 'reports', 'maintenance', 'masters', 'security', 'settings'],
-  'mill incharge': ['dashboard', 'production', 'inventory', 'cash-book', 'orders', 'reports', 'maintenance'],
-  mill: ['dashboard', 'production', 'inventory', 'cash-book', 'orders', 'reports', 'maintenance'],
+  // Manager: all modules EXCEPT CEO Dashboard
+  manager: ['production', 'inventory', 'cash-book', 'orders', 'reports', 'maintenance', 'masters', 'security', 'settings'],
+  'machine supervisor': ['production', 'inventory', 'maintenance', 'reports'],
+  salesman: ['orders', 'masters', 'reports', 'cash-book'],
+  'checker & dispatch': ['production', 'inventory', 'security'],
+  'program supervisor': ['production', 'orders', 'reports'],
+  'mill incharge': ['production', 'inventory', 'cash-book', 'orders', 'reports', 'maintenance'],
+  mill: ['production', 'inventory', 'cash-book', 'orders', 'reports', 'maintenance'],
   'store incharge': ['inventory', 'cash-book', 'reports'],
   store: ['inventory', 'cash-book', 'reports'],
   'production incharge': ['production', 'orders', 'reports'],
   programmer: ['production', 'orders', 'reports'],
   operator: ['production'],
-  security: ['security'],
+  security: ['security', 'inventory'],
   account: ['cash-book', 'reports', 'masters', 'security'],
   admin: ['cash-book', 'reports', 'masters', 'security', 'settings'],
   accounts: ['cash-book', 'reports', 'masters'],
@@ -30,9 +36,10 @@ const OPERATOR_SUBS: Partial<Record<MainModuleId, string[]>> = {
   production: ['prod-entry', 'weft-issue', 'warp-issue', 'folding'],
 }
 
-/** Security role — gate + basic verification */
+/** Security role — gate + yarn OCR + GEB */
 const SECURITY_SUBS: Partial<Record<MainModuleId, string[]>> = {
-  security: ['security-gate', 'login-activity'],
+  security: ['security-gate', 'yarn-inward-sec', 'geb-sec', 'login-activity'],
+  inventory: ['yarn-inward'],
 }
 
 function normalizeRole(name: string): string {
@@ -45,8 +52,7 @@ function matchDefaultModules(roleName: string): MainModuleId[] {
   for (const [key, mods] of Object.entries(ROLE_DEFAULTS)) {
     if (n.includes(key) || key.includes(n)) return mods
   }
-  // Unknown custom roles: conservative — dashboard + production
-  return ['dashboard', 'production']
+  return ['production']
 }
 
 function readOverrides(): Record<string, ModulePermission[]> {
@@ -75,12 +81,15 @@ export function getDefaultPermissions(roleName: string): ModulePermission[] {
   const modules = matchDefaultModules(roleName)
   const n = normalizeRole(roleName)
   const isOperator = n.includes('operator')
-  const isSecurity = n === 'security' || n.includes('security')
+  const isSecurity = n === 'security' || (n.includes('security') && !n.includes('supervisor'))
+  const isManager = n === 'manager'
 
   return modules.map((moduleId) => {
     let subIds: string[] | undefined
     if (isOperator && OPERATOR_SUBS[moduleId]) subIds = OPERATOR_SUBS[moduleId]
     if (isSecurity && SECURITY_SUBS[moduleId]) subIds = SECURITY_SUBS[moduleId]
+    // Manager: full access to every allowed module (no sub restriction)
+    if (isManager) subIds = undefined
     return { moduleId, subIds }
   })
 }
@@ -93,12 +102,17 @@ export function getPermissionsForRole(roleName: string): ModulePermission[] {
 }
 
 export function canAccessModule(roleName: string, moduleId: MainModuleId): boolean {
-  if (normalizeRole(roleName) === 'ceo') return true
+  const n = normalizeRole(roleName)
+  if (n === 'ceo') return true
+  // Hard rule: Manager never gets CEO Dashboard
+  if (n === 'manager' && moduleId === 'dashboard') return false
   return getPermissionsForRole(roleName).some((p) => p.moduleId === moduleId)
 }
 
 export function canAccessSub(roleName: string, moduleId: MainModuleId, subId: string): boolean {
-  if (normalizeRole(roleName) === 'ceo') return true
+  const n = normalizeRole(roleName)
+  if (n === 'ceo') return true
+  if (n === 'manager' && moduleId === 'dashboard') return false
   const perm = getPermissionsForRole(roleName).find((p) => p.moduleId === moduleId)
   if (!perm) return false
   if (!perm.subIds || perm.subIds.length === 0) return true
@@ -106,18 +120,21 @@ export function canAccessSub(roleName: string, moduleId: MainModuleId, subId: st
 }
 
 export function allowedModules(roleName: string): MainModuleId[] {
-  if (normalizeRole(roleName) === 'ceo') {
+  const n = normalizeRole(roleName)
+  if (n === 'ceo') {
     return MAIN_MODULES.map((m) => m.id)
   }
-  return getPermissionsForRole(roleName).map((p) => p.moduleId)
+  return getPermissionsForRole(roleName)
+    .map((p) => p.moduleId)
+    .filter((id) => !(n === 'manager' && id === 'dashboard'))
 }
 
 export function firstAllowedLanding(roleName: string): { module: MainModuleId; screen: import('./nav').AppScreen; sub?: string } {
   const mods = allowedModules(roleName)
-  const first = mods[0] || 'dashboard'
+  const first = mods[0] || 'production'
   if (first === 'dashboard') return { module: 'dashboard', screen: 'home' }
   const mod = MAIN_MODULES.find((m) => m.id === first)
-  if (!mod) return { module: 'dashboard', screen: 'home' }
+  if (!mod) return { module: 'production', screen: 'module-hub', sub: 'production' }
   if (mod.hasHub) return { module: mod.id, screen: 'module-hub', sub: mod.id }
   return { module: mod.id, screen: mod.screen, sub: mod.sub }
 }

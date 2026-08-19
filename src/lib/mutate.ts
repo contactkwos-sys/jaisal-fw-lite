@@ -46,6 +46,16 @@ export async function uploadPurchasePhoto(file: File, folder: string): Promise<s
   return data.publicUrl
 }
 
+/** Invoice OCR photos → invoice-images bucket. */
+export async function uploadInvoicePhoto(file: File, folder = 'yarn'): Promise<string> {
+  const ext = file.name.split('.').pop() || 'jpg'
+  const path = `${folder}/${Date.now()}-${crypto.randomUUID()}.${ext}`
+  const { error } = await supabase.storage.from('invoice-images').upload(path, file, { upsert: false })
+  if (error) throw error
+  const { data } = supabase.storage.from('invoice-images').getPublicUrl(path)
+  return data.publicUrl
+}
+
 export function todayISO() {
   return new Date().toISOString().slice(0, 10)
 }
