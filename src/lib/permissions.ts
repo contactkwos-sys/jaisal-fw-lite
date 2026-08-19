@@ -11,18 +11,18 @@ const STORAGE_KEY = 'jaisal_fw_role_permissions_v1'
 
 /** Default module access by role name (case-insensitive match / includes). */
 const ROLE_DEFAULTS: Record<string, MainModuleId[]> = {
-  ceo: ['dashboard', 'production', 'inventory', 'orders', 'reports', 'maintenance', 'masters', 'security', 'settings'],
-  'mill incharge': ['dashboard', 'production', 'inventory', 'orders', 'reports', 'maintenance'],
-  mill: ['dashboard', 'production', 'inventory', 'orders', 'reports', 'maintenance'],
-  'store incharge': ['inventory', 'reports'],
-  store: ['inventory', 'reports'],
+  ceo: ['dashboard', 'production', 'inventory', 'cash-book', 'orders', 'reports', 'maintenance', 'masters', 'security', 'settings'],
+  'mill incharge': ['dashboard', 'production', 'inventory', 'cash-book', 'orders', 'reports', 'maintenance'],
+  mill: ['dashboard', 'production', 'inventory', 'cash-book', 'orders', 'reports', 'maintenance'],
+  'store incharge': ['inventory', 'cash-book', 'reports'],
+  store: ['inventory', 'cash-book', 'reports'],
   'production incharge': ['production', 'orders', 'reports'],
   programmer: ['production', 'orders', 'reports'],
   operator: ['production'],
   security: ['security'],
-  account: ['reports', 'masters', 'security'],
-  admin: ['reports', 'masters', 'security', 'settings'],
-  accounts: ['reports', 'masters'],
+  account: ['cash-book', 'reports', 'masters', 'security'],
+  admin: ['cash-book', 'reports', 'masters', 'security', 'settings'],
+  accounts: ['cash-book', 'reports', 'masters'],
 }
 
 /** Operator may only open production entry / related entry screens */

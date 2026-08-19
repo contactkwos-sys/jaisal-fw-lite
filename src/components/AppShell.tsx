@@ -48,6 +48,14 @@ const ICONS: Record<string, ReactNode> = {
       />
     </svg>
   ),
+  'cash-book': (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="nav-ico">
+      <path
+        fill="currentColor"
+        d="M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zm2 2v12h14V6H6zm3 2h3a3 3 0 1 1 0 6H9v2H7V8h2zm0 2v2h3a1 1 0 1 0 0-2H9z"
+      />
+    </svg>
+  ),
   orders: (
     <svg viewBox="0 0 24 24" aria-hidden="true" className="nav-ico">
       <path

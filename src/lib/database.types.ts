@@ -404,6 +404,35 @@ export type ElectricityEntry = {
   created_at: string
 }
 
+export type CashBookEntryType = 'credit' | 'debit'
+
+export const CASHBOOK_CATEGORIES = [
+  'Deposit from Owner',
+  'Machine Repair',
+  'Tempo/Transport',
+  'Beam Supplier',
+  'Other',
+] as const
+
+export type CashBookCategory = (typeof CASHBOOK_CATEGORIES)[number]
+
+export type CashBookEntry = {
+  id: string
+  entry_date: string
+  entry_type: CashBookEntryType
+  party_name: string
+  contact_number: string | null
+  category: CashBookCategory
+  machine_number: string | null
+  purpose_notes: string | null
+  amount: number
+  entered_by: string
+  created_at: string
+  edited_by: string | null
+  edit_approved_by: string | null
+  edit_approved_at: string | null
+}
+
 /** assumed: 6 looms labelled M1–M6 */
 export const MACHINES = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6'] as const
 

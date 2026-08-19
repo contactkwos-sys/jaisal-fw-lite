@@ -1455,3 +1455,192 @@ body.drawer-open {
   gap: 0.45rem;
   justify-content: flex-end;
 }
+
+/* Cash Book */
+.cashbook-type-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+}
+
+.cashbook-type-btn {
+  background: var(--surface);
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.55rem 0.75rem;
+  font-weight: 600;
+  filter: none;
+}
+
+.cashbook-type-btn.credit.active {
+  background: var(--mint-soft);
+  border-color: color-mix(in srgb, var(--mint) 45%, var(--line));
+  color: #1f6b4a;
+}
+
+.cashbook-type-btn.debit.active {
+  background: var(--danger-soft);
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--line));
+  color: var(--danger);
+}
+
+.cashbook-type-btn:hover {
+  filter: none;
+}
+
+.cashbook-row.credit {
+  border-left: 3px solid var(--mint);
+}
+
+.cashbook-row.debit {
+  border-left: 3px solid var(--danger);
+}
+
+.cashbook-row-party {
+  font-weight: 650;
+}
+
+.cashbook-row-meta,
+.cashbook-row-notes {
+  margin-top: 0.15rem;
+  font-size: 0.85rem;
+}
+
+.cashbook-row-right {
+  display: grid;
+  justify-items: end;
+  gap: 0.25rem;
+}
+
+.cashbook-amount.credit {
+  color: #1f6b4a;
+}
+
+.cashbook-amount.debit {
+  color: var(--danger);
+}
+
+.cashbook-type-chip {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+}
+
+.cashbook-type-chip.credit {
+  background: var(--mint-soft);
+  color: #1f6b4a;
+}
+
+.cashbook-type-chip.debit {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.cashbook-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.65rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--line);
+}
+
+.cashbook-row-actions .share-actions {
+  margin: 0;
+}
+
+.cashbook-row-actions .btn-ghost {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.8rem;
+}
+
+.cashbook-link-btn {
+  display: inline;
+  width: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--teal);
+  text-decoration: underline;
+  font: inherit;
+  cursor: pointer;
+}
+
+.cashbook-ledger-card {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.cashbook-ledger-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.cashbook-ledger-lines li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+  padding: 0.3rem 0;
+  border-top: 1px dashed var(--line);
+}
+
+.cashbook-pin-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 0.75rem;
+}
+
+.cashbook-pin-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(0, 0, 0, 0.55);
+  cursor: pointer;
+}
+
+.cashbook-pin-panel {
+  position: relative;
+  z-index: 1;
+  width: min(380px, 100%);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 1rem;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.cashbook-pin-head {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.cashbook-pin-head h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.cashbook-form textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 4.5rem;
+  font: inherit;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+}
+
