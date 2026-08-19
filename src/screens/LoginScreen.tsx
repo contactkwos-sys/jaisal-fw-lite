@@ -2,19 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { PinPad } from '../components/PinPad'
 import { useAuth } from '../lib/auth'
 import type { Role } from '../lib/database.types'
+import { missingSystemRoleNames, orderRolesBySystemList, SYSTEM_ROLE_NAMES } from '../lib/systemRoles'
 import { supabase } from '../lib/supabase'
-
-const DEFAULT_NAMES = [
-  'CEO',
-  'Manager',
-  'Machine Supervisor',
-  'Salesman',
-  'Checker & Dispatch',
-  'Program Supervisor',
-  'Programmer',
-  'Security',
-  'Operator',
-]
 
 export function LoginScreen() {
   const { loginWithPin } = useAuth()
@@ -27,30 +16,39 @@ export function LoginScreen() {
   const [busy, setBusy] = useState(false)
 
   async function loadRoles() {
+    const applyList = (list: Role[]) => {
+      const ordered = orderRolesBySystemList(list)
+      setRoles(ordered)
+      if (!selectedId && ordered.length) {
+        const ceo = ordered.find((r) => r.role_name === 'CEO')
+        setSelectedId(ceo?.id ?? ordered[0].id)
+      }
+    }
+
     const { data: tableData, error: tableErr } = await supabase
       .from('roles')
       .select('id, role_name, is_custom, created_at')
       .order('created_at', { ascending: true })
-    if (!tableErr && tableData?.length) {
-      setRoles(tableData as Role[])
-      if (!selectedId) {
-        const ceo = tableData.find((r) => r.role_name === 'CEO')
-        setSelectedId(ceo?.id ?? tableData[0].id)
+
+    let list = (!tableErr && tableData?.length ? (tableData as Role[]) : []) as Role[]
+
+    // If system PIN roles are missing from the table, ask roles-gate to seed them.
+    if (!list.length || missingSystemRoleNames(list).length) {
+      const { data, error: fnErr } = await supabase.functions.invoke('roles-gate', {
+        body: { action: 'ensure' },
+      })
+      if (!fnErr && !data?.error && data?.roles?.length) {
+        list = data.roles as Role[]
+      } else if (!list.length) {
+        if (fnErr) throw new Error(fnErr.message || tableErr?.message || 'Load failed')
+        if (data?.error) throw new Error(data.error)
       }
-      return
     }
 
-    const { data, error: fnErr } = await supabase.functions.invoke('roles-gate', {
-      body: { action: 'list' },
-    })
-    if (fnErr) throw new Error(fnErr.message || tableErr?.message || 'Load failed')
-    if (data?.error) throw new Error(data.error)
-    const list = (data?.roles ?? []) as Role[]
-    setRoles(list)
-    if (!selectedId && list.length) {
-      const ceo = list.find((r) => r.role_name === 'CEO')
-      setSelectedId(ceo?.id ?? list[0].id)
+    if (!list.length) {
+      throw new Error(tableErr?.message || 'No roles available')
     }
+    applyList(list)
   }
 
   useEffect(() => {
@@ -63,7 +61,7 @@ export function LoginScreen() {
   )
 
   const chipRoles = useMemo(() => {
-    const defaults = DEFAULT_NAMES.map(
+    const defaults = SYSTEM_ROLE_NAMES.map(
       (name) => roles.find((r) => r.role_name === name) ?? null,
     ).filter(Boolean) as Role[]
     const customs = roles.filter((r) => r.is_custom)
@@ -82,7 +80,7 @@ export function LoginScreen() {
       if (fnErr) throw fnErr
       if (data?.error) throw new Error(data.error)
       const role = data.role as Role
-      setRoles((prev) => [...prev, role])
+      setRoles((prev) => orderRolesBySystemList([...prev, role]))
       setSelectedId(role.id)
       setAdding(false)
       setCustomName('')

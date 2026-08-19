@@ -20,6 +20,45 @@ const DEFAULT_ROLES = [
   'Operator',
 ]
 
+async function fetchRoles(admin: { from: (t: string) => any }) {
+  return admin
+    .from('roles')
+    .select('id, role_name, is_custom, created_at')
+    .order('created_at', { ascending: true })
+}
+
+/** Insert any missing system roles (Manager, Machine Supervisor, …) then return full list. */
+async function ensureSystemRoles(admin: any) {
+  const { data, error } = await fetchRoles(admin)
+  const rows = (!error && data ? data : []) as Array<{
+    id: string
+    role_name: string
+    is_custom: boolean
+    created_at: string
+  }>
+  const have = new Set(rows.map((r) => r.role_name))
+  const missing = DEFAULT_ROLES.filter((name) => !have.has(name))
+  if (missing.length) {
+    await admin.from('roles').insert(missing.map((role_name) => ({ role_name, is_custom: false })))
+    const again = await fetchRoles(admin)
+    if (!again.error && again.data?.length) return again.data
+  }
+  if (rows.length) return rows
+
+  // Fallback when table grants are missing: auth metadata + defaults
+  const { data: listed } = await admin.auth.admin.listUsers({ perPage: 200 })
+  const fromUsers = (listed?.users || [])
+    .map((u: { user_metadata?: { role_name?: string } | null }) => u.user_metadata?.role_name)
+    .filter(Boolean) as string[]
+  const names = [...new Set([...DEFAULT_ROLES, ...fromUsers])]
+  return names.map((role_name) => ({
+    id: `meta-${role_name.toLowerCase()}`,
+    role_name,
+    is_custom: !DEFAULT_ROLES.includes(role_name),
+    created_at: new Date(0).toISOString(),
+  }))
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -32,31 +71,8 @@ Deno.serve(async (req) => {
     const body = req.method === 'POST' ? await req.json() : {}
     const action = body.action ?? 'list'
 
-    if (action === 'list') {
-      const { data, error } = await admin
-        .from('roles')
-        .select('id, role_name, is_custom, created_at')
-        .order('created_at', { ascending: true })
-
-      if (!error && data?.length) {
-        return new Response(JSON.stringify({ roles: data }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
-      }
-
-      // Fallback when table grants are missing: auth metadata + defaults
-      const { data: listed } = await admin.auth.admin.listUsers({ perPage: 200 })
-      const fromUsers = (listed?.users || [])
-        .map((u) => (u.user_metadata as { role_name?: string } | null)?.role_name)
-        .filter(Boolean) as string[]
-      const names = [...new Set([...DEFAULT_ROLES, ...fromUsers])]
-      const roles = names.map((role_name, i) => ({
-        id: `meta-${role_name.toLowerCase()}`,
-        role_name,
-        is_custom: !DEFAULT_ROLES.includes(role_name),
-        created_at: new Date(0).toISOString(),
-        _idx: i,
-      }))
+    if (action === 'list' || action === 'ensure') {
+      const roles = await ensureSystemRoles(admin)
       return new Response(JSON.stringify({ roles }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
