@@ -481,6 +481,94 @@ export type GatePassRecord = {
   ref_id: string | null
   gp_number: string
   generated_at: string
+  tempo_number?: string | null
+}
+
+export type MachineProductionReport = {
+  id: string
+  report_date: string
+  machine_no: string
+  shift: 'Day' | 'Night'
+  total_meters: number
+  warp_broken_count: number
+  weft_broken_count: number
+  working_hours: number
+  shift_hours: number
+  difference_hours: number
+  efficiency_percent: number
+  entered_by: string
+  created_at: string
+}
+
+export type CheckingEntry = {
+  id: string
+  job_card_id: string
+  ok_meters: number
+  damage_meters: number
+  fresh_meters: number
+  total_meters: number
+  damage_reason: string | null
+  lot_number: number
+  entry_date: string
+  entered_by: string
+  status: 'checking' | 'ready_for_dispatch' | 'dispatched'
+  party_name: string | null
+  dno: string | null
+  colour: string | null
+  machine_no: string | null
+  program_meter: number | null
+  challan_id: string | null
+  created_at: string
+}
+
+export const CTR_COLOUR_NAMES = [
+  'Maroon',
+  'Wine',
+  'Mehendi',
+  'Firozi',
+  'Pink',
+  'Coffee',
+  'Grey',
+  'Navy Blue',
+  'HSVy 450',
+  'HSVy 660',
+  'Champion Gold',
+  'Champion Ivory',
+  'Other',
+] as const
+
+export type CtrColourName = (typeof CTR_COLOUR_NAMES)[number]
+
+export type CtrColourStock = {
+  id: string
+  colour_name: string
+  opening_stock_kg: number
+  current_stock_kg: number
+  updated_at: string
+}
+
+export type CtrDailyIssue = {
+  id: string
+  issue_date: string
+  machine_no: string
+  colour_id: string
+  gola_weight_kg: number
+  total_kg: number
+  entered_by: string
+  created_at: string
+}
+
+export type ProgramBookEntry = {
+  id: string
+  program_number: string
+  linked_machine: string | null
+  matching_card_ref: string | null
+  print_status: 'pending' | 'printed' | 'selected'
+  job_card_ref: string | null
+  note: string | null
+  entry_date: string
+  entered_by: string | null
+  created_at: string
 }
 
 export type LoanEntry = {
@@ -543,6 +631,9 @@ export type PendingApprovalRow = {
 
 /** assumed: 6 looms labelled M1–M6 */
 export const MACHINES = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6'] as const
+
+/** Default shift hours for efficiency calc */
+export const SHIFT_HOURS_DEFAULT = 12
 
 /** assumed: weft low-stock alert threshold = 50 kg (configurable) */
 export const WEFT_LOW_STOCK_KG = 50

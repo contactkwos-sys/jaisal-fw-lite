@@ -2,13 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ShareActions } from '../components/ShareActions'
 import { SubTabs } from '../components/SubTabs'
 import { useAuth } from '../lib/auth'
-import type { Challan, Gatepass, JobCard } from '../lib/database.types'
+import { nextGatePassNumber } from '../lib/checking'
+import type { Challan, CheckingEntry, Gatepass, JobCard } from '../lib/database.types'
 import { applyOrQueue, nextDocNo, todayISO } from '../lib/mutate'
 import { markProgramDispatched } from '../lib/programs'
-import { printSummary, rowsToHtml, shareWhatsApp } from '../lib/share'
+import { printSummary, rowsToHtml, shareWhatsApp, shareWhatsAppBusiness } from '../lib/share'
 import { supabase } from '../lib/supabase'
 
-type Sub = 'folding' | 'challan' | 'gatepass'
+type Sub = 'folding' | 'challan' | 'from-check' | 'gatepass'
 type Props = { initialSub?: Sub; filter?: string }
 
 export function DispatchScreen({ initialSub = 'folding' }: Props) {
@@ -46,6 +47,15 @@ export function DispatchScreen({ initialSub = 'folding' }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const drawing = useRef(false)
 
+  const [readyChecks, setReadyChecks] = useState<CheckingEntry[]>([])
+  const [checkId, setCheckId] = useState('')
+  const [checkTempo, setCheckTempo] = useState('')
+  const [lastFromCheck, setLastFromCheck] = useState<{
+    challan: Challan
+    gpNumber: string
+    tempo: string
+  } | null>(null)
+
   const total = useMemo(() => {
     const m = Number(meter) || 0
     const r = Number(rate) || 0
@@ -54,7 +64,7 @@ export function DispatchScreen({ initialSub = 'folding' }: Props) {
   }, [meter, rate, gstPct])
 
   const loadChallans = useCallback(async () => {
-    const [{ data: ch }, { data: gp }, { data: jobs }] = await Promise.all([
+    const [{ data: ch }, { data: gp }, { data: jobs }, { data: checks }] = await Promise.all([
       supabase.from('challans').select('*').order('created_at', { ascending: false }).limit(50),
       supabase
         .from('gatepass')
@@ -67,10 +77,17 @@ export function DispatchScreen({ initialSub = 'folding' }: Props) {
         .select('*')
         .order('created_at', { ascending: false })
         .limit(50),
+      supabase
+        .from('checking_entries')
+        .select('*')
+        .eq('status', 'ready_for_dispatch')
+        .order('created_at', { ascending: false })
+        .limit(40),
     ])
     setChallans((ch as Challan[]) ?? [])
     setPendingGp((gp as Gatepass[]) ?? [])
     setJobCards((jobs as JobCard[]) ?? [])
+    setReadyChecks((checks as CheckingEntry[]) ?? [])
     setChallanNo(nextDocNo('CH-', (ch ?? []).map((c) => c.challan_no)))
     setGpNo(nextDocNo('DG-', (gp ?? []).map((g) => g.gatepass_no ?? '')))
     if (!challanId && ch?.[0]) setChallanId(ch[0].id)
@@ -178,6 +195,74 @@ export function DispatchScreen({ initialSub = 'folding' }: Props) {
     }
   }
 
+  async function generateFromChecking(e: React.FormEvent) {
+    e.preventDefault()
+    if (!profile || !checkId) return
+    const check = readyChecks.find((c) => c.id === checkId)
+    if (!check) return
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    setLastFromCheck(null)
+    try {
+      const job = jobCards.find((j) => j.id === check.job_card_id)
+      const nextNo = nextDocNo(
+        'CH-',
+        challans.map((c) => c.challan_no),
+      )
+      const payload = {
+        challan_no: nextNo,
+        party: (check.party_name || party || 'Party').trim(),
+        meter: Number(check.ok_meters) || Number(check.total_meters) || 0,
+        rolls: 0,
+        rate: Number(rate) || 0,
+        gst_pct: Number(gstPct) || 5,
+        program_id: job?.program_id || null,
+        job_card_id: check.job_card_id,
+      }
+      const { data: ch, error: cErr } = await supabase
+        .from('challans')
+        .insert(payload)
+        .select('*')
+        .single()
+      if (cErr) throw cErr
+      const challan = ch as Challan
+
+      const gp_number = await nextGatePassNumber('GP-D')
+      const { error: gErr } = await supabase.from('gate_pass').insert({
+        ref_type: 'dispatch',
+        ref_id: challan.id,
+        gp_number,
+        tempo_number: checkTempo.trim() || null,
+      })
+      if (gErr) throw gErr
+
+      const { error: uErr } = await supabase
+        .from('checking_entries')
+        .update({ status: 'dispatched', challan_id: challan.id })
+        .eq('id', check.id)
+      if (uErr) throw uErr
+
+      if (job?.program_id) {
+        await markProgramDispatched(job.program_id, Number(challan.meter) || 0)
+      }
+
+      setLastFromCheck({ challan, gpNumber: gp_number, tempo: checkTempo.trim() })
+      setMessage(`Challan ${challan.challan_no} + Gate Pass ${gp_number} generated`)
+      setCheckId('')
+      setCheckTempo('')
+      await loadChallans()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Generate failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function accountantShareText(ch: Challan, gpNumber?: string, tempoNo?: string) {
+    return `Challan for Accountant\n${ch.challan_no}\nParty: ${ch.party}\nMeters: ${ch.meter}\nTotal: ₹${Number(ch.total || 0).toFixed(2)}${gpNumber ? `\nGate Pass: ${gpNumber}` : ''}${tempoNo ? `\nTempo: ${tempoNo}` : ''}`
+  }
+
   function billHtml(includeChallanNo: boolean) {
     return rowsToHtml([
       ...(includeChallanNo ? ([['Challan No', challanNo]] as Array<[string, string]>) : []),
@@ -259,6 +344,7 @@ export function DispatchScreen({ initialSub = 'folding' }: Props) {
           options={[
             { id: 'folding', label: 'Folding' },
             { id: 'challan', label: 'Challan' },
+            { id: 'from-check', label: `From Checking (${readyChecks.length})` },
             { id: 'gatepass', label: 'Gatepass' },
           ]}
         />
@@ -368,6 +454,103 @@ export function DispatchScreen({ initialSub = 'folding' }: Props) {
             ))}
           </div>
         </form>
+      ) : null}
+
+      {sub === 'from-check' ? (
+        <div className="form-stack">
+          <p className="text-muted">
+            Checking entries with status Ready for Dispatch → Challan + Gate Pass (tempo)
+          </p>
+          <form className="form-stack" onSubmit={(e) => void generateFromChecking(e)}>
+            <label className="field">
+              <span>Ready checking entry</span>
+              <select
+                value={checkId}
+                onChange={(e) => {
+                  setCheckId(e.target.value)
+                  const c = readyChecks.find((x) => x.id === e.target.value)
+                  if (c) {
+                    setParty(c.party_name || '')
+                    setMeter(String(c.ok_meters || c.total_meters || 0))
+                  }
+                }}
+                required
+              >
+                <option value="">Select lot / job</option>
+                {readyChecks.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    Lot {c.lot_number} · {c.party_name || '—'} · {c.dno || '—'} · OK {c.ok_meters}m
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>Party (auto)</span>
+              <input value={party} onChange={(e) => setParty(e.target.value)} required />
+            </label>
+            <label className="field">
+              <span>Meters (auto from OK)</span>
+              <input className="num" type="number" step="0.01" value={meter} onChange={(e) => setMeter(e.target.value)} />
+            </label>
+            <label className="field">
+              <span>Rate</span>
+              <input className="num" type="number" step="0.01" value={rate} onChange={(e) => setRate(e.target.value)} />
+            </label>
+            <label className="field">
+              <span>Tempo number</span>
+              <input value={checkTempo} onChange={(e) => setCheckTempo(e.target.value)} placeholder="Vehicle / tempo no." />
+            </label>
+            <button type="submit" className="primary-save" disabled={busy || !checkId}>
+              {busy ? 'Generating…' : 'Generate Challan + Gate Pass'}
+            </button>
+          </form>
+
+          {lastFromCheck ? (
+            <section className="dash-panel surface">
+              <h3>
+                {lastFromCheck.challan.challan_no} · GP {lastFromCheck.gpNumber}
+              </h3>
+              <p className="text-muted">
+                {lastFromCheck.challan.party} · {lastFromCheck.challan.meter}m
+                {lastFromCheck.tempo ? ` · Tempo ${lastFromCheck.tempo}` : ''}
+              </p>
+              <ShareActions
+                onWhatsApp={() =>
+                  shareWhatsApp(
+                    accountantShareText(
+                      lastFromCheck.challan,
+                      lastFromCheck.gpNumber,
+                      lastFromCheck.tempo,
+                    ),
+                  )
+                }
+                onWhatsAppBusiness={() =>
+                  shareWhatsAppBusiness(
+                    accountantShareText(
+                      lastFromCheck.challan,
+                      lastFromCheck.gpNumber,
+                      lastFromCheck.tempo,
+                    ),
+                  )
+                }
+                onPrint={() =>
+                  printSummary(
+                    `Challan ${lastFromCheck.challan.challan_no}`,
+                    rowsToHtml([
+                      ['Challan', lastFromCheck.challan.challan_no],
+                      ['Party', lastFromCheck.challan.party],
+                      ['Meters', lastFromCheck.challan.meter],
+                      ['Gate Pass', lastFromCheck.gpNumber],
+                      ['Tempo', lastFromCheck.tempo],
+                    ]),
+                  )
+                }
+              />
+            </section>
+          ) : null}
+
+          {!readyChecks.length ? <p className="text-muted">No checking entries ready for dispatch</p> : null}
+        </div>
       ) : null}
 
       {sub === 'gatepass' ? (
