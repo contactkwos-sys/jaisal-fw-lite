@@ -50,11 +50,18 @@ type MutateArgs = {
   requestedBy: string
   newData?: Record<string, unknown> | null
   apply: () => Promise<void>
+  /** When true, only CEO may apply immediately; everyone else is queued. */
+  requireCeoApproval?: boolean
 }
 
-/** Within 7 days (or CEO): apply now. Older: queue pending_approvals. */
+/**
+ * CEO (or within 7 days): apply now.
+ * Older records, or modules with requireCeoApproval: queue pending_approvals.
+ */
 export async function applyEditDeleteOrQueue(args: MutateArgs): Promise<'applied' | 'queued'> {
-  if (args.isCeo || isWithinEditWindow(args.createdAt)) {
+  const canApplyNow =
+    args.isCeo || (!args.requireCeoApproval && isWithinEditWindow(args.createdAt))
+  if (canApplyNow) {
     await args.apply()
     return 'applied'
   }
@@ -86,14 +93,57 @@ export async function resolvePendingApproval(
 ): Promise<void> {
   if (status === 'approved' && item.record_id) {
     if (item.action === 'delete') {
+      if (item.table_name === 'cashbook_entries') {
+        // Stamp CEO approval then delete (matches original cash-book RLS intent)
+        const { error: stampErr } = await supabase
+          .from(item.table_name)
+          .update({
+            edit_approved_by: resolvedBy,
+            edit_approved_at: new Date().toISOString(),
+          })
+          .eq('id', item.record_id)
+        if (stampErr) throw stampErr
+      }
       const { error } = await supabase.from(item.table_name).delete().eq('id', item.record_id)
       if (error) throw error
     } else if (item.action === 'edit' && item.new_data) {
+      const raw = { ...item.new_data }
+      const lineItems = Array.isArray(raw._items) ? raw._items : null
+      delete raw._items
+
+      const updatePayload =
+        item.table_name === 'cashbook_entries'
+          ? {
+              ...raw,
+              edit_approved_by: resolvedBy,
+              edit_approved_at: new Date().toISOString(),
+            }
+          : raw
+
       const { error } = await supabase
         .from(item.table_name)
-        .update(item.new_data)
+        .update(updatePayload)
         .eq('id', item.record_id)
       if (error) throw error
+
+      if (item.table_name === 'cashbook_entries' && lineItems) {
+        const { error: delErr } = await supabase
+          .from('cashbook_entry_items')
+          .delete()
+          .eq('entry_id', item.record_id)
+        if (delErr) throw delErr
+        const rows = (lineItems as Array<{ item_name?: unknown; amount?: unknown }>)
+          .map((i) => ({
+            entry_id: item.record_id as string,
+            item_name: String(i.item_name ?? '').trim(),
+            amount: Number(i.amount),
+          }))
+          .filter((i) => i.item_name && Number.isFinite(i.amount) && i.amount > 0)
+        if (rows.length) {
+          const { error: insErr } = await supabase.from('cashbook_entry_items').insert(rows)
+          if (insErr) throw insErr
+        }
+      }
     }
   }
 

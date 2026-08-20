@@ -42,7 +42,9 @@ export function ApprovalsWidget() {
   return (
     <section className="dash-panel">
       <h2 className="section-title">Approvals</h2>
-      <p className="text-muted2">Edit/delete requests for records older than 7 days</p>
+      <p className="text-muted2">
+        Edit/delete requests (Cash Book always; other modules when older than 7 days)
+      </p>
       {error ? <p className="form-error">{error}</p> : null}
       {message ? <p className="form-ok">{message}</p> : null}
       <div className="list">
