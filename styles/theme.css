@@ -1,6 +1,6 @@
 /**
  * JAISAL FW — premium textile mill design tokens
- * Light industrial SaaS: teal primary, mint selected, amber accent
+ * Light industrial SaaS: blue primary, pale selected, amber accent
  */
 :root {
   /* Surfaces */
@@ -9,19 +9,19 @@
   --surface2: #eef1f3;
   --line: #dde3e6;
 
-  /* Brand — deep industrial teal (primary) */
-  --teal: #0d6b6e;
-  --teal-deep: #0a5558;
-  --teal-soft: #e4f3f3;
-  --mint: #3fa88a;
-  --mint-soft: #e6f6f0;
+  /* Brand — industrial blue (primary) */
+  --teal: #1d5fa8;
+  --teal-deep: #164a85;
+  --teal-soft: #e8f0fb;
+  --mint: #1d5fa8;
+  --mint-soft: #e8f0fb;
 
   /* Accents */
   --amber: #c49a3c;
   --amber-soft: #f7f0de;
   --purple-soft: #efeaf8;
   --orange-soft: #f8eee6;
-  --blue-soft: #e8f0f8;
+  --blue-soft: #e8f0fb;
 
   /* Legacy aliases (existing screens use these names) */
   --warp: var(--teal);
@@ -29,7 +29,8 @@
   --weft: var(--amber);
   --weft-soft: var(--amber-soft);
   --greige: #6e7874;
-  --sage: var(--mint);
+  /* Status/success green — keep independent of brand primary */
+  --sage: #3fa88a;
 
   /* Text */
   --text: #1a2332;
