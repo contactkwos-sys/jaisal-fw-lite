@@ -41,6 +41,7 @@ import { MaintenanceMaterialScreen } from './screens/MaintenanceMaterialScreen'
 import { LoanTrackerScreen } from './screens/LoanTrackerScreen'
 import { GebReadingScreen } from './screens/GebReadingScreen'
 import { OrdersPendingScreen } from './screens/OrdersPendingScreen'
+import { HrPayrollScreen } from './screens/HrPayrollScreen'
 
 function AuthenticatedApp() {
   const { session, loading, isCeo, isManager, roleName } = useAuth()
@@ -130,6 +131,12 @@ function AuthenticatedApp() {
         <PlaceholderScreen title={titleFor('placeholder', undefined, undefined, filter)} />
       ) : null}
       {tab === 'attendance' ? <AttendanceScreen /> : null}
+      {tab === 'hr-payroll' ? (
+        <HrPayrollScreen
+          initialSub={sub || 'dashboard'}
+          onNavigate={go}
+        />
+      ) : null}
       {tab === 'stock' ? (
         <StockScreen
           initialTab={(sub as 'beam' | 'weft') || 'beam'}
@@ -207,6 +214,7 @@ function AuthenticatedApp() {
               'security',
               'settings',
               'cash-book',
+              'hr-payroll',
             ].includes(filter)
               ? filter
               : ''

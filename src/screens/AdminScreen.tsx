@@ -715,6 +715,10 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
 
       {sub === 'payroll' ? (
         <div className="form-stack">
+          <p className="text-muted">
+            Payroll processing has moved to <strong>HR & Payroll</strong>. This page keeps role-day rates for costing
+            compatibility.
+          </p>
           <h2 className="section-title">Rates per role / day</h2>
           {roles.map((role) => (
             <div key={role.id} className="card-row surface row-top">

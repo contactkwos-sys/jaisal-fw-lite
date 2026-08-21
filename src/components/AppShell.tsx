@@ -80,6 +80,14 @@ const ICONS: Record<string, ReactNode> = {
       />
     </svg>
   ),
+  'hr-payroll': (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="nav-ico">
+      <path
+        fill="currentColor"
+        d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm0 2c-3.33 0-10 1.67-10 5v1h20v-1c0-3.33-6.67-5-10-5zm8-9h-2v2h-2v2h2v2h2v-2h2V7h-2z"
+      />
+    </svg>
+  ),
   masters: (
     <svg viewBox="0 0 24 24" aria-hidden="true" className="nav-ico">
       <path
