@@ -9,11 +9,40 @@ export type ModulePermission = {
 
 const STORAGE_KEY = 'jaisal_fw_role_permissions_v1'
 
+const CEO_MODULES: MainModuleId[] = [
+  'dashboard',
+  'production',
+  'inventory',
+  'cash-book',
+  'orders',
+  'reports',
+  'maintenance',
+  'masters',
+  'security',
+  'settings',
+]
+
+const MANAGER_MODULES: MainModuleId[] = [
+  'production',
+  'inventory',
+  'cash-book',
+  'orders',
+  'reports',
+  'maintenance',
+  'masters',
+  'security',
+  'settings',
+]
+
 /** Default module access by role name (case-insensitive match / includes). */
 const ROLE_DEFAULTS: Record<string, MainModuleId[]> = {
-  ceo: ['dashboard', 'production', 'inventory', 'cash-book', 'orders', 'reports', 'maintenance', 'masters', 'security', 'settings'],
+  ceo: CEO_MODULES,
+  // Managing Director / MD — same floor access as CEO (Orders + Design Broadcast included)
+  md: CEO_MODULES,
+  'managing director': CEO_MODULES,
+  owner: CEO_MODULES,
   // Manager: all modules EXCEPT CEO Dashboard
-  manager: ['production', 'inventory', 'cash-book', 'orders', 'reports', 'maintenance', 'masters', 'security', 'settings'],
+  manager: MANAGER_MODULES,
   'machine supervisor': ['production', 'inventory', 'maintenance', 'reports'],
   salesman: ['orders', 'masters', 'reports', 'cash-book'],
   'checker & dispatch': ['production', 'inventory', 'security'],
@@ -48,11 +77,31 @@ function normalizeRole(name: string): string {
 
 function matchDefaultModules(roleName: string): MainModuleId[] {
   const n = normalizeRole(roleName)
+  if (!n) return ['production']
   if (ROLE_DEFAULTS[n]) return ROLE_DEFAULTS[n]
+  // Fuzzy match only for longer names — short tokens like "md" must not match
+  // inside "admin" via String.includes (that hid Orders / Design Broadcast).
   for (const [key, mods] of Object.entries(ROLE_DEFAULTS)) {
+    if (n.length < 4 || key.length < 4) continue
     if (n.includes(key) || key.includes(n)) return mods
   }
   return ['production']
+}
+
+/** Prefer DB role name, then auth metadata, then display name — never blank. */
+export function resolveAccessRoleName(input: {
+  roleName?: string | null
+  metaRoleName?: string | null
+  fullName?: string | null
+  fallback?: string
+}): string {
+  const fromRole = (input.roleName || '').trim()
+  if (fromRole) return fromRole
+  const fromMeta = (input.metaRoleName || '').trim()
+  if (fromMeta) return fromMeta
+  const fromName = (input.fullName || '').trim()
+  if (fromName) return fromName
+  return input.fallback || 'User'
 }
 
 function readOverrides(): Record<string, ModulePermission[]> {
@@ -103,7 +152,7 @@ export function getPermissionsForRole(roleName: string): ModulePermission[] {
 
 export function canAccessModule(roleName: string, moduleId: MainModuleId): boolean {
   const n = normalizeRole(roleName)
-  if (n === 'ceo') return true
+  if (n === 'ceo' || n === 'md' || n === 'managing director' || n === 'owner') return true
   // Hard rule: Manager never gets CEO Dashboard
   if (n === 'manager' && moduleId === 'dashboard') return false
   return getPermissionsForRole(roleName).some((p) => p.moduleId === moduleId)
@@ -111,7 +160,7 @@ export function canAccessModule(roleName: string, moduleId: MainModuleId): boole
 
 export function canAccessSub(roleName: string, moduleId: MainModuleId, subId: string): boolean {
   const n = normalizeRole(roleName)
-  if (n === 'ceo') return true
+  if (n === 'ceo' || n === 'md' || n === 'managing director' || n === 'owner') return true
   if (n === 'manager' && moduleId === 'dashboard') return false
   const perm = getPermissionsForRole(roleName).find((p) => p.moduleId === moduleId)
   if (!perm) return false
@@ -121,7 +170,7 @@ export function canAccessSub(roleName: string, moduleId: MainModuleId, subId: st
 
 export function allowedModules(roleName: string): MainModuleId[] {
   const n = normalizeRole(roleName)
-  if (n === 'ceo') {
+  if (n === 'ceo' || n === 'md' || n === 'managing director' || n === 'owner') {
     return MAIN_MODULES.map((m) => m.id)
   }
   return getPermissionsForRole(roleName)

@@ -107,13 +107,13 @@ const ICONS: Record<string, ReactNode> = {
 }
 
 export function AppShell({ active, sub, filter, activeModule, onNavigate, children }: Props) {
-  const { logout, profile, isCeo } = useAuth()
+  const { logout, profile, isCeo, roleName: authRoleName } = useAuth()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [expanded, setExpanded] = useState<MainModuleId | null>(activeModule)
   const brandId = useId()
   const today = todayISO()
   const pageTitle = titleFor(active, sub, activeModule, filter)
-  const roleName = profile?.roles?.role_name || profile?.full_name || (isCeo ? 'CEO' : 'User')
+  const roleName = authRoleName || (isCeo ? 'CEO' : 'User')
   const userName = profile?.full_name || roleName
 
   const modules = MAIN_MODULES.filter((m) => canAccessModule(roleName, m.id))

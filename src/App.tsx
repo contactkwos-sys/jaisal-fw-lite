@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AppShell } from './components/AppShell'
 import { ModuleHub } from './components/ModuleHub'
 import { PlaceholderScreen } from './components/PlaceholderScreen'
@@ -42,25 +42,33 @@ import { GebReadingScreen } from './screens/GebReadingScreen'
 import { OrdersPendingScreen } from './screens/OrdersPendingScreen'
 
 function AuthenticatedApp() {
-  const { session, loading, isCeo, isManager, profile } = useAuth()
+  const { session, loading, isCeo, isManager, roleName } = useAuth()
   const [tab, setTab] = useState<AppScreen>('home')
   const [sub, setSub] = useState<string | undefined>()
   const [filter, setFilter] = useState<string | undefined>()
   const [activeModule, setActiveModule] = useState<MainModuleId>('dashboard')
+  /** Prevent auth/profile refreshes from kicking the user off Design Broadcast etc. */
+  const landedUserIdRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (!session) return
-    const roleName = profile?.roles?.role_name || profile?.full_name || (isCeo ? 'CEO' : 'User')
-    const landing = firstAllowedLanding(roleName)
+    if (!session?.user?.id) {
+      landedUserIdRef.current = null
+      return
+    }
+    if (loading) return
+    // Land once per login — TOKEN_REFRESHED / profile re-fetch must not reset the screen
+    if (landedUserIdRef.current === session.user.id) return
+    landedUserIdRef.current = session.user.id
+    const landing = firstAllowedLanding(roleName || (isCeo ? 'CEO' : 'User'))
     setTab(landing.screen)
     setSub(landing.sub)
     setFilter(landing.module === landing.sub ? landing.module : undefined)
     setActiveModule(landing.module)
-  }, [session, isCeo, profile?.id, profile?.roles?.role_name, profile?.full_name])
+  }, [session, loading, roleName, isCeo])
 
   // Hard-block Manager from CEO Dashboard route
   useEffect(() => {
-    if (!session || !isManager) return
+    if (!session || !isManager || isCeo) return
     if (tab === 'home' || activeModule === 'dashboard') {
       const landing = firstAllowedLanding('Manager')
       setTab(landing.screen)
@@ -68,7 +76,7 @@ function AuthenticatedApp() {
       setFilter(landing.module === landing.sub ? landing.module : undefined)
       setActiveModule(landing.module)
     }
-  }, [session, isManager, tab, activeModule])
+  }, [session, isManager, isCeo, tab, activeModule])
 
   if (loading) {
     return (
