@@ -99,7 +99,12 @@ function AuthenticatedApp() {
     }
     const nextScreen = t.screen
     const nextSub = t.hub || t.sub
-    const nextFilter = t.filter ?? (t.hub ? t.hub : undefined)
+    // Prefer explicit filter (including undefined) when provided so hub opens clear a prior DIN
+    const nextFilter = Object.prototype.hasOwnProperty.call(t, 'filter')
+      ? t.filter
+      : t.hub
+        ? t.hub
+        : undefined
     setTab(nextScreen)
     setSub(nextSub)
     setFilter(nextFilter)
@@ -131,7 +136,7 @@ function AuthenticatedApp() {
         />
       ) : null}
       {tab === 'design' ? (
-        <DesignScreen onOpenDesignCosting={(dno) => go({ screen: 'design-wise-costing', filter: dno, module: 'reports' })} />
+        <DesignScreen onOpenDesignCosting={(dno) => go({ screen: 'design-wise-costing', filter: dno, module: 'orders' })} />
       ) : null}
       {tab === 'broadcast' ? <DesignBroadcastScreen initialDesignId={filter} /> : null}
       {tab === 'design-catalog' ? <DesignCatalogScreen /> : null}

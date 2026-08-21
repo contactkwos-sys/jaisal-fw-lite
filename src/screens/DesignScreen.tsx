@@ -13,6 +13,16 @@ type DesignRow = {
   cost_per_meter?: number | null
 }
 
+type RecentCosting = {
+  id: string
+  din_number: string
+  quality_name: string | null
+  costing_date: string
+  final_cost_per_mtr: number | null
+  status: string | null
+  updated_at: string | null
+}
+
 type Props = {
   onOpenDesignCosting?: (dno?: string) => void
 }
@@ -28,9 +38,51 @@ export function DesignScreen({ onOpenDesignCosting }: Props) {
   const [pendingRawFile, setPendingRawFile] = useState<File | null>(null)
   const [designs, setDesigns] = useState<DesignRow[]>([])
   const [costByDin, setCostByDin] = useState<Record<string, number>>({})
+  const [recentCostings, setRecentCostings] = useState<RecentCosting[]>([])
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+
+  const loadCostMaps = useCallback(async (dinList: string[]) => {
+    const map: Record<string, number> = {}
+    if (dinList.length) {
+      const { data: costs, error: cErr } = await supabase
+        .from('design_costing')
+        .select('din_number, final_cost_per_mtr, updated_at, created_at')
+        .in('din_number', dinList)
+        .order('updated_at', { ascending: false })
+        .order('created_at', { ascending: false })
+      if (!cErr) {
+        for (const c of costs ?? []) {
+          if (map[c.din_number] == null && c.final_cost_per_mtr != null) {
+            map[c.din_number] = Number(c.final_cost_per_mtr)
+          }
+        }
+      }
+    }
+
+    // Always load recent costings so Order-module entries stay visible even
+    // when the DIN is not yet in the designs register.
+    const { data: recent, error: rErr } = await supabase
+      .from('design_costing')
+      .select(
+        'id, din_number, quality_name, costing_date, final_cost_per_mtr, status, updated_at, created_at',
+      )
+      .order('updated_at', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(40)
+    if (!rErr) {
+      setRecentCostings((recent as RecentCosting[]) ?? [])
+      for (const c of recent ?? []) {
+        if (map[c.din_number] == null && c.final_cost_per_mtr != null) {
+          map[c.din_number] = Number(c.final_cost_per_mtr)
+        }
+      }
+    } else {
+      setRecentCostings([])
+    }
+    return map
+  }, [])
 
   const loadDesigns = useCallback(async () => {
     const { data, error: err } = await supabase
@@ -43,28 +95,14 @@ export function DesignScreen({ onOpenDesignCosting }: Props) {
     setDesigns(rows)
 
     const dinList = [...new Set(rows.map((r) => r.dno).filter(Boolean))]
-    if (!dinList.length) {
-      setCostByDin({})
-      return
-    }
-    const { data: costs } = await supabase
-      .from('design_costing')
-      .select('din_number, final_cost_per_mtr, created_at')
-      .in('din_number', dinList)
-      .order('created_at', { ascending: false })
-    const map: Record<string, number> = {}
-    for (const c of costs ?? []) {
-      if (map[c.din_number] == null && c.final_cost_per_mtr != null) {
-        map[c.din_number] = Number(c.final_cost_per_mtr)
-      }
-    }
+    const map = await loadCostMaps(dinList)
     for (const r of rows) {
       if (map[r.dno] == null && r.cost_per_meter != null) {
         map[r.dno] = Number(r.cost_per_meter)
       }
     }
     setCostByDin(map)
-  }, [])
+  }, [loadCostMaps])
 
   useEffect(() => {
     void (async () => {
@@ -84,23 +122,7 @@ export function DesignScreen({ onOpenDesignCosting }: Props) {
         setDno(String(nums.length ? Math.max(...nums) + 1 : 1))
 
         const dinList = [...new Set(rows.map((r) => r.dno).filter(Boolean))]
-        if (!dinList.length) {
-          setCostByDin({})
-          return
-        }
-        const { data: costs, error: cErr } = await supabase
-          .from('design_costing')
-          .select('din_number, final_cost_per_mtr, created_at')
-          .in('din_number', dinList)
-          .order('created_at', { ascending: false })
-        const map: Record<string, number> = {}
-        if (!cErr) {
-          for (const c of costs ?? []) {
-            if (map[c.din_number] == null && c.final_cost_per_mtr != null) {
-              map[c.din_number] = Number(c.final_cost_per_mtr)
-            }
-          }
-        }
+        const map = await loadCostMaps(dinList)
         for (const r of rows) {
           if (map[r.dno] == null && r.cost_per_meter != null) {
             map[r.dno] = Number(r.cost_per_meter)
@@ -111,7 +133,7 @@ export function DesignScreen({ onOpenDesignCosting }: Props) {
         setError(e instanceof Error ? e.message : 'Load failed')
       }
     })()
-  }, [])
+  }, [loadCostMaps])
 
   useEffect(() => {
     if (!imageFile) {
@@ -199,8 +221,15 @@ export function DesignScreen({ onOpenDesignCosting }: Props) {
   return (
     <div className="screen design-register-screen">
       <header className="screen-header">
-        <h1>Design Master</h1>
-        <p className="text-muted">Design master entry — naya design register / upload</p>
+        <div>
+          <h1>Design Master</h1>
+          <p className="text-muted">Design master entry — naya design register / upload</p>
+        </div>
+        {onOpenDesignCosting ? (
+          <button type="button" className="btn-warp" onClick={() => onOpenDesignCosting()}>
+            Design Wise Costing
+          </button>
+        ) : null}
       </header>
 
       <form className="form-stack design-register-form surface" onSubmit={(e) => void handleSave(e)}>
@@ -245,6 +274,46 @@ export function DesignScreen({ onOpenDesignCosting }: Props) {
 
       {error ? <p className="form-error text-danger">{error}</p> : null}
       {message ? <p className="form-ok text-sage">{message}</p> : null}
+
+      <section className="design-register-list">
+        <h2 className="section-title text-warp">Saved Design Costings</h2>
+        <p className="text-muted2">Latest warp/weft costings — open any DIN to edit</p>
+        <div className="list">
+          {recentCostings.map((row) => (
+            <article key={row.id} className="card-row surface design-register-card">
+              <div className="design-register-card-main">
+                <div>
+                  <strong>{row.din_number}</strong>
+                  <div className="text-muted">
+                    {row.costing_date}
+                    {row.quality_name ? ` · ${row.quality_name}` : ''}
+                  </div>
+                  {row.final_cost_per_mtr != null ? (
+                    <span className="dwc-cost-badge">
+                      {row.status === 'final' ? 'Final' : 'Draft'} ₹
+                      {Number(row.final_cost_per_mtr).toFixed(2)}/mtr
+                    </span>
+                  ) : (
+                    <span className="text-muted">{row.status === 'final' ? 'Final' : 'Draft'}</span>
+                  )}
+                </div>
+              </div>
+              {onOpenDesignCosting ? (
+                <button
+                  type="button"
+                  className="btn-warp"
+                  onClick={() => onOpenDesignCosting(row.din_number)}
+                >
+                  Open Costing
+                </button>
+              ) : null}
+            </article>
+          ))}
+          {!recentCostings.length ? (
+            <p className="text-muted">No design costings saved yet — use Design Wise Costing</p>
+          ) : null}
+        </div>
+      </section>
 
       <section className="design-register-list">
         <h2 className="section-title text-warp">Registered designs</h2>
