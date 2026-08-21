@@ -1,0 +1,322 @@
+/* Warp Yarn Management — JAISAL FW light blue professional */
+
+.wym-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  min-height: 0;
+  flex: 1;
+}
+
+.wym-header h1 {
+  margin: 0.15rem 0 0.2rem;
+  color: var(--teal-deep);
+}
+
+.wym-sub {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.wym-quick {
+  padding: 0.75rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.wym-quick-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.wym-quick-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.wym-legacy-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.wym-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+@media (min-width: 720px) {
+  .wym-kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1100px) {
+  .wym-kpi-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.wym-kpi {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 0.85rem 0.95rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-height: 4.5rem;
+}
+
+.wym-kpi-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.wym-kpi-value {
+  font-size: 1.35rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.wym-kpi.tone-info {
+  border-left: 3px solid var(--info);
+  background: linear-gradient(180deg, var(--info-soft), var(--surface));
+}
+.wym-kpi.tone-ok {
+  border-left: 3px solid var(--success);
+  background: linear-gradient(180deg, var(--success-soft), var(--surface));
+}
+.wym-kpi.tone-warn {
+  border-left: 3px solid var(--warning);
+  background: linear-gradient(180deg, var(--warning-soft), var(--surface));
+}
+.wym-kpi.tone-slate {
+  border-left: 3px solid var(--hub-slate);
+  background: linear-gradient(180deg, var(--hub-slate-soft), var(--surface));
+}
+.wym-kpi.tone-warper {
+  border-left: 3px solid #7c3aed;
+  background: linear-gradient(180deg, #f5f3ff, var(--surface));
+}
+
+.wym-overview-grid {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+@media (min-width: 960px) {
+  .wym-overview-grid {
+    grid-template-columns: 1.2fr 1fr;
+  }
+}
+
+.wym-panel {
+  padding: 0.85rem;
+}
+
+.wym-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.wym-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: 0.5rem;
+  padding: 0.75rem;
+  align-items: end;
+}
+
+.wym-filters .wym-clear {
+  align-self: end;
+  height: 2.4rem;
+}
+
+.wym-table-wrap {
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: var(--radius);
+}
+
+.wym-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.86rem;
+  min-width: 640px;
+}
+
+.wym-table th,
+.wym-table td {
+  padding: 0.55rem 0.65rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.wym-table th {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  background: var(--surface2);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.wym-table td.num,
+.wym-table th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.wym-row-active {
+  background: var(--info-soft);
+}
+
+.wym-row-diff {
+  background: var(--danger-soft);
+}
+
+.wym-pipe-link {
+  background: none;
+  border: none;
+  color: var(--teal-deep);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.wym-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.45rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: var(--surface2);
+  color: var(--muted);
+}
+
+.wym-badge-ok {
+  background: var(--success-soft);
+  color: var(--success);
+}
+.wym-badge-pending {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+.wym-badge-danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.wym-badge-info {
+  background: var(--info-soft);
+  color: var(--info);
+}
+
+.wym-report-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.wym-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.35);
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.wym-modal {
+  width: min(40rem, 100%);
+  max-height: min(92vh, 54rem);
+  overflow: auto;
+  padding: 1rem;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+}
+
+.wym-modal.wide {
+  width: min(64rem, 100%);
+}
+
+.wym-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.wym-modal-head h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: var(--teal-deep);
+}
+
+.wym-form-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.55rem;
+}
+
+@media (min-width: 640px) {
+  .wym-form-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .wym-form-grid .wym-span-2 {
+    grid-column: span 2;
+  }
+}
+
+.wym-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
+.wym-history-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.wym-monthly {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+@media (max-width: 640px) {
+  .wym-quick-row .btn-warp,
+  .wym-quick-row .btn-ghost {
+    flex: 1 1 calc(50% - 0.45rem);
+    font-size: 0.8rem;
+    padding: 0.45rem 0.55rem;
+  }
+}

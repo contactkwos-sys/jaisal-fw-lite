@@ -417,7 +417,7 @@ export function DashboardScreen({ onNavigate }: Props) {
         {(
           [
             ['Attendance Today', kpis.attendanceToday, 'att', { screen: 'attendance' as AppScreen, module: 'reports' as const }],
-            ['Warp Beam Stock', `${kpis.warpBeamStock} Beams`, 'beam', { screen: 'stock' as AppScreen, sub: 'beam', module: 'inventory' as const }],
+            ['Warp Yarn Mgmt', `${kpis.warpBeamStock} Beams`, 'beam', { screen: 'warp-yarn' as AppScreen, sub: 'overview', module: 'inventory' as const }],
             ['Weft Yarn Stock', `${kpis.weftYarnStock.toFixed(0)} kg`, 'yarn', { screen: 'stock' as AppScreen, sub: 'weft', module: 'inventory' as const }],
             ['Greige Production', `${kpis.greigeToday.toFixed(0)} m`, 'greige', { screen: 'production' as AppScreen, sub: 'report', module: 'production' as const }],
             ['Dispatch Today', `${kpis.dispatchToday.toFixed(0)} m`, 'dispatch', { screen: 'dispatch' as AppScreen, sub: 'challan', module: 'production' as const }],

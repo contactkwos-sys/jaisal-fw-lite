@@ -35,6 +35,7 @@ import { DesignCatalogScreen } from './screens/DesignCatalogScreen'
 import { CrmCustomersScreen } from './screens/CrmCustomersScreen'
 import { CashBookScreen } from './screens/CashBookScreen'
 import { WarpBeamPipeScreen } from './screens/WarpBeamPipeScreen'
+import { WarpYarnManagementScreen } from './screens/WarpYarnManagementScreen'
 import { YarnInwardScreen } from './screens/YarnInwardScreen'
 import { MaintenanceMaterialScreen } from './screens/MaintenanceMaterialScreen'
 import { LoanTrackerScreen } from './screens/LoanTrackerScreen'
@@ -143,6 +144,17 @@ function AuthenticatedApp() {
       {tab === 'crm' ? <CrmCustomersScreen /> : null}
       {tab === 'cash-book' ? <CashBookScreen /> : null}
       {tab === 'warp-beam-pipe' ? <WarpBeamPipeScreen /> : null}
+      {tab === 'warp-yarn' ? (
+        <WarpYarnManagementScreen
+          initialTab={
+            (['overview', 'machines', 'godown', 'empty', 'warper', 'reports'].includes(sub || '')
+              ? sub
+              : 'overview') as 'overview' | 'machines' | 'godown' | 'empty' | 'warper' | 'reports'
+          }
+          onNavigate={go}
+          onTabChange={(t) => setSub(t)}
+        />
+      ) : null}
       {tab === 'yarn-inward' ? <YarnInwardScreen /> : null}
       {tab === 'maint-material' ? <MaintenanceMaterialScreen /> : null}
       {tab === 'loan-tracker' ? <LoanTrackerScreen /> : null}

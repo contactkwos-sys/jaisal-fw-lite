@@ -25,6 +25,7 @@ export type AppScreen =
   | 'crm'
   | 'cash-book'
   | 'warp-beam-pipe'
+  | 'warp-yarn'
   | 'yarn-inward'
   | 'maint-material'
   | 'loan-tracker'
@@ -95,7 +96,7 @@ export const MAIN_MODULES: MainModule[] = [
     hasHub: true,
     mobileNav: true,
     items: [
-      { id: 'warp-issue', label: 'Warp Issue', screen: 'stock', sub: 'beam', hint: 'Warp beam stock & issue' },
+      { id: 'warp-issue', label: 'Warp Issue', screen: 'warp-yarn', sub: 'machines', hint: 'Issue / return warp pipes on machines' },
       { id: 'weft-issue', label: 'Weft Issue', screen: 'purchase', sub: 'weft', hint: 'Weft yarn issue' },
       { id: 'prod-entry', label: 'Production Entry', screen: 'production', sub: 'entry', hint: 'Machine production meters' },
       { id: 'folding', label: 'Folding', screen: 'dispatch', sub: 'folding', hint: 'Folding entry' },
@@ -113,8 +114,13 @@ export const MAIN_MODULES: MainModule[] = [
     mobileNav: true,
     items: [
       { id: 'yarn-stock', label: 'Yarn Stock', screen: 'stock', sub: 'weft', hint: 'Opening stock & yarn item master' },
-      { id: 'beam-stock', label: 'Warp Beam Stock', screen: 'stock', sub: 'beam', hint: 'Beam pipe stock' },
-      { id: 'warp-beam-pipe', label: 'Warp Beam Pipe', screen: 'warp-beam-pipe', hint: 'Pipe out / in tracking' },
+      {
+        id: 'warp-yarn',
+        label: 'Warp Yarn Management',
+        screen: 'warp-yarn',
+        sub: 'overview',
+        hint: 'Overview · Machines · Godown · Empty · Warper · Reports',
+      },
       { id: 'yarn-inward', label: 'Yarn Inward OCR', screen: 'yarn-inward', hint: 'Warp/Weft invoice OCR' },
       { id: 'greige-stock', label: 'Greige Stock', screen: 'production', sub: 'report', hint: 'Greige / production stock' },
       { id: 'consumables', label: 'Consumables', screen: 'purchase', sub: 'maint_in', hint: 'Maintenance inward' },
@@ -262,6 +268,7 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   crm: 'CRM',
   'cash-book': 'Cash Book',
   'warp-beam-pipe': 'Warp Beam Pipe',
+  'warp-yarn': 'Warp Yarn Management',
   'yarn-inward': 'Yarn Inward OCR',
   'maint-material': 'Maintenance Material',
   'loan-tracker': 'Loan Tracker',
@@ -297,7 +304,13 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
   }
 
   if (screen === 'production' || screen === 'dispatch') return 'production'
-  if (screen === 'stock' || screen === 'purchase' || screen === 'warp-beam-pipe' || screen === 'yarn-inward') {
+  if (
+    screen === 'stock' ||
+    screen === 'purchase' ||
+    screen === 'warp-beam-pipe' ||
+    screen === 'warp-yarn' ||
+    screen === 'yarn-inward'
+  ) {
     return 'inventory'
   }
   if (screen === 'cash-book') return 'cash-book'
@@ -338,8 +351,19 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
 
 export function titleFor(screen: AppScreen, sub?: string, moduleId?: MainModuleId, filter?: string): string {
   if (screen === 'module-hub' && moduleId) return moduleById(moduleId).label
+  if (screen === 'warp-yarn') {
+    const labels: Record<string, string> = {
+      overview: 'Warp Yarn Management',
+      machines: 'Warp Yarn · On Machines',
+      godown: 'Warp Yarn · Godown – Filled',
+      empty: 'Warp Yarn · Empty Pipes',
+      warper: 'Warp Yarn · At Warper',
+      reports: 'Warp Yarn · Transactions & Reports',
+    }
+    return labels[sub || 'overview'] || 'Warp Yarn Management'
+  }
   if (screen === 'stock' && sub === 'weft') return 'Yarn Stock'
-  if (screen === 'stock') return 'Warp Beam Stock'
+  if (screen === 'stock') return 'Warp Beam Stock (Legacy)'
   if (screen === 'purchase' && sub === 'weft') return 'Weft Issue'
   if (screen === 'purchase' && sub === 'report') return 'Stock Reports'
   if (screen === 'purchase' && sub === 'maint_in') return 'Consumables / Inward'
