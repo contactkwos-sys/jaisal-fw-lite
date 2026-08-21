@@ -1102,6 +1102,15 @@ export function YarnStockPanel() {
                           >
                             Edit
                           </button>
+                          <button
+                            type="button"
+                            className="btn-ghost text-danger"
+                            aria-label="Delete"
+                            disabled={busy}
+                            onClick={(e) => void deleteYarn(row, e)}
+                          >
+                            Delete
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -1175,6 +1184,14 @@ export function YarnStockPanel() {
                       onClick={(e) => openEdit(row, e)}
                     >
                       Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-ghost text-danger"
+                      disabled={busy}
+                      onClick={(e) => void deleteYarn(row, e)}
+                    >
+                      Delete
                     </button>
                   </div>
                 </button>
