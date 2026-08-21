@@ -229,6 +229,8 @@ Customer Order → Program to Production → Job Card → Production Tracking �
 
 **Note:** Production Entry is **not** kept as a second PD page — redirect to MWP Production Entry (or embed same component).
 
+**Daily Costing link (D-25):** Dispatch rate and sales value for **Dispatch-wise P&L** must flow automatically from approved Customer Order → program → challan/invoice. Do not create a separate rate-entry path inside Daily Costing.
+
 ## 4.4 Machine-wise Production
 Must contain (A–J):
 
