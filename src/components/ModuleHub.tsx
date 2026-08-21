@@ -86,6 +86,8 @@ const ICON_PATHS: Record<string, string> = {
     'M4 4h7v7H4V4zm9 0h7v4h-7V4zM4 13h7v7H4v-7zm9 3h3v-3h2v3h3v2h-3v3h-2v-3h-3v-2z',
   'stock-reports':
     'M5 3h14a1 1 0 0 1 1 1v16l-8-3-8 3V4a1 1 0 0 1 1-1zm3 4v2h8V7H8zm0 4v2h5v-2H8z',
+  'design-costing':
+    'M4 4h16v2H4V4zm0 4h10v2H4V8zm0 4h16v2H4v-2zm0 4h10v2H4v-2z',
 }
 
 function Chevron() {

@@ -144,7 +144,6 @@ export const MAIN_MODULES: MainModule[] = [
       { id: 'job-card', label: 'Job Card Issue', screen: 'production', sub: 'job', hint: 'Issue job cards' },
       { id: 'design-job', label: 'Design & Job Card', screen: 'design', hint: 'Design register' },
       { id: 'sample-job', label: 'Sample Job Card', screen: 'sample-job-card', hint: 'Sample cards' },
-      { id: 'design-costing', label: 'Design Wise Costing', screen: 'design-wise-costing', hint: 'Cost per design' },
       { id: 'design-catalog', label: 'Design Catalog', screen: 'design-catalog', hint: 'Design DNA catalog' },
       { id: 'broadcast', label: 'Design Broadcast', screen: 'broadcast', hint: 'Share designs' },
       { id: 'program-pending', label: 'Program Pending', screen: 'programs', sub: 'pending', hint: 'Pending tracker' },
@@ -157,6 +156,7 @@ export const MAIN_MODULES: MainModule[] = [
     screen: 'module-hub',
     hasHub: true,
     items: [
+      { id: 'design-costing', label: 'Design Wise Costing', screen: 'design-wise-costing', hint: 'Cost per design' },
       { id: 'prod-report', label: 'Production Report', screen: 'production', sub: 'report', hint: 'Daily production' },
       { id: 'stock-report', label: 'Stock Report', screen: 'purchase', sub: 'report', hint: 'Stock & purchase' },
       { id: 'party-delivery', label: 'Party Delivery Report', screen: 'orders', sub: 'report', hint: 'Delivery by party' },
@@ -306,13 +306,13 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
     screen === 'programs' ||
     screen === 'design' ||
     screen === 'sample-job-card' ||
-    screen === 'design-wise-costing' ||
     screen === 'design-catalog' ||
     screen === 'broadcast'
   ) {
     return 'orders'
   }
   if (
+    screen === 'design-wise-costing' ||
     screen === 'costing' ||
     screen === 'beam-remaining' ||
     screen === 'sample-register' ||
