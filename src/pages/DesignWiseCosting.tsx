@@ -126,8 +126,16 @@ function isDinFilter(value: string | undefined): value is string {
 }
 
 export function DesignWiseCosting({ initialDin = '' }: Props) {
-  const { session, profile, isCeo, isManager } = useAuth()
+  const { session, profile, isCeo, isManager, roleName } = useAuth()
   const canDeleteFinal = isCeo || isManager
+  const role = (roleName || '').trim().toLowerCase()
+  const canViewCosting =
+    isCeo ||
+    isManager ||
+    role === 'md' ||
+    role === 'managing director' ||
+    role === 'owner' ||
+    role.includes('ceo')
 
   const [dinNumber, setDinNumber] = useState(initialDin)
   const [costingDate, setCostingDate] = useState(todayISO())
@@ -686,6 +694,18 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
     setDinNumber(value)
     const match = designOpts.find((d) => d.dno === value)
     if (match?.colour && !qualityName) setQualityName(match.colour)
+  }
+
+  if (!canViewCosting) {
+    return (
+      <div className="screen">
+        <header className="screen-header">
+          <h1>DIN Costing</h1>
+          <p className="text-muted">Restricted to CEO / authorized roles.</p>
+        </header>
+        <p className="form-error text-danger">You do not have permission to view DIN Costing rates.</p>
+      </div>
+    )
   }
 
   return (

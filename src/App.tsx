@@ -52,6 +52,8 @@ import { DtoSamplePromotionScreen } from './screens/DtoSamplePromotionScreen'
 import { DtoFollowupScreen } from './screens/DtoFollowupScreen'
 import { DtoReportsScreen } from './screens/DtoReportsScreen'
 import { HrPayrollScreen } from './screens/HrPayrollScreen'
+import { ProgramDispatchScreen } from './screens/ProgramDispatchScreen'
+import { SecurityInventoryScreen, type SiSub } from './screens/SecurityInventoryScreen'
 
 function AuthenticatedApp() {
   const { session, loading, isCeo, isManager, roleName } = useAuth()
@@ -177,6 +179,31 @@ function AuthenticatedApp() {
       {tab === 'loan-tracker' ? <LoanTrackerScreen /> : null}
       {tab === 'geb-readings' ? <GebReadingScreen /> : null}
       {tab === 'orders-pending' ? <OrdersPendingScreen /> : null}
+      {tab === 'program-dispatch' ? (
+        <ProgramDispatchScreen initialSub={sub || 'pto'} onNavigate={go} />
+      ) : null}
+      {tab === 'security-inventory' ? (
+        <SecurityInventoryScreen
+          initialSub={
+            ([
+              'dashboard',
+              'warp',
+              'weft',
+              'maint-in',
+              'maint-out',
+              'general',
+              'others',
+              'pending',
+              'documents',
+              'reports',
+            ].includes(sub || '')
+              ? sub
+              : 'dashboard') as SiSub
+          }
+          onSubChange={(s) => setSub(s)}
+          onNavigate={go}
+        />
+      ) : null}
       {tab === 'parties' ? <PartyMasterScreen /> : null}
       {tab === 'purchase' ? <PurchaseScreen initialSub={sub || 'general'} /> : null}
       {tab === 'orders' ? <OrderBookScreen initialSub={sub || 'entry'} /> : null}
@@ -231,6 +258,8 @@ function AuthenticatedApp() {
               'cash-book',
               'design-to-order',
               'hr-payroll',
+              'program-dispatch',
+              'warp-yarn',
             ].includes(filter)
               ? filter
               : ''
