@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../lib/auth'
 import { todayISO } from '../lib/mutate'
 import { supabase } from '../lib/supabase'
@@ -153,6 +153,8 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
   const [dragOver, setDragOver] = useState(false)
   const [lengthError, setLengthError] = useState<string | null>(null)
   const [historyError, setHistoryError] = useState<string | null>(null)
+  /** After "Save As New", skip one DIN blur auto-load so the form is not overwritten. */
+  const skipDinAutoloadRef = useRef(false)
 
   useEffect(() => {
     void (async () => {
@@ -347,11 +349,12 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
     [loadById],
   )
 
-  /** Open DIN from Reports / Design register navigation */
+  /** Open DIN from Orders / Reports / Design register navigation */
   useEffect(() => {
     if (!isDinFilter(initialDin)) return
     const din = initialDin.trim()
     setDinNumber(din)
+    setHistoryFilters((f) => ({ ...f, din }))
     void loadExisting(din).catch((e: Error) => setError(e.message))
   }, [initialDin, loadExisting])
 
@@ -528,6 +531,9 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
       }
 
       let costingId = savedId
+      let previousWarpIds: string[] = []
+      let previousWeftIds: string[] = []
+
       if (costingId) {
         const { created_by: _omit, ...updatePayload } = header
         void _omit
@@ -536,8 +542,15 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
           .update(updatePayload)
           .eq('id', costingId)
         if (uErr) throw uErr
-        await supabase.from('design_costing_warp').delete().eq('costing_id', costingId)
-        await supabase.from('design_costing_weft').delete().eq('costing_id', costingId)
+
+        // Capture existing child rows so we can delete them AFTER a successful insert.
+        // Deleting first caused "saved then empty" when re-insert failed (schema / RLS).
+        const [{ data: oldWarps }, { data: oldWefts }] = await Promise.all([
+          supabase.from('design_costing_warp').select('id').eq('costing_id', costingId),
+          supabase.from('design_costing_weft').select('id').eq('costing_id', costingId),
+        ])
+        previousWarpIds = (oldWarps ?? []).map((r) => r.id as string)
+        previousWeftIds = (oldWefts ?? []).map((r) => r.id as string)
       } else {
         const { data, error: iErr } = await supabase
           .from('design_costing')
@@ -587,14 +600,38 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
         if (fErr) throw fErr
       }
 
+      // Only remove previous lines after new lines are stored
+      if (previousWarpIds.length) {
+        const { error: dwErr } = await supabase
+          .from('design_costing_warp')
+          .delete()
+          .in('id', previousWarpIds)
+        if (dwErr) throw dwErr
+      }
+      if (previousWeftIds.length) {
+        const { error: dfErr } = await supabase
+          .from('design_costing_weft')
+          .delete()
+          .in('id', previousWeftIds)
+        if (dfErr) throw dfErr
+      }
+
       if (!asDraft) {
-        await supabase
+        const { error: designErr } = await supabase
           .from('designs')
           .update({
             cost_per_meter: totals.finalCostPerMtr,
             total_cost: totals.finalCostPerMtr,
           })
           .eq('dno', dinNumber.trim())
+        if (designErr) {
+          // Costing itself is saved — surface design-register sync as a soft warning
+          setMessage(
+            `Costing saved to DIN ${dinNumber.trim()} · Final ${fmtInr(totals.finalCostPerMtr)}/mtr (design register sync: ${designErr.message})`,
+          )
+          await refreshHistory()
+          return
+        }
       }
 
       await refreshHistory()
@@ -663,7 +700,20 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
               list="dwc-design-list"
               value={dinNumber}
               onChange={(e) => onDinSelect(e.target.value)}
-              onBlur={() => void loadExisting(dinNumber).catch((e: Error) => setError(e.message))}
+              onBlur={() => {
+                if (skipDinAutoloadRef.current) {
+                  skipDinAutoloadRef.current = false
+                  return
+                }
+                // Do not overwrite an in-progress new costing with a prior row for the same DIN
+                if (!savedId) {
+                  const hasDraftLines =
+                    warps.some((r) => r.yarn_name.trim() || n(r.denier) || n(r.tar_ends) || n(r.rate_per_kg)) ||
+                    wefts.some((r) => r.weft_name.trim() || n(r.denier) || n(r.pic) || n(r.rate_per_kg))
+                  if (hasDraftLines) return
+                }
+                void loadExisting(dinNumber).catch((e: Error) => setError(e.message))
+              }}
               placeholder="e.g. JFG1591"
               required
             />
@@ -1156,6 +1206,7 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
           className="dwc-secondary-btn"
           disabled={busy}
           onClick={() => {
+            skipDinAutoloadRef.current = true
             setSavedId(null)
             setStatus('draft')
             setMessage('Editing as new costing — save to create a separate record')
@@ -1190,7 +1241,7 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
           </button>
         </div>
         <p className="text-muted2 dwc-history-lead">
-          Reports → Design Wise Costing · latest first · click DIN to open full costing
+          Orders / Reports → Design Wise Costing · latest first · click DIN to open · Clear Filters if list looks empty
         </p>
         <div className="dwc-filters">
           <label className="field">

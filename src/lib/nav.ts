@@ -143,6 +143,7 @@ export const MAIN_MODULES: MainModule[] = [
       { id: 'program-card', label: 'Program Card', screen: 'programs', sub: 'create', hint: 'Program + petty meters' },
       { id: 'job-card', label: 'Job Card Issue', screen: 'production', sub: 'job', hint: 'Issue job cards' },
       { id: 'design-job', label: 'Design & Job Card', screen: 'design', hint: 'Design register' },
+      { id: 'design-costing', label: 'Design Wise Costing', screen: 'design-wise-costing', hint: 'Warp / weft cost per DIN' },
       { id: 'sample-job', label: 'Sample Job Card', screen: 'sample-job-card', hint: 'Sample cards' },
       { id: 'design-catalog', label: 'Design Catalog', screen: 'design-catalog', hint: 'Design DNA catalog' },
       { id: 'broadcast', label: 'Design Broadcast', screen: 'broadcast', hint: 'Post & share designs' },
@@ -305,6 +306,7 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
     screen === 'orders-pending' ||
     screen === 'programs' ||
     screen === 'design' ||
+    screen === 'design-wise-costing' ||
     screen === 'sample-job-card' ||
     screen === 'design-catalog' ||
     screen === 'broadcast'
@@ -312,7 +314,6 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
     return 'orders'
   }
   if (
-    screen === 'design-wise-costing' ||
     screen === 'costing' ||
     screen === 'beam-remaining' ||
     screen === 'sample-register' ||
