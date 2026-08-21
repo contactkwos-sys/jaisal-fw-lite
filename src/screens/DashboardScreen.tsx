@@ -10,6 +10,7 @@ import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import { ApprovalsWidget } from '../components/ApprovalsWidget'
 import { PendingOrdersWidget } from './OrdersPendingScreen'
+import { inr, loadDashboardPnLCards } from '../lib/dailyCosting'
 
 type Props = {
   onNavigate: (t: NavTarget) => void
@@ -90,6 +91,22 @@ export function DashboardScreen({ onNavigate }: Props) {
   const [yarns, setYarns] = useState<WeftYarnStock[]>([])
   const [recentInward, setRecentInward] = useState<InwardRow[]>([])
   const [topMachines, setTopMachines] = useState<MachineRow[]>([])
+  const [pnlToday, setPnlToday] = useState({
+    productionMeters: 0,
+    productionValue: 0,
+    dispatchMeters: 0,
+    dispatchValue: 0,
+    totalCost: 0,
+    grossProfit: 0,
+    netProfit: 0,
+  })
+  const [pnlMtd, setPnlMtd] = useState({
+    productionMeters: 0,
+    dispatchMeters: 0,
+    revenue: 0,
+    totalCost: 0,
+    netProfit: 0,
+  })
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -283,6 +300,28 @@ export function DashboardScreen({ onNavigate }: Props) {
     setTopMachines(
       [...machineMap.values()].sort((a, b) => b.meters - a.meters).slice(0, 6),
     )
+
+    try {
+      const pnl = await loadDashboardPnLCards(today)
+      setPnlToday({
+        productionMeters: pnl.today.productionMeters,
+        productionValue: pnl.today.productionValue,
+        dispatchMeters: pnl.today.dispatchMeters,
+        dispatchValue: pnl.today.dispatchValue,
+        totalCost: pnl.today.totalCost,
+        grossProfit: pnl.today.grossProfit,
+        netProfit: pnl.today.netProfit,
+      })
+      setPnlMtd({
+        productionMeters: pnl.mtd.productionMeters,
+        dispatchMeters: pnl.mtd.dispatchMeters,
+        revenue: pnl.mtd.revenue,
+        totalCost: pnl.mtd.totalCost,
+        netProfit: pnl.mtd.netProfit,
+      })
+    } catch {
+      // P&L cards are additive — do not fail the whole dashboard
+    }
   }, [today])
 
   useEffect(() => {
@@ -405,13 +444,13 @@ export function DashboardScreen({ onNavigate }: Props) {
 
   const quick: Array<{ label: string; screen: AppScreen; sub?: string; module?: import('../lib/nav').MainModuleId }> = [
     { label: 'Design to Order', screen: 'dto-hub', module: 'design-to-order' },
-    { label: 'DIN Costing', screen: 'design-wise-costing', module: 'design-to-order' },
+    { label: 'Design-wise Costing', screen: 'design-wise-costing', module: 'design-to-order' },
+    { label: 'Daily Costing & P&L', screen: 'costing', sub: 'factory', module: 'reports' },
     { label: 'Program & Dispatch', screen: 'program-dispatch', sub: 'pto', module: 'program-dispatch' },
     { label: 'Warp Yarn Management', screen: 'warp-yarn', sub: 'overview', module: 'warp-yarn' },
     { label: 'Attendance & Payroll', screen: 'hr-payroll', sub: 'dashboard', module: 'hr-payroll' },
     { label: 'Machine-wise Maintenance', screen: 'maintenance', sub: 'overview', module: 'maintenance' },
     { label: 'Security / Inward', screen: 'security-inventory', sub: 'dashboard', module: 'security' },
-    { label: 'Orders & Pending', screen: 'orders-pending', module: 'orders' },
   ]
 
   const alertRows = (
@@ -469,6 +508,57 @@ export function DashboardScreen({ onNavigate }: Props) {
             <strong className="num">{value}</strong>
           </button>
         ))}
+      </section>
+
+      <section className="dash-panel" style={{ marginTop: 12 }}>
+        <h2 className="section-title">Today&apos;s Profit &amp; Loss</h2>
+        <div className="kpi-grid kpi-grid-6">
+          {(
+            [
+              ['Today Production', `${pnlToday.productionMeters.toFixed(0)} m`, { screen: 'costing' as AppScreen, sub: 'production', module: 'reports' as const }],
+              ['Today Production Value', inr(pnlToday.productionValue), { screen: 'costing' as AppScreen, sub: 'production', module: 'reports' as const }],
+              ['Today Dispatch', `${pnlToday.dispatchMeters.toFixed(0)} m`, { screen: 'costing' as AppScreen, sub: 'dispatch', module: 'reports' as const }],
+              ['Today Dispatch Value', inr(pnlToday.dispatchValue), { screen: 'costing' as AppScreen, sub: 'dispatch', module: 'reports' as const }],
+              ['Today Total Cost', inr(pnlToday.totalCost), { screen: 'costing' as AppScreen, sub: 'sources', module: 'reports' as const }],
+              ['Today Gross Profit', inr(pnlToday.grossProfit), { screen: 'costing' as AppScreen, sub: 'factory', module: 'reports' as const }],
+              ['Today Net P&L', inr(pnlToday.netProfit), { screen: 'costing' as AppScreen, sub: 'factory', module: 'reports' as const }],
+            ] as const
+          ).map(([label, value, nav]) => (
+            <button
+              key={label}
+              type="button"
+              className="kpi-card surface kpi-tone-dispatch"
+              onClick={() => onNavigate(nav)}
+            >
+              <span className="text-muted">{label}</span>
+              <strong className="num">{value}</strong>
+            </button>
+          ))}
+        </div>
+        <h2 className="section-title" style={{ marginTop: 16 }}>
+          MTD Profit &amp; Loss
+        </h2>
+        <div className="kpi-grid kpi-grid-6">
+          {(
+            [
+              ['MTD Production', `${pnlMtd.productionMeters.toFixed(0)} m`, { screen: 'costing' as AppScreen, sub: 'mtd', module: 'reports' as const }],
+              ['MTD Dispatch', `${pnlMtd.dispatchMeters.toFixed(0)} m`, { screen: 'costing' as AppScreen, sub: 'mtd', module: 'reports' as const }],
+              ['MTD Revenue', inr(pnlMtd.revenue), { screen: 'costing' as AppScreen, sub: 'mtd', module: 'reports' as const }],
+              ['MTD Cost', inr(pnlMtd.totalCost), { screen: 'costing' as AppScreen, sub: 'mtd', module: 'reports' as const }],
+              ['MTD Profit/Loss', inr(pnlMtd.netProfit), { screen: 'costing' as AppScreen, sub: 'mtd', module: 'reports' as const }],
+            ] as const
+          ).map(([label, value, nav]) => (
+            <button
+              key={label}
+              type="button"
+              className="kpi-card surface kpi-tone-beam"
+              onClick={() => onNavigate(nav)}
+            >
+              <span className="text-muted">{label}</span>
+              <strong className="num">{value}</strong>
+            </button>
+          ))}
+        </div>
       </section>
 
       <section className="kpi-grid kpi-grid-6" style={{ marginTop: 12 }}>

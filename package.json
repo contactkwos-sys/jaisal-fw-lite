@@ -15,6 +15,7 @@
     "smoke:mwm": "node scripts/machine-maintenance-smoke.mjs",
     "smoke:mwm-ui": "node scripts/mwm-ui-smoke.mjs",
     "smoke:mwp": "node scripts/machine-wise-production-smoke.mjs",
+    "smoke:daily-costing": "node scripts/daily-costing-smoke.mjs",
     "test:design-wise-costing": "node scripts/test-design-wise-costing.mjs",
     "start": "node scripts/serve-app.mjs",
     "functions:local": "node scripts/local-functions-server.mjs"

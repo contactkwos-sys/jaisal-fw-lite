@@ -486,8 +486,8 @@ export const MAIN_MODULES: MainModule[] = [
       { id: 'stock-report', label: 'Stock Report', screen: 'purchase', sub: 'report', hint: 'Stock & purchase' },
       { id: 'party-delivery', label: 'Party Delivery Report', screen: 'orders', sub: 'report', hint: 'Delivery by party' },
       { id: 'beam-remaining', label: 'Beam Remaining', screen: 'beam-remaining', hint: 'Beam meters left' },
-      { id: 'costing-report', label: 'Costing Report', screen: 'costing', sub: 'summary', hint: 'Daily costing' },
-      { id: 'geb-readings', label: 'GEB Electricity', screen: 'geb-readings', hint: 'Daily meter units & cost' },
+      { id: 'costing-report', label: 'Daily Costing & P&L', screen: 'costing', sub: 'factory', hint: 'Daily factory / production / dispatch P&L' },
+      { id: 'geb-readings', label: 'GEB Electricity', screen: 'geb-readings', hint: 'Daily meter units & cost (sole electricity entry)' },
       { id: 'loan-tracker', label: 'Loan Tracker', screen: 'loan-tracker', hint: 'Party-wise loan ledger' },
       {
         id: 'attendance-report',
@@ -532,7 +532,7 @@ export const MAIN_MODULES: MainModule[] = [
       { id: 'shift-settings', label: 'Shift Settings', screen: 'placeholder', filter: 'shift-settings', hint: 'Day / night shifts' },
       { id: 'notifications', label: 'Notification Settings', screen: 'placeholder', filter: 'notifications', hint: 'Alerts preferences' },
       { id: 'backup', label: 'Backup', screen: 'placeholder', filter: 'backup', hint: 'Data backup notes' },
-      { id: 'preferences', label: 'System Preferences', screen: 'costing', sub: 'electricity', hint: 'Electricity & system' },
+      { id: 'preferences', label: 'System Preferences', screen: 'placeholder', filter: 'preferences', hint: 'System preferences' },
     ],
   },
 ]
@@ -547,7 +547,7 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   maintenance: 'Machine-wise Maintenance',
   dispatch: 'Dispatch',
   admin: 'Security / Admin',
-  costing: 'Costing',
+  costing: 'Daily Costing & P&L',
   orders: 'Order Book',
   programs: 'Program Card',
   security: 'Security Gate',
@@ -556,7 +556,7 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   'sample-job-card': 'Sample Job Card',
   'sample-register': 'Sample Register',
   'beam-remaining': 'Beam Remaining',
-  'design-wise-costing': 'DIN Costing',
+  'design-wise-costing': 'Design-wise Costing',
   'design-catalog': 'Design Catalog',
   crm: 'CRM',
   'cash-book': 'Cash Book',
@@ -757,7 +757,12 @@ export function titleFor(screen: AppScreen, sub?: string, moduleId?: MainModuleI
   if (screen === 'admin' && sub === 'permissions') return 'Permission Management'
   if (screen === 'admin' && sub === 'approvals') return 'Approvals'
   if (screen === 'admin') return 'PIN Management'
-  if (screen === 'costing' && sub === 'electricity') return 'System Preferences'
+  if (screen === 'costing' && sub === 'production') return 'Production-wise P&L'
+  if (screen === 'costing' && sub === 'dispatch') return 'Dispatch-wise P&L'
+  if (screen === 'costing' && sub === 'mtd') return 'MTD P&L'
+  if (screen === 'costing' && sub === 'monthly') return 'Monthly P&L'
+  if (screen === 'costing' && sub === 'sources') return 'Cost Breakdown'
+  if (screen === 'costing') return 'Daily Costing & P&L'
   if (screen === 'placeholder') {
     const labels: Record<string, string> = {
       'machine-master': 'Machine Master',
@@ -768,6 +773,7 @@ export function titleFor(screen: AppScreen, sub?: string, moduleId?: MainModuleI
       'shift-settings': 'Shift Settings',
       notifications: 'Notification Settings',
       backup: 'Backup',
+      preferences: 'System Preferences',
     }
     return labels[filter || ''] || 'Coming Soon'
   }
