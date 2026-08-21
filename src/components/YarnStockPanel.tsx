@@ -423,7 +423,7 @@ export function YarnStockPanel() {
             <h2 className="yarn-detail-title">{isNew ? 'Add Yarn' : 'Edit Yarn'}</h2>
             <p className="yarn-detail-sub">
               {isNew
-                ? 'Complete yarn entry on one page. Opening stock seeds the ledger.'
+                ? 'Enter Opening Stock Quantity in KG (or selected unit). This becomes the starting balance.'
                 : 'Update master information. Current stock is driven by transactions.'}
             </p>
           </div>
@@ -507,24 +507,39 @@ export function YarnStockPanel() {
               {isNew ? (
                 <label className="field">
                   <span>
-                    Opening Stock <em className="req">*</em>
+                    Opening Stock Quantity <em className="req">*</em>
                   </span>
-                  <input
-                    className="num"
-                    inputMode="decimal"
-                    value={form.opening_stock}
-                    onChange={(e) => setField('opening_stock', e.target.value)}
-                    placeholder="1000"
-                  />
+                  <div className="yarn-qty-input">
+                    <input
+                      className="num"
+                      inputMode="decimal"
+                      required
+                      value={form.opening_stock}
+                      onChange={(e) => setField('opening_stock', e.target.value)}
+                      placeholder="Enter quantity"
+                      aria-label="Opening Stock Quantity"
+                    />
+                    <span className="yarn-qty-unit" aria-hidden="true">
+                      {form.unit || 'KG'}
+                    </span>
+                  </div>
+                  <small className="yarn-field-hint">
+                    How many {form.unit || 'KG'} are in opening stock right now
+                  </small>
                 </label>
               ) : (
                 <label className="field">
                   <span>Current Stock (read-only)</span>
-                  <input
-                    className="num"
-                    readOnly
-                    value={formatKg(Number(activeYarn?.stock_kg || 0))}
-                  />
+                  <div className="yarn-qty-input">
+                    <input
+                      className="num"
+                      readOnly
+                      value={formatKg(Number(activeYarn?.stock_kg || 0))}
+                    />
+                    <span className="yarn-qty-unit" aria-hidden="true">
+                      {activeYarn?.unit || form.unit || 'KG'}
+                    </span>
+                  </div>
                 </label>
               )}
               <label className="field">
@@ -1207,8 +1222,8 @@ export function YarnStockPanel() {
                 <th>Supplier</th>
                 <th>Quality</th>
                 <th>Yarn Specification</th>
-                <th>Opening Stock</th>
-                <th>Current Stock</th>
+                <th>Opening Stock (KG)</th>
+                <th>Current Stock (KG)</th>
                 <th>Unit</th>
                 <th>Rate / KG</th>
                 <th>Stock Value</th>
@@ -1314,6 +1329,12 @@ export function YarnStockPanel() {
                     <div>
                       Specification
                       <strong>{row.yarn_specification || '—'}</strong>
+                    </div>
+                    <div>
+                      Opening Stock
+                      <strong>
+                        {formatKg(Number(row.opening_stock ?? 0))} {row.unit || 'KG'}
+                      </strong>
                     </div>
                     <div>
                       Current Stock
