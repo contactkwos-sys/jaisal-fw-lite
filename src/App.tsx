@@ -20,6 +20,7 @@ import { DesignScreen } from './screens/DesignScreen'
 import { DispatchScreen } from './screens/DispatchScreen'
 import { LoginScreen } from './screens/LoginScreen'
 import { MaintenanceScreen } from './screens/MaintenanceScreen'
+import { MachineWiseMaintenanceScreen } from './screens/MachineWiseMaintenanceScreen'
 import { OrderBookScreen } from './screens/OrderBookScreen'
 import { PartyMasterScreen } from './screens/PartyMasterScreen'
 import { ProductionScreen } from './screens/ProductionScreen'
@@ -188,10 +189,15 @@ function AuthenticatedApp() {
         />
       ) : null}
       {tab === 'maintenance' ? (
-        <MaintenanceScreen
-          initialSub={(sub as 'request' | 'repair') || 'request'}
-          filter={filter}
-        />
+        sub === 'repair' ? (
+          <MaintenanceScreen initialSub="repair" filter={filter} />
+        ) : (
+          <MachineWiseMaintenanceScreen
+            initialSub={sub || 'overview'}
+            filter={filter}
+            onNavigate={go}
+          />
+        )
       ) : null}
       {tab === 'dispatch' ? (
         <DispatchScreen

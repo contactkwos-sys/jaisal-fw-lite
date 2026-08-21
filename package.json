@@ -11,6 +11,8 @@
     "smoke:prod": "node scripts/prod-nav-smoke.mjs",
     "smoke:ui": "node scripts/ui-nav-smoke.mjs",
     "smoke:hr-payroll": "node scripts/hr-payroll-helpers-smoke.mjs",
+    "smoke:mwm": "node scripts/machine-maintenance-smoke.mjs",
+    "smoke:mwm-ui": "node scripts/mwm-ui-smoke.mjs",
     "test:design-wise-costing": "node scripts/test-design-wise-costing.mjs",
     "start": "node scripts/serve-app.mjs",
     "functions:local": "node scripts/local-functions-server.mjs"

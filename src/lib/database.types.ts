@@ -523,6 +523,13 @@ export type MaintenanceRequest = {
   status: string
   cost: number
   created_at: string
+  entry_date?: string | null
+  maintenance_type?: string | null
+  work_details?: string | null
+  parts_used?: string | null
+  next_maintenance_date?: string | null
+  remarks?: string | null
+  technician?: string | null
 }
 
 export type RepairingTracker = {
