@@ -314,13 +314,17 @@ export const MAIN_MODULES: MainModule[] = [
     screen: 'module-hub',
     hasHub: true,
     items: [
-      { id: 'maint-overview', label: 'Machine Overview', screen: 'maintenance', sub: 'overview', hint: 'M1–M6 status board' },
-      { id: 'maint-request', label: 'Breakdown / Complaint', screen: 'maintenance', sub: 'request', hint: 'Open breakdown tickets' },
-      { id: 'breakdown', label: 'Repair / Resolution', screen: 'maintenance', sub: 'repair', hint: 'Call → arrive → resolve' },
-      { id: 'maint-material', label: 'Parts / Material Out-In', screen: 'maint-material', hint: 'Material + auto gate pass' },
-      { id: 'service-history', label: 'Service History', screen: 'maintenance', sub: 'history', hint: 'Machine history log' },
-      { id: 'spare-parts', label: 'Spare Parts Inward', screen: 'purchase', sub: 'maint_in', hint: 'Parts inward' },
-      { id: 'maint-reports', label: 'Maintenance Reports', screen: 'purchase', sub: 'repair_inv', hint: 'Repair invoices' },
+      { id: 'overview', label: 'Machine Overview', screen: 'maintenance', sub: 'overview', hint: 'M1–M6 status board' },
+      { id: 'breakdown', label: 'Breakdown Entry', screen: 'maintenance', sub: 'breakdown', hint: 'OPEN → CALL → ARRIVED → RESOLVED' },
+      { id: 'complaints', label: 'Complaint Register', screen: 'maintenance', sub: 'complaints', hint: 'Machine complaints' },
+      { id: 'maint-entry', label: 'Maintenance Entry', screen: 'maintenance', sub: 'entry', hint: 'Planned / general maintenance' },
+      { id: 'maint-schedule', label: 'Maintenance Schedule', screen: 'maintenance', sub: 'schedule', hint: 'Calendar & due dates' },
+      { id: 'service-history', label: 'Service History', screen: 'maintenance', sub: 'history', hint: 'Auto history from entries' },
+      { id: 'spare-parts', label: 'Spare Parts', screen: 'maintenance', sub: 'spares', hint: 'Stock & low-stock alerts' },
+      { id: 'contacts', label: 'Contacts Directory', screen: 'maintenance', sub: 'contacts', hint: 'Technicians & contractors' },
+      { id: 'maint-reports', label: 'Maintenance Reports', screen: 'maintenance', sub: 'reports', hint: 'A4 print & CSV reports' },
+      { id: 'maint-material', label: 'Material Out / In', screen: 'maint-material', hint: 'Material + auto gate pass' },
+      { id: 'repair-out', label: 'Repair Out / In', screen: 'maintenance', sub: 'repair', hint: 'Legacy repair tracker / gatepass' },
     ],
   },
   {
@@ -467,7 +471,7 @@ export const MAIN_MODULES: MainModule[] = [
     items: [
       { id: 'party-master', label: 'Party Master', screen: 'parties', hint: 'Customers / parties + Marka' },
       { id: 'item-master', label: 'Item Master', screen: 'design-catalog', hint: 'Design / item catalog' },
-      { id: 'machine-master', label: 'Machine Master', screen: 'placeholder', filter: 'machine-master', hint: 'Machine list (M1–M6)' },
+      { id: 'machine-master', label: 'Machine Master', screen: 'maintenance', sub: 'overview', hint: 'Machine 1–6 overview (M1–M6)' },
       {
         id: 'employee-master',
         label: 'Employee Master',
@@ -678,9 +682,16 @@ export function titleFor(screen: AppScreen, sub?: string, moduleId?: MainModuleI
   if (screen === 'maintenance') {
     const labels: Record<string, string> = {
       overview: 'Machine Overview',
-      request: 'Breakdown / Complaint',
-      repair: 'Repair / Resolution',
+      breakdown: 'Breakdown Entry',
+      complaints: 'Complaint Register',
+      entry: 'Maintenance Entry',
+      request: 'Maintenance Entry',
+      schedule: 'Maintenance Schedule',
       history: 'Service History',
+      spares: 'Spare Parts',
+      contacts: 'Contacts Directory',
+      reports: 'Maintenance Reports',
+      repair: 'Repair Out / In',
     }
     return labels[sub || 'overview'] || 'Machine-wise Maintenance'
   }
@@ -706,7 +717,6 @@ export function titleFor(screen: AppScreen, sub?: string, moduleId?: MainModuleI
   if (screen === 'costing' && sub === 'electricity') return 'System Preferences'
   if (screen === 'placeholder') {
     const labels: Record<string, string> = {
-      'maint-schedule': 'Maintenance Schedule',
       'machine-master': 'Machine Master',
       'dept-master': 'Department Master',
       'shift-master': 'Shift Master',

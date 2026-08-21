@@ -603,6 +603,15 @@ export type MaintenanceRequest = {
   status: string
   cost: number
   created_at: string
+  // Machine-wise Maintenance (planned entry fields from #58)
+  entry_date?: string | null
+  maintenance_type?: string | null
+  work_details?: string | null
+  parts_used?: string | null
+  next_maintenance_date?: string | null
+  remarks?: string | null
+  technician?: string | null
+  // Breakdown flow timestamps (additive; dedicated machine_breakdowns is preferred)
   fault_type?: string | null
   contact_name?: string | null
   contact_phone?: string | null
