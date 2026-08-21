@@ -95,6 +95,12 @@ export function MachineWiseProductionScreen({ initialTab }: { initialTab?: strin
     initialTab === 'entry' || initialTab === 'report' ? initialTab : 'weft',
   )
 
+  useEffect(() => {
+    if (initialTab === 'entry' || initialTab === 'report' || initialTab === 'weft') {
+      setTab(initialTab)
+    }
+  }, [initialTab])
+
   const [programs, setPrograms] = useState<ProgramOption[]>([])
   const [yarns, setYarns] = useState<WeftYarnStock[]>([])
   const [operators, setOperators] = useState<string[]>([])
