@@ -212,13 +212,17 @@ export const MAIN_MODULES: MainModule[] = [
     screen: 'module-hub',
     hasHub: true,
     items: [
-      { id: 'maint-request', label: 'Machine Maintenance', screen: 'maintenance', sub: 'request', hint: 'Maintenance requests' },
-      { id: 'breakdown', label: 'Breakdown Entry', screen: 'maintenance', sub: 'repair', hint: 'Repair out / in' },
+      { id: 'overview', label: 'Machine Overview', screen: 'maintenance', sub: 'overview', hint: 'Machine-wise Maintenance dashboard' },
+      { id: 'breakdown', label: 'Breakdown Entry', screen: 'maintenance', sub: 'breakdown', hint: 'Log & track breakdowns' },
+      { id: 'complaints', label: 'Complaint Register', screen: 'maintenance', sub: 'complaints', hint: 'Machine complaints' },
+      { id: 'maint-entry', label: 'Maintenance Entry', screen: 'maintenance', sub: 'entry', hint: 'Planned / general maintenance' },
+      { id: 'maint-schedule', label: 'Maintenance Schedule', screen: 'maintenance', sub: 'schedule', hint: 'Calendar & due dates' },
+      { id: 'service-history', label: 'Service History', screen: 'maintenance', sub: 'history', hint: 'Auto history from entries' },
+      { id: 'spare-parts', label: 'Spare Parts', screen: 'maintenance', sub: 'spares', hint: 'Stock & low-stock alerts' },
+      { id: 'contacts', label: 'Contacts Directory', screen: 'maintenance', sub: 'contacts', hint: 'Technicians & contractors' },
+      { id: 'maint-reports', label: 'Maintenance Reports', screen: 'maintenance', sub: 'reports', hint: 'A4 print & CSV reports' },
       { id: 'maint-material', label: 'Material Out / In', screen: 'maint-material', hint: 'Material + auto gate pass' },
-      { id: 'maint-schedule', label: 'Maintenance Schedule', screen: 'placeholder', filter: 'maint-schedule', hint: 'Schedule overview' },
-      { id: 'service-history', label: 'Service History', screen: 'maintenance', sub: 'repair', hint: 'Repair tracker' },
-      { id: 'spare-parts', label: 'Spare Parts', screen: 'purchase', sub: 'maint_in', hint: 'Parts inward' },
-      { id: 'maint-reports', label: 'Maintenance Reports', screen: 'purchase', sub: 'repair_inv', hint: 'Repair invoices' },
+      { id: 'repair-out', label: 'Repair Out / In', screen: 'maintenance', sub: 'repair', hint: 'Legacy repair tracker / gatepass' },
     ],
   },
   {
@@ -230,7 +234,7 @@ export const MAIN_MODULES: MainModule[] = [
     items: [
       { id: 'party-master', label: 'Party Master', screen: 'parties', hint: 'Customers / parties' },
       { id: 'item-master', label: 'Item Master', screen: 'design-catalog', hint: 'Design / item catalog' },
-      { id: 'machine-master', label: 'Machine Master', screen: 'placeholder', filter: 'machine-master', hint: 'Machine list (M1–M6)' },
+      { id: 'machine-master', label: 'Machine Master', screen: 'maintenance', sub: 'overview', hint: 'Machine 1–6 overview (M1–M6)' },
       {
         id: 'employee-master',
         label: 'Employee Master',
@@ -292,7 +296,7 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   design: 'Design & Job Card',
   purchase: 'Purchase & Inward',
   production: 'Production',
-  maintenance: 'Maintenance',
+  maintenance: 'Machine-wise Maintenance',
   dispatch: 'Dispatch',
   admin: 'Security / Admin',
   costing: 'Costing',
@@ -419,6 +423,22 @@ export function titleFor(screen: AppScreen, sub?: string, moduleId?: MainModuleI
     }
     return labels[sub || 'overview'] || 'Warp Yarn Management'
   }
+  if (screen === 'maintenance') {
+    const labels: Record<string, string> = {
+      overview: 'Machine Overview',
+      breakdown: 'Breakdown Entry',
+      complaints: 'Complaint Register',
+      entry: 'Maintenance Entry',
+      request: 'Maintenance Entry',
+      schedule: 'Maintenance Schedule',
+      history: 'Service History',
+      spares: 'Spare Parts',
+      contacts: 'Contacts Directory',
+      reports: 'Maintenance Reports',
+      repair: 'Repair Out / In',
+    }
+    return labels[sub || 'overview'] || 'Machine-wise Maintenance'
+  }
   if (screen === 'stock' && sub === 'weft') return 'Yarn Stock'
   if (screen === 'stock') return 'Warp Beam Stock (Legacy)'
   if (screen === 'purchase' && sub === 'weft') return 'Weft Issue'
@@ -441,7 +461,6 @@ export function titleFor(screen: AppScreen, sub?: string, moduleId?: MainModuleI
   if (screen === 'costing' && sub === 'electricity') return 'System Preferences'
   if (screen === 'placeholder') {
     const labels: Record<string, string> = {
-      'maint-schedule': 'Maintenance Schedule',
       'machine-master': 'Machine Master',
       'dept-master': 'Department Master',
       'shift-master': 'Shift Master',
