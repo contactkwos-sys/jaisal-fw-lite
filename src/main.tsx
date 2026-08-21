@@ -9,6 +9,7 @@ import './styles/sample-job-card.css'
 import './styles/design-wise-costing.css'
 import './styles/design-catalog.css'
 import './styles/crm-customers.css'
+import './styles/design-to-order.css'
 import App from './App.tsx'
 
 createRoot(document.getElementById('root')!).render(

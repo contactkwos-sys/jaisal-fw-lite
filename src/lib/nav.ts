@@ -31,12 +31,22 @@ export type AppScreen =
   | 'loan-tracker'
   | 'geb-readings'
   | 'orders-pending'
+  | 'dto-hub'
+  | 'dto-intake'
+  | 'dto-sample-job'
+  | 'dto-tracking'
+  | 'dto-order-booking'
+  | 'dto-order-status'
+  | 'dto-promotion'
+  | 'dto-followup'
+  | 'dto-reports'
   | 'module-hub'
   | 'settings-hub'
   | 'placeholder'
 
 export type MainModuleId =
   | 'dashboard'
+  | 'design-to-order'
   | 'production'
   | 'inventory'
   | 'cash-book'
@@ -87,6 +97,29 @@ export const MAIN_MODULES: MainModule[] = [
     screen: 'home',
     items: [],
     mobileNav: true,
+  },
+  {
+    id: 'design-to-order',
+    label: 'Design to Order',
+    icon: 'design-to-order',
+    screen: 'dto-hub',
+    mobileNav: true,
+    items: [
+      { id: 'din-intake', label: 'DIN Intake', screen: 'dto-intake', hint: 'Receive DIN photo / email' },
+      {
+        id: 'din-costing',
+        label: 'DIN Costing',
+        screen: 'design-wise-costing',
+        hint: 'Same Design Wise Costing engine',
+      },
+      { id: 'sample-job', label: 'Sample Job Card', screen: 'dto-sample-job', hint: 'Issue sample cards' },
+      { id: 'sample-tracking', label: 'Sample Tracking', screen: 'dto-tracking', hint: 'Produce · receive · approve' },
+      { id: 'order-booking', label: 'Order Booking', screen: 'dto-order-booking', hint: 'Salesman order entry' },
+      { id: 'order-status', label: 'Order Status', screen: 'dto-order-status', hint: 'Track booked orders' },
+      { id: 'sample-promotion', label: 'Sample Promotion', screen: 'dto-promotion', hint: 'Share to parties' },
+      { id: 'followup', label: 'Follow-up / Reminders', screen: 'dto-followup', hint: 'Party follow-ups' },
+      { id: 'dto-reports', label: 'Reports', screen: 'dto-reports', hint: 'Design to Order reports' },
+    ],
   },
   {
     id: 'production',
@@ -263,7 +296,7 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   'sample-job-card': 'Sample Job Card',
   'sample-register': 'Sample Register',
   'beam-remaining': 'Beam Remaining',
-  'design-wise-costing': 'Design Wise Costing',
+  'design-wise-costing': 'DIN Costing',
   'design-catalog': 'Design Catalog',
   crm: 'CRM',
   'cash-book': 'Cash Book',
@@ -274,6 +307,15 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   'loan-tracker': 'Loan Tracker',
   'geb-readings': 'GEB Electricity',
   'orders-pending': 'Orders & Pending',
+  'dto-hub': 'Design to Order',
+  'dto-intake': 'DIN Intake',
+  'dto-sample-job': 'Sample Job Card',
+  'dto-tracking': 'Sample Tracking',
+  'dto-order-booking': 'Order Booking',
+  'dto-order-status': 'Order Status',
+  'dto-promotion': 'Sample Promotion',
+  'dto-followup': 'Follow-up / Reminders',
+  'dto-reports': 'Design to Order Reports',
   'module-hub': 'Module',
   'settings-hub': 'Settings',
   placeholder: 'Coming Soon',
@@ -303,6 +345,20 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
     }
   }
 
+  if (
+    screen === 'dto-hub' ||
+    screen === 'dto-intake' ||
+    screen === 'dto-sample-job' ||
+    screen === 'dto-tracking' ||
+    screen === 'dto-order-booking' ||
+    screen === 'dto-order-status' ||
+    screen === 'dto-promotion' ||
+    screen === 'dto-followup' ||
+    screen === 'dto-reports'
+  ) {
+    return 'design-to-order'
+  }
+
   if (screen === 'production' || screen === 'dispatch') return 'production'
   if (
     screen === 'stock' ||
@@ -314,6 +370,8 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
     return 'inventory'
   }
   if (screen === 'cash-book') return 'cash-book'
+  // Prefer Design to Order when navigating DIN costing from that module
+  if (screen === 'design-wise-costing' && sub === 'design-to-order') return 'design-to-order'
   if (
     screen === 'orders' ||
     screen === 'orders-pending' ||

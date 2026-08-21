@@ -11,6 +11,7 @@ const STORAGE_KEY = 'jaisal_fw_role_permissions_v1'
 
 const CEO_MODULES: MainModuleId[] = [
   'dashboard',
+  'design-to-order',
   'production',
   'inventory',
   'cash-book',
@@ -23,6 +24,7 @@ const CEO_MODULES: MainModuleId[] = [
 ]
 
 const MANAGER_MODULES: MainModuleId[] = [
+  'design-to-order',
   'production',
   'inventory',
   'cash-book',
@@ -43,16 +45,16 @@ const ROLE_DEFAULTS: Record<string, MainModuleId[]> = {
   owner: CEO_MODULES,
   // Manager: all modules EXCEPT CEO Dashboard
   manager: MANAGER_MODULES,
-  'machine supervisor': ['production', 'inventory', 'maintenance', 'reports'],
-  salesman: ['orders', 'masters', 'reports', 'cash-book'],
+  'machine supervisor': ['production', 'inventory', 'maintenance', 'reports', 'design-to-order'],
+  salesman: ['design-to-order', 'orders', 'masters', 'reports', 'cash-book'],
   'checker & dispatch': ['production', 'inventory', 'security'],
-  'program supervisor': ['production', 'orders', 'reports'],
-  'mill incharge': ['production', 'inventory', 'cash-book', 'orders', 'reports', 'maintenance'],
-  mill: ['production', 'inventory', 'cash-book', 'orders', 'reports', 'maintenance'],
+  'program supervisor': ['production', 'orders', 'reports', 'design-to-order'],
+  'mill incharge': ['production', 'inventory', 'cash-book', 'orders', 'reports', 'maintenance', 'design-to-order'],
+  mill: ['production', 'inventory', 'cash-book', 'orders', 'reports', 'maintenance', 'design-to-order'],
   'store incharge': ['inventory', 'cash-book', 'reports'],
   store: ['inventory', 'cash-book', 'reports'],
-  'production incharge': ['production', 'orders', 'reports'],
-  programmer: ['production', 'orders', 'reports'],
+  'production incharge': ['production', 'orders', 'reports', 'design-to-order'],
+  programmer: ['production', 'orders', 'reports', 'design-to-order'],
   operator: ['production'],
   security: ['security', 'inventory'],
   account: ['cash-book', 'reports', 'masters', 'security'],
