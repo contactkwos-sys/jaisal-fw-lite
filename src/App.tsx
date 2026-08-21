@@ -41,6 +41,7 @@ import { MaintenanceMaterialScreen } from './screens/MaintenanceMaterialScreen'
 import { LoanTrackerScreen } from './screens/LoanTrackerScreen'
 import { GebReadingScreen } from './screens/GebReadingScreen'
 import { OrdersPendingScreen } from './screens/OrdersPendingScreen'
+import { ProgramDispatchScreen } from './screens/ProgramDispatchScreen'
 
 function AuthenticatedApp() {
   const { session, loading, isCeo, isManager, roleName } = useAuth()
@@ -160,6 +161,9 @@ function AuthenticatedApp() {
       {tab === 'loan-tracker' ? <LoanTrackerScreen /> : null}
       {tab === 'geb-readings' ? <GebReadingScreen /> : null}
       {tab === 'orders-pending' ? <OrdersPendingScreen /> : null}
+      {tab === 'program-dispatch' ? (
+        <ProgramDispatchScreen initialSub={sub || 'pto'} onNavigate={go} />
+      ) : null}
       {tab === 'parties' ? <PartyMasterScreen /> : null}
       {tab === 'purchase' ? <PurchaseScreen initialSub={sub || 'general'} /> : null}
       {tab === 'orders' ? <OrderBookScreen initialSub={sub || 'entry'} /> : null}

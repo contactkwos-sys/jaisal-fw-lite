@@ -26,7 +26,7 @@ function record(check, pass, extra = {}) {
 
 const MAIN_NINE = [
   'Dashboard',
-  'Production',
+  'Program & Dispatch',
   'Inventory',
   'Orders',
   'Reports',
@@ -100,10 +100,10 @@ const forbidden = ['ADMIN', 'Yarn Management', 'Admin Master', 'Dispatch & Gate 
 const leaked = forbidden.filter((n) => navText.split('\n').map((s) => s.trim()).includes(n))
 record('old flat tabs not main-level', leaked.length === 0, { leaked })
 
-await m.locator('.side-nav').getByRole('button', { name: 'Production', exact: true }).click()
+await m.locator('.side-nav').getByRole('button', { name: 'Program & Dispatch', exact: true }).click()
 await m.waitForTimeout(500)
 record('drawer closes on nav', (await m.locator('.app-shell.drawer-is-open').count()) === 0)
-record('module hub cards', (await m.locator('.hub-card').count()) >= 3)
+record('program dispatch hub', (await m.locator('.pd-hub, .pd-screen, .screen').count()) >= 1)
 await shot(m, 'ui-mobile-production-hub')
 
 await mobile.close()
@@ -178,19 +178,17 @@ await shot(d, 'ui-desktop-dashboard')
 const bg = await d.evaluate(() => getComputedStyle(document.body).backgroundColor)
 record('light theme body', !bg.includes('20,') && !bg.includes('rgb(20'), { bg })
 
-for (const name of ['Orders', 'Inventory', 'Security']) {
-  await d.locator('.side-nav').getByRole('button', { name, exact: true }).click()
+for (const name of ['Orders & Pending', 'Inventory', 'Security']) {
+  await d.locator('.side-nav .side-nav-item', { hasText: name }).first().click()
   await d.waitForTimeout(500)
   record(`open ${name} hub`, (await d.locator('.hub-card, .screen').count()) > 0)
 }
 await shot(d, 'ui-desktop-orders-hub')
 
-// Program Card via Orders hub
-await d.locator('.side-nav').getByRole('button', { name: 'Orders', exact: true }).click()
-await d.waitForTimeout(500)
-await d.locator('.hub-card').filter({ hasText: 'Program Card' }).first().click()
+// Program to Production via Program & Dispatch
+await d.locator('.side-nav .side-nav-item', { hasText: 'Program & Dispatch' }).first().click()
 await d.waitForTimeout(700)
-record('program card form', (await d.locator('.program-card-form, .program-save-btn, form').count()) > 0)
+record('program dispatch form', (await d.locator('.pd-hub, .pd-workflow, .pd-kpi').count()) > 0)
 await shot(d, 'ui-desktop-program')
 
 await desk.close()

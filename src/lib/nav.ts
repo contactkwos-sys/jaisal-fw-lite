@@ -34,6 +34,7 @@ export type AppScreen =
   | 'module-hub'
   | 'settings-hub'
   | 'placeholder'
+  | 'program-dispatch'
 
 export type MainModuleId =
   | 'dashboard'
@@ -90,19 +91,69 @@ export const MAIN_MODULES: MainModule[] = [
   },
   {
     id: 'production',
-    label: 'Production',
+    label: 'Program & Dispatch',
     icon: 'production',
-    screen: 'module-hub',
-    hasHub: true,
+    screen: 'program-dispatch',
+    sub: 'pto',
+    hasHub: false,
     mobileNav: true,
     items: [
-      { id: 'warp-issue', label: 'Warp Issue', screen: 'warp-yarn', sub: 'machines', hint: 'Issue / return warp pipes on machines' },
-      { id: 'weft-issue', label: 'Weft Issue', screen: 'purchase', sub: 'weft', hint: 'Weft yarn issue' },
-      { id: 'prod-entry', label: 'Production Entry', screen: 'production', sub: 'entry', hint: 'Machine production meters' },
-      { id: 'folding', label: 'Folding', screen: 'dispatch', sub: 'folding', hint: 'Folding entry' },
-      { id: 'dispatch', label: 'Dispatch', screen: 'dispatch', sub: 'challan', hint: 'Challan & gate pass' },
-      { id: 'machine-wise', label: 'Machine-wise Production', screen: 'production', sub: 'report', filter: 'machine', hint: 'By machine' },
-      { id: 'shift-wise', label: 'Shift-wise Production', screen: 'production', sub: 'report', filter: 'shift', hint: 'By shift' },
+      {
+        id: 'pto',
+        label: 'Program to Production',
+        screen: 'program-dispatch',
+        sub: 'pto',
+        hint: 'Orders → machine programs · live KPIs',
+      },
+      {
+        id: 'prod-entry',
+        label: 'Production Entry',
+        screen: 'program-dispatch',
+        sub: 'entry',
+        hint: 'Shift / machine / operator meters',
+      },
+      {
+        id: 'tracking',
+        label: 'Production Tracking',
+        screen: 'program-dispatch',
+        sub: 'tracking',
+        hint: 'Order → dispatched live meters',
+      },
+      {
+        id: 'folding',
+        label: 'Folding & Checking',
+        screen: 'program-dispatch',
+        sub: 'folding',
+        hint: 'Lots · damage · final meter',
+      },
+      {
+        id: 'dispatch',
+        label: 'Dispatch / Challan',
+        screen: 'program-dispatch',
+        sub: 'challan',
+        hint: 'Select lots · create challan',
+      },
+      {
+        id: 'gatepass',
+        label: 'Gate Pass',
+        screen: 'program-dispatch',
+        sub: 'gatepass',
+        hint: 'Vehicle · print gate pass',
+      },
+      {
+        id: 'invoice',
+        label: 'Invoice',
+        screen: 'program-dispatch',
+        sub: 'invoice',
+        hint: 'GST invoice · print / PDF',
+      },
+      {
+        id: 'pd-reports',
+        label: 'Reports',
+        screen: 'program-dispatch',
+        sub: 'reports',
+        hint: 'Production · checking · dispatch',
+      },
     ],
   },
   {
@@ -146,14 +197,11 @@ export const MAIN_MODULES: MainModule[] = [
     items: [
       { id: 'orders-pending', label: 'Orders & Pending', screen: 'orders-pending', hint: 'Raise & track pending orders' },
       { id: 'order-book', label: 'Order Book', screen: 'orders', sub: 'entry', hint: 'Party orders' },
-      { id: 'program-card', label: 'Program Card', screen: 'programs', sub: 'create', hint: 'Program + petty meters' },
-      { id: 'job-card', label: 'Job Card Issue', screen: 'production', sub: 'job', hint: 'Issue job cards' },
       { id: 'design-job', label: 'Design & Job Card', screen: 'design', hint: 'Design register' },
       { id: 'design-costing', label: 'Design Wise Costing', screen: 'design-wise-costing', hint: 'Warp / weft cost per DIN' },
       { id: 'sample-job', label: 'Sample Job Card', screen: 'sample-job-card', hint: 'Sample cards' },
       { id: 'design-catalog', label: 'Design Catalog', screen: 'design-catalog', hint: 'Design DNA catalog' },
       { id: 'broadcast', label: 'Design Broadcast', screen: 'broadcast', hint: 'Post & share designs' },
-      { id: 'program-pending', label: 'Program Pending', screen: 'programs', sub: 'pending', hint: 'Pending tracker' },
     ],
   },
   {
@@ -277,6 +325,7 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   'module-hub': 'Module',
   'settings-hub': 'Settings',
   placeholder: 'Coming Soon',
+  'program-dispatch': 'Program & Dispatch',
 }
 
 export function moduleById(id: MainModuleId): MainModule {
@@ -303,7 +352,9 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
     }
   }
 
-  if (screen === 'production' || screen === 'dispatch') return 'production'
+  if (screen === 'production' || screen === 'dispatch' || screen === 'program-dispatch' || screen === 'programs') {
+    return 'production'
+  }
   if (
     screen === 'stock' ||
     screen === 'purchase' ||
@@ -317,7 +368,6 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
   if (
     screen === 'orders' ||
     screen === 'orders-pending' ||
-    screen === 'programs' ||
     screen === 'design' ||
     screen === 'design-wise-costing' ||
     screen === 'sample-job-card' ||
@@ -368,11 +418,24 @@ export function titleFor(screen: AppScreen, sub?: string, moduleId?: MainModuleI
   if (screen === 'purchase' && sub === 'report') return 'Stock Reports'
   if (screen === 'purchase' && sub === 'maint_in') return 'Consumables / Inward'
   if (screen === 'purchase' && sub === 'repair_inv') return 'Repair Invoices'
-  if (screen === 'dispatch' && sub === 'folding') return 'Folding'
+  if (screen === 'dispatch' && sub === 'folding') return 'Folding & Checking'
   if (screen === 'dispatch') return 'Dispatch'
   if (screen === 'production' && sub === 'report') return 'Production Report'
   if (screen === 'production' && sub === 'job') return 'Job Card Issue'
   if (screen === 'production' && sub === 'entry') return 'Production Entry'
+  if (screen === 'program-dispatch') {
+    const labels: Record<string, string> = {
+      pto: 'Program to Production',
+      entry: 'Production Entry',
+      tracking: 'Production Tracking',
+      folding: 'Folding & Checking',
+      challan: 'Dispatch / Challan',
+      gatepass: 'Gate Pass',
+      invoice: 'Invoice',
+      reports: 'Program & Dispatch Reports',
+    }
+    return labels[sub || 'pto'] || 'Program & Dispatch'
+  }
   if (screen === 'orders' && sub === 'report') return 'Party Delivery Report'
   if (screen === 'programs' && sub === 'pending') return 'Program Pending'
   if (screen === 'programs') return 'Program Card'
@@ -402,6 +465,9 @@ export function titleFor(screen: AppScreen, sub?: string, moduleId?: MainModuleI
 export function isSubItemActive(item: SubItem, screen: AppScreen, sub?: string, filter?: string): boolean {
   if (item.screen !== screen) return false
   if (item.sub && (sub || '') !== item.sub) {
+    if (item.screen === 'program-dispatch' && item.sub === 'challan') {
+      return (sub || '') === 'challan'
+    }
     if (item.screen === 'dispatch' && item.sub === 'challan') {
       return (sub || 'challan') === 'challan' || sub === 'gatepass'
     }

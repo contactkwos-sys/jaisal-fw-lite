@@ -317,6 +317,11 @@ export type OrderBook = {
   payment_days: number | null
   discount_pct: number | null
   created_at: string
+  order_no?: string | null
+  delivery_date?: string | null
+  remarks?: string | null
+  party_code?: string | null
+  status?: string | null
 }
 
 export type OrderBookItem = {
@@ -328,6 +333,10 @@ export type OrderBookItem = {
   rate: number
   amount: number
   settled: boolean
+  quality?: string | null
+  total_pcs?: number | null
+  delivery_date?: string | null
+  status?: string | null
 }
 
 export type Program = {
@@ -337,6 +346,19 @@ export type Program = {
   status: string
   dispatched_meter: number
   created_at: string
+  program_no?: string | null
+  marka?: string | null
+  party_name?: string | null
+  design_no?: string | null
+  colour?: string | null
+  quality?: string | null
+  total_pcs?: number | null
+  total_pick?: number | null
+  total_meter?: number | null
+  required_meter?: number | null
+  planned_date?: string | null
+  priority?: string | null
+  job_card_no?: string | null
 }
 
 export type ProgramPetty = {
@@ -368,6 +390,64 @@ export type DesignBroadcast = {
 export type PartyMaster = {
   id: string
   party_name: string
+  created_at: string
+  marka?: string | null
+  party_code?: string | null
+  gstin?: string | null
+  billing_address?: string | null
+  shipping_address?: string | null
+}
+
+export type CheckingLot = {
+  id: string
+  lot_no: string
+  program_id: string | null
+  marka: string | null
+  meter_in: number
+  checked_meter: number
+  damage_meter: number
+  final_meter: number
+  checker_name: string | null
+  entry_date: string
+  shift: string | null
+  remarks: string | null
+  status: string
+  challan_id: string | null
+  created_at: string
+}
+
+export type LotDamage = {
+  id: string
+  lot_id: string
+  damage_type: string
+  damage_operator: string | null
+  damage_meter: number
+  remarks: string | null
+  created_at: string
+}
+
+export type GstInvoice = {
+  id: string
+  invoice_no: string
+  invoice_date: string
+  challan_id: string | null
+  party: string
+  gstin: string | null
+  billing_address: string | null
+  shipping_address: string | null
+  design_no: string | null
+  quality: string | null
+  colour: string | null
+  marka: string | null
+  quantity: number
+  rate: number
+  taxable_value: number
+  gst_pct: number
+  cgst: number
+  sgst: number
+  igst: number
+  grand_total: number
+  is_inter_state: boolean
   created_at: string
 }
 
@@ -403,6 +483,15 @@ export type FoldingEntry = {
   meter_folded: number
   rolls: number
   created_at: string
+  program_id?: string | null
+  lot_no?: string | null
+  marka?: string | null
+  meter_in?: number | null
+  damage_meter?: number | null
+  final_meter?: number | null
+  checker_name?: string | null
+  shift?: string | null
+  remarks?: string | null
 }
 
 export type Challan = {
@@ -417,6 +506,11 @@ export type Challan = {
   created_at: string
   program_id: string | null
   job_card_id: string | null
+  marka?: string | null
+  design_no?: string | null
+  quality?: string | null
+  colour?: string | null
+  status?: string | null
 }
 
 export type Gatepass = {
@@ -431,6 +525,14 @@ export type Gatepass = {
   signed_by_driver: string | null
   signed_by_received: string | null
   created_at: string
+  party?: string | null
+  marka?: string | null
+  total_meter?: number | null
+  lots_count?: number | null
+  transporter_name?: string | null
+  driver_name?: string | null
+  gp_time?: string | null
+  remarks?: string | null
 }
 
 export type PayrollRate = {

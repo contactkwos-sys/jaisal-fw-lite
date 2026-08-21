@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "smoke:prod": "node scripts/prod-nav-smoke.mjs",
     "smoke:ui": "node scripts/ui-nav-smoke.mjs",
+    "smoke:program-dispatch": "node scripts/program-dispatch-api-smoke.mjs",
     "test:design-wise-costing": "node scripts/test-design-wise-costing.mjs",
     "start": "node scripts/serve-app.mjs",
     "functions:local": "node scripts/local-functions-server.mjs"
