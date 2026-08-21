@@ -88,6 +88,8 @@ const ICON_PATHS: Record<string, string> = {
     'M5 3h14a1 1 0 0 1 1 1v16l-8-3-8 3V4a1 1 0 0 1 1-1zm3 4v2h8V7H8zm0 4v2h5v-2H8z',
   'design-costing':
     'M4 4h16v2H4V4zm0 4h10v2H4V8zm0 4h16v2H4v-2zm0 4h10v2H4v-2z',
+  broadcast:
+    'M12 3a1 1 0 0 1 1 1v1.06A7.002 7.002 0 0 1 19 12v1a1 1 0 1 1-2 0v-1a5 5 0 0 0-10 0v1a1 1 0 1 1-2 0v-1a7.002 7.002 0 0 1 6-6.94V4a1 1 0 0 1 1-1zm-4 11a2 2 0 0 1 2 2v4H6v-4a2 2 0 0 1 2-2zm8 0a2 2 0 0 1 2 2v4h-4v-4a2 2 0 0 1 2-2z',
 }
 
 function Chevron() {
@@ -187,8 +189,8 @@ function OverviewIcon({ tone }: { tone: HubTone }) {
 }
 
 export function ModuleHub({ moduleId, onNavigate }: Props) {
-  const { profile, isCeo } = useAuth()
-  const roleName = profile?.roles?.role_name || profile?.full_name || (isCeo ? 'CEO' : 'User')
+  const { roleName: authRoleName, profile, isCeo } = useAuth()
+  const roleName = authRoleName || profile?.roles?.role_name || profile?.full_name || (isCeo ? 'CEO' : 'User')
   const mod = moduleById(moduleId)
   const items = mod.items.filter((item) => canAccessSub(roleName, moduleId, item.id))
   const isInventory = moduleId === 'inventory'

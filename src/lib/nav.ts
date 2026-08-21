@@ -145,7 +145,7 @@ export const MAIN_MODULES: MainModule[] = [
       { id: 'design-job', label: 'Design & Job Card', screen: 'design', hint: 'Design register' },
       { id: 'sample-job', label: 'Sample Job Card', screen: 'sample-job-card', hint: 'Sample cards' },
       { id: 'design-catalog', label: 'Design Catalog', screen: 'design-catalog', hint: 'Design DNA catalog' },
-      { id: 'broadcast', label: 'Design Broadcast', screen: 'broadcast', hint: 'Share designs' },
+      { id: 'broadcast', label: 'Design Broadcast', screen: 'broadcast', hint: 'Post & share designs' },
       { id: 'program-pending', label: 'Program Pending', screen: 'programs', sub: 'pending', hint: 'Pending tracker' },
     ],
   },
