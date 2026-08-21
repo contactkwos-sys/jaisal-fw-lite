@@ -1,6 +1,6 @@
 /**
- * KMOS / JAISAL FW — professional textile ERP design tokens
- * Light industrial: KMOS blue primary, white cards, cool grey canvas
+ * JAISAL FW — Fashionweave Industries design tokens
+ * Light industrial: brand blue primary, white cards, cool grey canvas
  */
 :root {
   /* Surfaces */
@@ -9,7 +9,7 @@
   --surface2: #eef2f6;
   --line: #d9e1ea;
 
-  /* Brand — KMOS Blue */
+  /* Brand — JAISAL FW Blue */
   --teal: #1769c2;
   --teal-deep: #1254a0;
   --teal-soft: #e8f1fb;

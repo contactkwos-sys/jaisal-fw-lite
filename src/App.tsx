@@ -123,7 +123,7 @@ function AuthenticatedApp() {
         />
       ) : null}
       {tab === 'design' ? (
-        <DesignScreen onOpenDesignCosting={(dno) => go({ screen: 'design-wise-costing', filter: dno, module: 'orders' })} />
+        <DesignScreen onOpenDesignCosting={(dno) => go({ screen: 'design-wise-costing', filter: dno, module: 'reports' })} />
       ) : null}
       {tab === 'broadcast' ? <DesignBroadcastScreen initialDesignId={filter} /> : null}
       {tab === 'design-catalog' ? <DesignCatalogScreen /> : null}

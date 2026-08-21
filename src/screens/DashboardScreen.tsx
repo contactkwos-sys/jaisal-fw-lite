@@ -408,8 +408,8 @@ export function DashboardScreen({ onNavigate }: Props) {
       <section className="dash-hero">
         <div className="dash-hero-copy">
           <p className="dash-hero-eyebrow">Fashionweave Industries</p>
-          <h2 className="dash-hero-title">Mill overview</h2>
-          <p className="dash-hero-sub text-muted">Live floor KPIs for management</p>
+          <h2 className="dash-hero-title">JAISAL FW</h2>
+          <p className="dash-hero-sub text-muted">Mill overview · live floor KPIs for management</p>
         </div>
       </section>
 

@@ -26,7 +26,7 @@ const COPY: Record<string, { title: string; body: string }> = {
   },
   company: {
     title: 'Company Settings',
-    body: 'JAISAL FW / Fashionweave Industries. Company profile fields can be stored here in a future update without adding a new main tab.',
+    body: 'JAISAL FW – Fashionweave Industries. Company profile fields can be stored here in a future update without adding a new main tab.',
   },
   'shift-settings': {
     title: 'Shift Settings',
