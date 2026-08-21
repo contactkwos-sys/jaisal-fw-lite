@@ -700,10 +700,10 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
     return (
       <div className="screen">
         <header className="screen-header">
-          <h1>DIN Costing</h1>
+          <h1>Design-wise Costing</h1>
           <p className="text-muted">Restricted to CEO / authorized roles.</p>
         </header>
-        <p className="form-error text-danger">You do not have permission to view DIN Costing rates.</p>
+        <p className="form-error text-danger">You do not have permission to view Design-wise Costing rates.</p>
       </div>
     )
   }
@@ -712,7 +712,7 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
     <div className="screen dwc-screen">
       <header className="screen-header dwc-header">
         <div>
-          <h1>Design Wise Costing</h1>
+          <h1>Design-wise Costing</h1>
           <p className="text-muted">
             Warp + Weft yarn cost → Total PIC → Weaving charge → Final ₹/meter
           </p>
@@ -728,7 +728,7 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
         <h2 className="section-title">Design Details</h2>
         <div className="dwc-details-row">
           <label className="field">
-            <span className="text-muted">DIN / Design No.</span>
+            <span className="text-muted">DESI / Design No. (formerly DIN)</span>
             <input
               list="dwc-design-list"
               value={dinNumber}
@@ -1294,7 +1294,7 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
           </button>
         </div>
         <p className="text-muted2 dwc-history-lead">
-          Orders / Reports → Design Wise Costing · latest first · click DIN to open · Clear Filters if list looks empty
+          Design to Order / Reports → Design-wise Costing · latest first · click DESI to open · Clear Filters if list looks empty
         </p>
         <div className="dwc-filters">
           <label className="field">

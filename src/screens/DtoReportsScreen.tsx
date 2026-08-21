@@ -44,7 +44,7 @@ export function DtoReportsScreen({ onNavigate }: Props) {
           className="btn-warp"
           onClick={() => onNavigate({ screen: 'design-wise-costing', module: 'design-to-order' })}
         >
-          Open DIN Costing
+          Open Design-wise Costing
         </button>
       </header>
 

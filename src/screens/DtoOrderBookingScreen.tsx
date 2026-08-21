@@ -195,7 +195,7 @@ export function DtoOrderBookingScreen({ onNavigate, initialDinNumber }: Props) {
     <div className="screen dto-screen">
       <header className="screen-header">
         <div>
-          <h1>Order Booking</h1>
+          <h1>Customer Order</h1>
           <p className="text-muted">Salesman-friendly booking — order rate auto-carries into Program &amp; Dispatch.</p>
         </div>
         <button type="button" className="btn-warp" onClick={() => onNavigate({ screen: 'dto-order-status', module: 'design-to-order' })}>
@@ -209,7 +209,7 @@ export function DtoOrderBookingScreen({ onNavigate, initialDinNumber }: Props) {
       <form className="surface dto-panel" onSubmit={(e) => void saveOrder(e)}>
         <div className="dto-form-grid">
           <label className="field">
-            <span>DIN No.</span>
+            <span>DESI No.</span>
             <select value={dinNumber} onChange={(e) => setDinNumber(e.target.value)} required>
               <option value="">Select DIN…</option>
               {dins.map((d) => (

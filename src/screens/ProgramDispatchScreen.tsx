@@ -1,12 +1,12 @@
 import type { NavTarget } from '../lib/nav'
 import { PdChallan } from '../components/pd/PdChallan'
-import { PdEntry } from '../components/pd/PdEntry'
 import { PdFolding } from '../components/pd/PdFolding'
 import { PdGatePass } from '../components/pd/PdGatePass'
 import { PdHub } from '../components/pd/PdHub'
 import { PdInvoice } from '../components/pd/PdInvoice'
 import { PdReports } from '../components/pd/PdReports'
 import { PdTracking } from '../components/pd/PdTracking'
+import { MachineWiseProductionScreen } from './MachineWiseProductionScreen'
 
 export type PdSub =
   | 'pto'
@@ -23,6 +23,10 @@ type Props = {
   onNavigate: (t: NavTarget) => void
 }
 
+/**
+ * Program & Dispatch shell.
+ * D-03: Production Entry embeds canonical Machine-wise Production Entry (no second engine).
+ */
 export function ProgramDispatchScreen({ initialSub = 'pto', onNavigate }: Props) {
   const sub = (['pto', 'entry', 'tracking', 'folding', 'challan', 'gatepass', 'invoice', 'reports'].includes(
     initialSub || '',
@@ -37,7 +41,7 @@ export function ProgramDispatchScreen({ initialSub = 'pto', onNavigate }: Props)
   return (
     <div className="screen pd-screen">
       {sub === 'pto' ? <PdHub onGo={go} onNavigate={onNavigate} /> : null}
-      {sub === 'entry' ? <PdEntry /> : null}
+      {sub === 'entry' ? <MachineWiseProductionScreen initialTab="entry" /> : null}
       {sub === 'tracking' ? <PdTracking onGo={go} /> : null}
       {sub === 'folding' ? <PdFolding onGo={go} /> : null}
       {sub === 'challan' ? <PdChallan onGo={go} /> : null}

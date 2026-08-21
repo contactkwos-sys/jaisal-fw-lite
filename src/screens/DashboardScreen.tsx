@@ -405,7 +405,7 @@ export function DashboardScreen({ onNavigate }: Props) {
 
   const quick: Array<{ label: string; screen: AppScreen; sub?: string; module?: import('../lib/nav').MainModuleId }> = [
     { label: 'Design to Order', screen: 'dto-hub', module: 'design-to-order' },
-    { label: 'DIN Costing', screen: 'design-wise-costing', module: 'design-to-order' },
+    { label: 'Design-wise Costing', screen: 'design-wise-costing', module: 'design-to-order' },
     { label: 'Program & Dispatch', screen: 'program-dispatch', sub: 'pto', module: 'program-dispatch' },
     { label: 'Warp Yarn Management', screen: 'warp-yarn', sub: 'overview', module: 'warp-yarn' },
     { label: 'Attendance & Payroll', screen: 'hr-payroll', sub: 'dashboard', module: 'hr-payroll' },

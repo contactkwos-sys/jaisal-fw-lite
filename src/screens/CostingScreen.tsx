@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { ShareActions } from '../components/ShareActions'
 import { SubTabs } from '../components/SubTabs'
 import { useAuth } from '../lib/auth'
-import type { ElectricityEntry } from '../lib/database.types'
-import { applyOrQueue, todayISO } from '../lib/mutate'
+import type { ElectricityEntry, GebReading } from '../lib/database.types'
+import { todayISO } from '../lib/mutate'
 import { printSummary, rowsToHtml, shareWhatsApp } from '../lib/share'
 import { supabase } from '../lib/supabase'
 
@@ -11,35 +11,28 @@ type Sub = 'summary' | 'electricity'
 type Props = { initialSub?: Sub }
 
 /**
- * Yarn consumption proxy (assumed):
- * average yarn amount across design_warp + design_weft rows × today's production meters.
- * (Design Master no longer stores flat warp_rate/weft_rate; see design_warp / design_weft.)
+ * Daily Factory Costing + Daily P&L (preserved; separate from Design-wise Costing).
+ * D-07: Electricity for the day is taken from GEB Readings (canonical meter).
+ * Legacy electricity_entries remain visible as history only — not deleted.
  */
 export function CostingScreen({ initialSub = 'summary' }: Props) {
-  const { isCeo, profile } = useAuth()
+  const { isCeo } = useAuth()
   const [sub, setSub] = useState<Sub>(initialSub)
   const [date, setDate] = useState(todayISO())
-  const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
 
   const [salary, setSalary] = useState(0)
   const [yarnCost, setYarnCost] = useState(0)
   const [electricity, setElectricity] = useState(0)
   const [maintenance, setMaintenance] = useState(0)
   const [billing, setBilling] = useState(0)
-  const [entries, setEntries] = useState<ElectricityEntry[]>([])
+  const [gebRows, setGebRows] = useState<GebReading[]>([])
+  const [legacyElec, setLegacyElec] = useState<ElectricityEntry[]>([])
 
-  const [source, setSource] = useState('DGVCL Meter')
-  const [unit, setUnit] = useState('')
-  const [rate, setRate] = useState('')
-
-  const elecTotal = useMemo(() => (Number(unit) || 0) * (Number(rate) || 0), [unit, rate])
   const expense = salary + yarnCost + electricity + maintenance
   const profit = billing - expense
 
   const loadSummary = useCallback(async () => {
-    const month = date.slice(0, 7)
     const [
       { data: att },
       { data: rates },
@@ -47,7 +40,8 @@ export function CostingScreen({ initialSub = 'summary' }: Props) {
       { data: prod },
       { data: warps },
       { data: wefts },
-      { data: elec },
+      { data: geb },
+      { data: legacy },
       { data: maint },
       { data: repair },
       { data: challans },
@@ -58,10 +52,23 @@ export function CostingScreen({ initialSub = 'summary' }: Props) {
       supabase.from('production_entries').select('total_meter').eq('entry_date', date),
       supabase.from('design_warp').select('amount'),
       supabase.from('design_weft').select('amount'),
+      supabase.from('geb_readings').select('*').eq('reading_date', date).order('created_at', { ascending: false }),
       supabase.from('electricity_entries').select('*').eq('entry_date', date),
-      supabase.from('maintenance_requests').select('cost').gte('created_at', `${date}T00:00:00`).lte('created_at', `${date}T23:59:59`),
-      supabase.from('repairing_tracker').select('cost').gte('created_at', `${date}T00:00:00`).lte('created_at', `${date}T23:59:59`),
-      supabase.from('challans').select('total').gte('created_at', `${date}T00:00:00`).lte('created_at', `${date}T23:59:59`),
+      supabase
+        .from('maintenance_requests')
+        .select('cost')
+        .gte('created_at', `${date}T00:00:00`)
+        .lte('created_at', `${date}T23:59:59`),
+      supabase
+        .from('repairing_tracker')
+        .select('cost')
+        .gte('created_at', `${date}T00:00:00`)
+        .lte('created_at', `${date}T23:59:59`),
+      supabase
+        .from('challans')
+        .select('total')
+        .gte('created_at', `${date}T00:00:00`)
+        .lte('created_at', `${date}T23:59:59`),
     ])
 
     const rateByRole = new Map((rates ?? []).map((r) => [r.role_id, Number(r.rate_per_day || 0)]))
@@ -79,7 +86,6 @@ export function CostingScreen({ initialSub = 'summary' }: Props) {
       const rid = w.role_id
       sal += rid ? rateByRole.get(rid) || 0 : 0
     }
-    // If no role_id mapping, fall back to average rate × present count
     if (sal === 0 && presentIds.size && (rates ?? []).length) {
       const avg =
         (rates ?? []).reduce((s, r) => s + Number(r.rate_per_day || 0), 0) / (rates ?? []).length
@@ -89,15 +95,19 @@ export function CostingScreen({ initialSub = 'summary' }: Props) {
 
     const meters = (prod ?? []).reduce((s, p) => s + Number(p.total_meter || 0), 0)
     const yarnRows = [...(warps ?? []), ...(wefts ?? [])]
-    const avgYarn =
-      yarnRows.length
-        ? yarnRows.reduce((s, d) => s + Number(d.amount || 0), 0) / yarnRows.length
-        : 0
+    const avgYarn = yarnRows.length
+      ? yarnRows.reduce((s, d) => s + Number(d.amount || 0), 0) / yarnRows.length
+      : 0
     setYarnCost(avgYarn * meters)
 
-    const elecSum = (elec ?? []).reduce((s, e) => s + Number(e.total || 0), 0)
-    setElectricity(elecSum)
-    setEntries((elec as ElectricityEntry[]) ?? [])
+    const gebList = (geb as GebReading[]) ?? []
+    setGebRows(gebList)
+    const gebSum = gebList.reduce((s, e) => s + Number(e.amount || 0), 0)
+    const legacyList = (legacy as ElectricityEntry[]) ?? []
+    setLegacyElec(legacyList)
+    // Prefer GEB (canonical). Fall back to legacy electricity_entries if no GEB that day.
+    const legacySum = legacyList.reduce((s, e) => s + Number(e.total || 0), 0)
+    setElectricity(gebSum > 0 ? gebSum : legacySum)
 
     const maintSum =
       (maint ?? []).reduce((s, m) => s + Number(m.cost || 0), 0) +
@@ -105,7 +115,6 @@ export function CostingScreen({ initialSub = 'summary' }: Props) {
     setMaintenance(maintSum)
 
     setBilling((challans ?? []).reduce((s, c) => s + Number(c.total || 0), 0))
-    void month
   }, [date])
 
   useEffect(() => {
@@ -116,46 +125,10 @@ export function CostingScreen({ initialSub = 'summary' }: Props) {
     if (initialSub) setSub(initialSub)
   }, [initialSub])
 
-  async function saveElectricity(e: React.FormEvent) {
-    e.preventDefault()
-    if (!profile) return
-    setBusy(true)
-    setError(null)
-    setMessage(null)
-    try {
-      const payload = {
-        entry_date: date,
-        source,
-        unit_kwh: Number(unit) || 0,
-        rate_per_unit: Number(rate) || 0,
-      }
-      const result = await applyOrQueue({
-        isCeo,
-        userId: profile.id,
-        tableName: 'electricity_entries',
-        action: 'insert',
-        recordId: null,
-        payload,
-        apply: async () => {
-          const { error: iErr } = await supabase.from('electricity_entries').insert(payload)
-          if (iErr) throw iErr
-        },
-      })
-      setMessage(result === 'applied' ? 'Electricity saved' : 'Sent to approval queue')
-      setUnit('')
-      setRate('')
-      await loadSummary()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Save failed')
-    } finally {
-      setBusy(false)
-    }
-  }
-
   if (!isCeo) {
     return (
       <div className="screen">
-        <p className="text-danger">Costing Paper is CEO-only.</p>
+        <p className="text-danger">Daily Factory Costing is CEO-only.</p>
       </div>
     )
   }
@@ -163,13 +136,14 @@ export function CostingScreen({ initialSub = 'summary' }: Props) {
   return (
     <div className="screen">
       <header className="screen-header">
-        <h1>Costing Paper</h1>
+        <h1>Daily Factory Costing</h1>
+        <p className="text-muted">Daily P&amp;L · separate from Design-wise Costing</p>
         <SubTabs
           value={sub}
           onChange={(id) => setSub(id as Sub)}
           options={[
             { id: 'summary', label: 'Daily Summary' },
-            { id: 'electricity', label: 'Electricity' },
+            { id: 'electricity', label: 'Electricity (GEB)' },
           ]}
         />
         <label className="field">
@@ -190,7 +164,7 @@ export function CostingScreen({ initialSub = 'summary' }: Props) {
               <strong className="num">₹{yarnCost.toFixed(0)}</strong>
             </div>
             <div className="kpi-card surface">
-              <span className="text-muted">Electricity</span>
+              <span className="text-muted">Electricity (GEB)</span>
               <strong className="num">₹{electricity.toFixed(0)}</strong>
             </div>
             <div className="kpi-card surface">
@@ -219,16 +193,16 @@ export function CostingScreen({ initialSub = 'summary' }: Props) {
           <ShareActions
             onWhatsApp={() =>
               shareWhatsApp(
-                `Costing ${date}\nSalary ₹${salary.toFixed(0)}\nYarn ₹${yarnCost.toFixed(0)}\nElec ₹${electricity.toFixed(0)}\nMaint ₹${maintenance.toFixed(0)}\nExpense ₹${expense.toFixed(0)}\nBilling ₹${billing.toFixed(0)}\nProfit ₹${profit.toFixed(0)}`,
+                `Daily Factory Costing ${date}\nSalary ₹${salary.toFixed(0)}\nYarn ₹${yarnCost.toFixed(0)}\nElec ₹${electricity.toFixed(0)}\nMaint ₹${maintenance.toFixed(0)}\nExpense ₹${expense.toFixed(0)}\nBilling ₹${billing.toFixed(0)}\nProfit ₹${profit.toFixed(0)}`,
               )
             }
             onPrint={() =>
               printSummary(
-                `Daily Costing ${date}`,
+                `Daily Factory Costing ${date}`,
                 rowsToHtml([
                   ['Salary', salary.toFixed(0)],
                   ['Yarn', yarnCost.toFixed(0)],
-                  ['Electricity', electricity.toFixed(0)],
+                  ['Electricity (GEB)', electricity.toFixed(0)],
                   ['Maintenance', maintenance.toFixed(0)],
                   ['Expense', expense.toFixed(0)],
                   ['Billing', billing.toFixed(0)],
@@ -241,44 +215,42 @@ export function CostingScreen({ initialSub = 'summary' }: Props) {
       ) : null}
 
       {sub === 'electricity' ? (
-        <form className="form-stack" onSubmit={(e) => void saveElectricity(e)}>
-          <label className="field">
-            <span className="text-muted">Source</span>
-            <select value={source} onChange={(e) => setSource(e.target.value)}>
-              <option>DGVCL Meter</option>
-              <option>DG Set</option>
-              <option>Other</option>
-            </select>
-          </label>
-          <label className="field">
-            <span className="text-muted">Unit (kWh)</span>
-            <input className="num" type="number" step="0.01" value={unit} onChange={(e) => setUnit(e.target.value)} required />
-          </label>
-          <label className="field">
-            <span className="text-muted">Rate / Unit</span>
-            <input className="num" type="number" step="0.01" value={rate} onChange={(e) => setRate(e.target.value)} required />
-          </label>
-          <label className="field">
-            <span className="text-muted">Total</span>
-            <input className="num readonly" value={elecTotal.toFixed(2)} readOnly />
-          </label>
-          <button type="submit" className="primary-save" disabled={busy}>Save</button>
-
+        <div className="form-stack">
+          <p className="text-muted">
+            Canonical meter entry is <strong>GEB Reading</strong> (Security / Reports). New readings are
+            not entered here — this tab shows today&apos;s GEB figures used by Daily Factory Costing.
+          </p>
           <div className="list">
-            {entries.map((en) => (
+            {gebRows.map((en) => (
               <article key={en.id} className="card-row surface">
-                <strong>{en.source}</strong>
+                <strong>GEB · {en.reading_date}</strong>
                 <div className="text-muted num">
-                  {en.unit_kwh} kWh × ₹{en.rate_per_unit} = ₹{Number(en.total).toFixed(2)}
+                  Meter {en.meter_reading} · Units {en.unit_consumed} × ₹{en.rate_per_unit} = ₹
+                  {Number(en.amount).toFixed(2)}
                 </div>
               </article>
             ))}
+            {!gebRows.length ? <p className="text-muted">No GEB reading for this date</p> : null}
           </div>
-        </form>
+          {legacyElec.length ? (
+            <>
+              <h3 className="section-title">Legacy electricity entries (read-only)</h3>
+              <div className="list">
+                {legacyElec.map((en) => (
+                  <article key={en.id} className="card-row surface">
+                    <strong>{en.source} (LEGACY)</strong>
+                    <div className="text-muted num">
+                      {en.unit_kwh} kWh × ₹{en.rate_per_unit} = ₹{Number(en.total).toFixed(2)}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </>
+          ) : null}
+        </div>
       ) : null}
 
       {error ? <p className="form-error text-danger">{error}</p> : null}
-      {message ? <p className="form-ok text-sage">{message}</p> : null}
     </div>
   )
 }
