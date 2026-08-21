@@ -14,6 +14,7 @@ import './styles/hr-payroll.css'
 import './styles/program-dispatch.css'
 import './styles/security-inventory.css'
 import './styles/machine-maintenance.css'
+import './styles/machine-wise-production.css'
 import App from './App.tsx'
 
 createRoot(document.getElementById('root')!).render(
