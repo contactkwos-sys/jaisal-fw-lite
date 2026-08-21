@@ -611,7 +611,7 @@ export function DashboardScreen({ onNavigate }: Props) {
                     Edit
                   </button>
                   <button type="button" className="btn-ghost icon-btn" disabled={busy} onClick={() => void deleteBeam(b)}>
-                    Del
+                    Delete
                   </button>
                 </div>
               </article>
@@ -627,7 +627,7 @@ export function DashboardScreen({ onNavigate }: Props) {
                     Edit
                   </button>
                   <button type="button" className="btn-ghost icon-btn" disabled={busy} onClick={() => void deleteYarn(y)}>
-                    Del
+                    Delete
                   </button>
                 </div>
               </article>

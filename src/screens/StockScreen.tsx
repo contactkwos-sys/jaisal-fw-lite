@@ -184,7 +184,7 @@ export function StockScreen({ initialTab = 'beam', onTabChange }: Props) {
                 aria-label="Delete"
                 onClick={() => void deleteBeam(row)}
               >
-                Del
+                Delete
               </button>
             </div>
           </article>
