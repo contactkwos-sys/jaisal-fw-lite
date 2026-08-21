@@ -673,6 +673,7 @@ export type Challan = {
   design_no?: string | null
   quality?: string | null
   colour?: string | null
+  status?: string | null
   lot_ids?: string[] | null
 }
 

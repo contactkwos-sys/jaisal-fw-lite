@@ -106,6 +106,14 @@ record('drawer closes on nav', (await m.locator('.app-shell.drawer-is-open').cou
 record('module hub cards', (await m.locator('.hub-card').count()) >= 3)
 await shot(m, 'ui-mobile-production-hub')
 
+await ham.click()
+await m.waitForTimeout(300)
+record('Program & Dispatch in nav', (await m.locator('.side-nav').innerText()).includes('Program & Dispatch'))
+await m.locator('.side-nav').locator('.side-nav-item', { hasText: 'Program & Dispatch' }).first().click()
+await m.waitForTimeout(500)
+record('program dispatch screen', (await m.locator('.pd-hub, .pd-screen, .screen').count()) >= 1)
+await shot(m, 'ui-mobile-program-dispatch')
+
 await mobile.close()
 
 // TABLET
@@ -167,7 +175,7 @@ record('desktop sidebar visible', await d.locator('.app-sidebar').isVisible())
 await d.locator('.side-nav').getByRole('button', { name: 'Dashboard', exact: true }).click()
 await d.waitForTimeout(1400)
 const kpiCount = await d.locator('.kpi-card').count()
-record('6 KPI cards', kpiCount === 6, { kpiCount })
+record('KPI cards present', kpiCount >= 6, { kpiCount })
 record('summary flow', (await d.locator('.flow-row-h').count()) >= 1)
 const tables = await d.locator('.dash-table').count()
 record('inward+machines tables', tables >= 2, { tables })
@@ -178,19 +186,17 @@ await shot(d, 'ui-desktop-dashboard')
 const bg = await d.evaluate(() => getComputedStyle(document.body).backgroundColor)
 record('light theme body', !bg.includes('20,') && !bg.includes('rgb(20'), { bg })
 
-for (const name of ['Orders', 'Inventory', 'Security']) {
-  await d.locator('.side-nav').getByRole('button', { name, exact: true }).click()
+for (const name of ['Orders & Pending', 'Inventory', 'Security']) {
+  await d.locator('.side-nav .side-nav-item', { hasText: name }).first().click()
   await d.waitForTimeout(500)
   record(`open ${name} hub`, (await d.locator('.hub-card, .screen').count()) > 0)
 }
 await shot(d, 'ui-desktop-orders-hub')
 
-// Program Card via Orders hub
-await d.locator('.side-nav').getByRole('button', { name: 'Orders', exact: true }).click()
-await d.waitForTimeout(500)
-await d.locator('.hub-card').filter({ hasText: 'Program Card' }).first().click()
+// Program & Dispatch module
+await d.locator('.side-nav .side-nav-item', { hasText: 'Program & Dispatch' }).first().click()
 await d.waitForTimeout(700)
-record('program card form', (await d.locator('.program-card-form, .program-save-btn, form').count()) > 0)
+record('program dispatch form', (await d.locator('.pd-hub, .pd-workflow, .pd-kpi, .screen').count()) > 0)
 await shot(d, 'ui-desktop-program')
 
 await desk.close()

@@ -208,7 +208,7 @@ function AuthenticatedApp() {
           onSubChange={(s) => setSub(s)}
           onNavigate={go}
         />
-      ) : null}
+       ) : null}
       {tab === 'parties' ? <PartyMasterScreen /> : null}
       {tab === 'item-master' ? <ItemMasterScreen /> : null}
       {tab === 'purchase' ? <PurchaseScreen initialSub={sub || 'general'} /> : null}
@@ -242,7 +242,10 @@ function AuthenticatedApp() {
         <AdminScreen initialSub={(sub as 'roles' | 'payroll' | 'approvals' | 'permissions') || 'roles'} />
       ) : null}
       {tab === 'costing' ? (
-        <CostingScreen initialSub={(sub as 'summary' | 'electricity') || 'summary'} />
+        <CostingScreen
+          initialSub={(sub as 'factory' | 'production' | 'dispatch' | 'mtd' | 'monthly' | 'sources' | 'summary' | 'electricity') || 'factory'}
+          onOpenGeb={() => go({ screen: 'geb-readings', module: 'reports' })}
+        />
       ) : null}
       {tab === 'sample-job-card' ? <SampleJobCard /> : null}
       {tab === 'sample-register' ? <SampleRegister /> : null}

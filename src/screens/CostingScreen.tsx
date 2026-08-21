@@ -1,134 +1,102 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ShareActions } from '../components/ShareActions'
 import { SubTabs } from '../components/SubTabs'
 import { useAuth } from '../lib/auth'
-import type { ElectricityEntry, GebReading } from '../lib/database.types'
+import {
+  inr,
+  loadDailyFactoryPnL,
+  loadDispatchPnL,
+  loadMtdPnL,
+  loadPeriodPnL,
+  loadProductionPnL,
+  type CostSourceRef,
+  type DailyFactoryPnL,
+  type DispatchPnLRow,
+  type PeriodPnL,
+  type ProductionPnLRow,
+} from '../lib/dailyCosting'
 import { todayISO } from '../lib/mutate'
 import { printSummary, rowsToHtml, shareWhatsApp } from '../lib/share'
-import { supabase } from '../lib/supabase'
 
-type Sub = 'summary' | 'electricity'
-type Props = { initialSub?: Sub }
+type Sub = 'factory' | 'production' | 'dispatch' | 'mtd' | 'monthly' | 'sources'
+type Props = {
+  initialSub?: Sub | 'summary' | 'electricity'
+  onOpenGeb?: () => void
+}
 
 /**
- * Daily Factory Costing + Daily P&L (preserved; separate from Design-wise Costing).
- * D-07: Electricity for the day is taken from GEB Readings (canonical meter).
- * Legacy electricity_entries remain visible as history only — not deleted.
+ * Daily Costing & Profit / Loss — factory financial performance.
+ * Aggregates canonical module data. Design-wise Costing remains separate.
  */
-export function CostingScreen({ initialSub = 'summary' }: Props) {
+export function CostingScreen({ initialSub = 'factory', onOpenGeb }: Props) {
   const { isCeo } = useAuth()
-  const [sub, setSub] = useState<Sub>(initialSub)
+  const mappedInitial: Sub =
+    initialSub === 'summary' || initialSub === 'electricity' ? 'factory' : (initialSub as Sub)
+  const [sub, setSub] = useState<Sub>(mappedInitial)
   const [date, setDate] = useState(todayISO())
+  const [month, setMonth] = useState(todayISO().slice(0, 7))
   const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
 
-  const [salary, setSalary] = useState(0)
-  const [yarnCost, setYarnCost] = useState(0)
-  const [electricity, setElectricity] = useState(0)
-  const [maintenance, setMaintenance] = useState(0)
-  const [billing, setBilling] = useState(0)
-  const [gebRows, setGebRows] = useState<GebReading[]>([])
-  const [legacyElec, setLegacyElec] = useState<ElectricityEntry[]>([])
+  const [factory, setFactory] = useState<DailyFactoryPnL | null>(null)
+  const [production, setProduction] = useState<ProductionPnLRow[]>([])
+  const [dispatch, setDispatch] = useState<DispatchPnLRow[]>([])
+  const [mtd, setMtd] = useState<PeriodPnL | null>(null)
+  const [monthly, setMonthly] = useState<PeriodPnL | null>(null)
+  const [sourceFilter, setSourceFilter] = useState<string>('all')
 
-  const expense = salary + yarnCost + electricity + maintenance
-  const profit = billing - expense
-
-  const loadSummary = useCallback(async () => {
-    const [
-      { data: att },
-      { data: rates },
-      { data: workers },
-      { data: prod },
-      { data: warps },
-      { data: wefts },
-      { data: geb },
-      { data: legacy },
-      { data: maint },
-      { data: repair },
-      { data: challans },
-    ] = await Promise.all([
-      supabase.from('attendance').select('worker_id, status').eq('date', date),
-      supabase.from('payroll_rates').select('*'),
-      supabase.from('workers').select('id, role_id, department'),
-      supabase.from('production_entries').select('total_meter').eq('entry_date', date),
-      supabase.from('design_warp').select('amount'),
-      supabase.from('design_weft').select('amount'),
-      supabase.from('geb_readings').select('*').eq('reading_date', date).order('created_at', { ascending: false }),
-      supabase.from('electricity_entries').select('*').eq('entry_date', date),
-      supabase
-        .from('maintenance_requests')
-        .select('cost')
-        .gte('created_at', `${date}T00:00:00`)
-        .lte('created_at', `${date}T23:59:59`),
-      supabase
-        .from('repairing_tracker')
-        .select('cost')
-        .gte('created_at', `${date}T00:00:00`)
-        .lte('created_at', `${date}T23:59:59`),
-      supabase
-        .from('challans')
-        .select('total')
-        .gte('created_at', `${date}T00:00:00`)
-        .lte('created_at', `${date}T23:59:59`),
-    ])
-
-    const rateByRole = new Map((rates ?? []).map((r) => [r.role_id, Number(r.rate_per_day || 0)]))
-    const presentIds = new Set(
-      (att ?? [])
-        .filter((a) => {
-          const s = String(a.status || '').toLowerCase()
-          return s.includes('present') || s === 'completed' || s === 'on break'
-        })
-        .map((a) => a.worker_id),
-    )
-    let sal = 0
-    for (const w of workers ?? []) {
-      if (!presentIds.has(w.id)) continue
-      const rid = w.role_id
-      sal += rid ? rateByRole.get(rid) || 0 : 0
+  const load = useCallback(async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      if (sub === 'factory' || sub === 'sources') {
+        const f = await loadDailyFactoryPnL(date)
+        setFactory(f)
+      }
+      if (sub === 'production') {
+        const [f, rows] = await Promise.all([loadDailyFactoryPnL(date), loadProductionPnL(date)])
+        setFactory(f)
+        setProduction(rows)
+      }
+      if (sub === 'dispatch') {
+        const [f, rows] = await Promise.all([loadDailyFactoryPnL(date), loadDispatchPnL(date)])
+        setFactory(f)
+        setDispatch(rows)
+      }
+      if (sub === 'mtd') {
+        setMtd(await loadMtdPnL(date))
+      }
+      if (sub === 'monthly') {
+        const from = `${month}-01`
+        const last = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)
+        const to = last.toISOString().slice(0, 10)
+        setMonthly(await loadPeriodPnL(from, to, `Month ${month}`))
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load Daily Costing')
+    } finally {
+      setBusy(false)
     }
-    if (sal === 0 && presentIds.size && (rates ?? []).length) {
-      const avg =
-        (rates ?? []).reduce((s, r) => s + Number(r.rate_per_day || 0), 0) / (rates ?? []).length
-      sal = avg * presentIds.size
-    }
-    setSalary(sal)
-
-    const meters = (prod ?? []).reduce((s, p) => s + Number(p.total_meter || 0), 0)
-    const yarnRows = [...(warps ?? []), ...(wefts ?? [])]
-    const avgYarn = yarnRows.length
-      ? yarnRows.reduce((s, d) => s + Number(d.amount || 0), 0) / yarnRows.length
-      : 0
-    setYarnCost(avgYarn * meters)
-
-    const gebList = (geb as GebReading[]) ?? []
-    setGebRows(gebList)
-    const gebSum = gebList.reduce((s, e) => s + Number(e.amount || 0), 0)
-    const legacyList = (legacy as ElectricityEntry[]) ?? []
-    setLegacyElec(legacyList)
-    // Prefer GEB (canonical). Fall back to legacy electricity_entries if no GEB that day.
-    const legacySum = legacyList.reduce((s, e) => s + Number(e.total || 0), 0)
-    setElectricity(gebSum > 0 ? gebSum : legacySum)
-
-    const maintSum =
-      (maint ?? []).reduce((s, m) => s + Number(m.cost || 0), 0) +
-      (repair ?? []).reduce((s, r) => s + Number(r.cost || 0), 0)
-    setMaintenance(maintSum)
-
-    setBilling((challans ?? []).reduce((s, c) => s + Number(c.total || 0), 0))
-  }, [date])
+  }, [date, month, sub])
 
   useEffect(() => {
-    void loadSummary().catch((e: Error) => setError(e.message))
-  }, [loadSummary])
+    void load()
+  }, [load])
 
   useEffect(() => {
-    if (initialSub) setSub(initialSub)
-  }, [initialSub])
+    setSub(mappedInitial)
+  }, [mappedInitial])
+
+  const filteredSources: CostSourceRef[] = useMemo(() => {
+    const all = factory?.sources ?? []
+    if (sourceFilter === 'all') return all
+    return all.filter((s) => s.source.toLowerCase().includes(sourceFilter.toLowerCase()))
+  }, [factory, sourceFilter])
 
   if (!isCeo) {
     return (
       <div className="screen">
-        <p className="text-danger">Daily Factory Costing is CEO-only.</p>
+        <p className="text-danger">Daily Costing &amp; Profit / Loss is CEO-only.</p>
       </div>
     )
   }
@@ -136,121 +104,419 @@ export function CostingScreen({ initialSub = 'summary' }: Props) {
   return (
     <div className="screen">
       <header className="screen-header">
-        <h1>Daily Factory Costing</h1>
-        <p className="text-muted">Daily P&amp;L · separate from Design-wise Costing</p>
+        <h1>Daily Costing &amp; Profit / Loss</h1>
+        <p className="text-muted" style={{ marginTop: 4 }}>
+          Factory financial performance · aggregates live modules · Design-wise Costing stays separate
+        </p>
         <SubTabs
           value={sub}
           onChange={(id) => setSub(id as Sub)}
           options={[
-            { id: 'summary', label: 'Daily Summary' },
-            { id: 'electricity', label: 'Electricity (GEB)' },
+            { id: 'factory', label: 'Daily Factory P&L' },
+            { id: 'production', label: 'Production P&L' },
+            { id: 'dispatch', label: 'Dispatch P&L' },
+            { id: 'mtd', label: 'MTD P&L' },
+            { id: 'monthly', label: 'Monthly P&L' },
+            { id: 'sources', label: 'Cost Breakdown' },
           ]}
         />
-        <label className="field">
-          <span className="text-muted">Date</span>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        </label>
+        {sub === 'monthly' ? (
+          <label className="field">
+            <span className="text-muted">Month</span>
+            <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
+          </label>
+        ) : (
+          <label className="field">
+            <span className="text-muted">Date</span>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          </label>
+        )}
       </header>
 
-      {sub === 'summary' ? (
-        <div className="form-stack">
-          <div className="kpi-grid">
-            <div className="kpi-card surface">
-              <span className="text-muted">Salary</span>
-              <strong className="num">₹{salary.toFixed(0)}</strong>
-            </div>
-            <div className="kpi-card surface">
-              <span className="text-muted">Yarn Consumption</span>
-              <strong className="num">₹{yarnCost.toFixed(0)}</strong>
-            </div>
-            <div className="kpi-card surface">
-              <span className="text-muted">Electricity (GEB)</span>
-              <strong className="num">₹{electricity.toFixed(0)}</strong>
-            </div>
-            <div className="kpi-card surface">
-              <span className="text-muted">Maintenance / Repair</span>
-              <strong className="num">₹{maintenance.toFixed(0)}</strong>
-            </div>
-          </div>
-
-          <div className="profit-panel surface">
-            <div>
-              <span className="text-muted">Total Expense</span>
-              <div className="num">₹{expense.toFixed(0)}</div>
-            </div>
-            <div>
-              <span className="text-muted">Daily Billing</span>
-              <div className="num">₹{billing.toFixed(0)}</div>
-            </div>
-            <div>
-              <span className="text-muted">Profit</span>
-              <div className={`num ${profit >= 0 ? 'text-sage' : 'text-danger'}`}>
-                ₹{profit.toFixed(0)}
-              </div>
-            </div>
-          </div>
-
-          <ShareActions
-            onWhatsApp={() =>
-              shareWhatsApp(
-                `Daily Factory Costing ${date}\nSalary ₹${salary.toFixed(0)}\nYarn ₹${yarnCost.toFixed(0)}\nElec ₹${electricity.toFixed(0)}\nMaint ₹${maintenance.toFixed(0)}\nExpense ₹${expense.toFixed(0)}\nBilling ₹${billing.toFixed(0)}\nProfit ₹${profit.toFixed(0)}`,
-              )
-            }
-            onPrint={() =>
-              printSummary(
-                `Daily Factory Costing ${date}`,
-                rowsToHtml([
-                  ['Salary', salary.toFixed(0)],
-                  ['Yarn', yarnCost.toFixed(0)],
-                  ['Electricity (GEB)', electricity.toFixed(0)],
-                  ['Maintenance', maintenance.toFixed(0)],
-                  ['Expense', expense.toFixed(0)],
-                  ['Billing', billing.toFixed(0)],
-                  ['Profit', profit.toFixed(0)],
-                ]),
-              )
-            }
-          />
-        </div>
-      ) : null}
-
-      {sub === 'electricity' ? (
-        <div className="form-stack">
-          <p className="text-muted">
-            Canonical meter entry is <strong>GEB Reading</strong> (Security / Reports). New readings are
-            not entered here — this tab shows today&apos;s GEB figures used by Daily Factory Costing.
-          </p>
-          <div className="list">
-            {gebRows.map((en) => (
-              <article key={en.id} className="card-row surface">
-                <strong>GEB · {en.reading_date}</strong>
-                <div className="text-muted num">
-                  Meter {en.meter_reading} · Units {en.unit_consumed} × ₹{en.rate_per_unit} = ₹
-                  {Number(en.amount).toFixed(2)}
-                </div>
-              </article>
-            ))}
-            {!gebRows.length ? <p className="text-muted">No GEB reading for this date</p> : null}
-          </div>
-          {legacyElec.length ? (
-            <>
-              <h3 className="section-title">Legacy electricity entries (read-only)</h3>
-              <div className="list">
-                {legacyElec.map((en) => (
-                  <article key={en.id} className="card-row surface">
-                    <strong>{en.source} (LEGACY)</strong>
-                    <div className="text-muted num">
-                      {en.unit_kwh} kWh × ₹{en.rate_per_unit} = ₹{Number(en.total).toFixed(2)}
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </>
-          ) : null}
-        </div>
-      ) : null}
-
+      {busy ? <p className="text-muted">Loading…</p> : null}
       {error ? <p className="form-error text-danger">{error}</p> : null}
+
+      {sub === 'factory' && factory ? <FactoryView factory={factory} onOpenGeb={onOpenGeb} onOpenSources={() => setSub('sources')} /> : null}
+      {sub === 'production' ? <ProductionView rows={production} factory={factory} /> : null}
+      {sub === 'dispatch' ? <DispatchView rows={dispatch} /> : null}
+      {sub === 'mtd' && mtd ? <PeriodView period={mtd} /> : null}
+      {sub === 'monthly' && monthly ? <PeriodView period={monthly} /> : null}
+      {sub === 'sources' && factory ? (
+        <SourcesView
+          factory={factory}
+          filter={sourceFilter}
+          onFilter={setSourceFilter}
+          rows={filteredSources}
+          onOpenGeb={onOpenGeb}
+        />
+      ) : null}
+    </div>
+  )
+}
+
+function FactoryView({
+  factory,
+  onOpenGeb,
+  onOpenSources,
+}: {
+  factory: DailyFactoryPnL
+  onOpenGeb?: () => void
+  onOpenSources: () => void
+}) {
+  return (
+    <div className="form-stack">
+      <div className="kpi-grid">
+        <button type="button" className="kpi-card surface" onClick={onOpenSources}>
+          <span className="text-muted">Production m</span>
+          <strong className="num">{factory.productionMeters.toFixed(0)}</strong>
+        </button>
+        <button type="button" className="kpi-card surface" onClick={onOpenSources}>
+          <span className="text-muted">Production Value</span>
+          <strong className="num">{inr(factory.productionValue)}</strong>
+        </button>
+        <button type="button" className="kpi-card surface" onClick={onOpenSources}>
+          <span className="text-muted">Dispatch m</span>
+          <strong className="num">{factory.dispatchMeters.toFixed(0)}</strong>
+        </button>
+        <button type="button" className="kpi-card surface" onClick={onOpenSources}>
+          <span className="text-muted">Revenue (Billing)</span>
+          <strong className="num">{inr(factory.revenue)}</strong>
+        </button>
+      </div>
+
+      <div className="kpi-grid">
+        <button type="button" className="kpi-card surface" onClick={onOpenSources}>
+          <span className="text-muted">Salary</span>
+          <strong className="num">{inr(factory.salary)}</strong>
+        </button>
+        <button type="button" className="kpi-card surface" onClick={onOpenGeb}>
+          <span className="text-muted">Electricity (GEB)</span>
+          <strong className="num">{inr(factory.electricity)}</strong>
+        </button>
+        <button type="button" className="kpi-card surface" onClick={onOpenSources}>
+          <span className="text-muted">Warp Yarn</span>
+          <strong className="num">{inr(factory.warpYarn)}</strong>
+        </button>
+        <button type="button" className="kpi-card surface" onClick={onOpenSources}>
+          <span className="text-muted">Weft Yarn</span>
+          <strong className="num">{inr(factory.weftYarn)}</strong>
+        </button>
+        <button type="button" className="kpi-card surface" onClick={onOpenSources}>
+          <span className="text-muted">Maintenance / Repair</span>
+          <strong className="num">{inr(factory.maintenance)}</strong>
+        </button>
+        <button type="button" className="kpi-card surface" onClick={onOpenSources}>
+          <span className="text-muted">Other Expenses</span>
+          <strong className="num">{inr(factory.otherExpenses)}</strong>
+        </button>
+      </div>
+
+      <div className="profit-panel surface">
+        <div>
+          <span className="text-muted">Production Cost</span>
+          <div className="num">{inr(factory.productionCost)}</div>
+        </div>
+        <div>
+          <span className="text-muted">Total Cost</span>
+          <div className="num">{inr(factory.totalCost)}</div>
+        </div>
+        <div>
+          <span className="text-muted">Gross Profit</span>
+          <div className={`num ${factory.grossProfit >= 0 ? 'text-sage' : 'text-danger'}`}>
+            {inr(factory.grossProfit)}
+          </div>
+        </div>
+        <div>
+          <span className="text-muted">Net Operating P&amp;L</span>
+          <div className={`num ${factory.netProfit >= 0 ? 'text-sage' : 'text-danger'}`}>
+            {inr(factory.netProfit)}
+          </div>
+        </div>
+      </div>
+
+      <div className="surface" style={{ padding: 12 }}>
+        <h3 className="section-title" style={{ marginTop: 0 }}>
+          Daily Factory P&amp;L
+        </h3>
+        <p className="text-muted" style={{ marginBottom: 8 }}>
+          Today&apos;s Dispatch (Revenue) − Today&apos;s actual operating costs = Daily Profit / Loss
+        </p>
+        <ul className="text-muted" style={{ margin: 0, paddingLeft: 18 }}>
+          <li>Revenue {inr(factory.revenue)}</li>
+          <li>− Production Cost {inr(factory.productionCost)}</li>
+          <li>− Other Expenses {inr(factory.otherExpenses)}</li>
+          <li>
+            = Net {inr(factory.netProfit)}
+          </li>
+        </ul>
+      </div>
+
+      {factory.gaps.length ? (
+        <div className="surface" style={{ padding: 12 }}>
+          <strong>Data gaps (not silent estimates)</strong>
+          <ul>
+            {factory.gaps.map((g) => (
+              <li key={g} className="text-muted">
+                {g}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      <p className="text-muted">
+        Electricity entry lives in <strong>GEB Readings</strong>
+        {onOpenGeb ? (
+          <>
+            {' '}
+            —{' '}
+            <button type="button" className="linkish" onClick={onOpenGeb}>
+              Open GEB
+            </button>
+          </>
+        ) : null}
+        . This screen only reads meter cost.
+      </p>
+
+      <ShareActions
+        onWhatsApp={() =>
+          shareWhatsApp(
+            `Daily Costing ${factory.date}\nRevenue ${inr(factory.revenue)}\nSalary ${inr(factory.salary)}\nElec ${inr(factory.electricity)}\nWarp ${inr(factory.warpYarn)}\nWeft ${inr(factory.weftYarn)}\nMaint ${inr(factory.maintenance)}\nOther ${inr(factory.otherExpenses)}\nTotal Cost ${inr(factory.totalCost)}\nNet P&L ${inr(factory.netProfit)}`,
+          )
+        }
+        onPrint={() =>
+          printSummary(
+            `Daily Factory P&L ${factory.date}`,
+            rowsToHtml([
+              ['Revenue', factory.revenue.toFixed(0)],
+              ['Salary', factory.salary.toFixed(0)],
+              ['Electricity', factory.electricity.toFixed(0)],
+              ['Warp Yarn', factory.warpYarn.toFixed(0)],
+              ['Weft Yarn', factory.weftYarn.toFixed(0)],
+              ['Maintenance', factory.maintenance.toFixed(0)],
+              ['Other', factory.otherExpenses.toFixed(0)],
+              ['Total Cost', factory.totalCost.toFixed(0)],
+              ['Gross Profit', factory.grossProfit.toFixed(0)],
+              ['Net P&L', factory.netProfit.toFixed(0)],
+            ]),
+          )
+        }
+      />
+    </div>
+  )
+}
+
+function ProductionView({ rows, factory }: { rows: ProductionPnLRow[]; factory: DailyFactoryPnL | null }) {
+  return (
+    <div className="form-stack">
+      {factory ? (
+        <p className="text-muted">
+          Allocations use production-meter share of factory costs for {factory.date}. Yarn valued from
+          actual warp/weft issues.
+        </p>
+      ) : null}
+      <div className="list">
+        {rows.length === 0 ? <p className="text-muted">No production entries for this date.</p> : null}
+        {rows.map((r) => (
+          <article key={r.machineNo} className="card-row surface">
+            <strong>
+              Machine {r.machineNo} · {r.productionMeters.toFixed(0)} m
+            </strong>
+            <div className="text-muted num">
+              Value {inr(r.productionValue)} · Warp {inr(r.warpValue)} · Weft {inr(r.weftValue)} · Elec{' '}
+              {inr(r.electricityAlloc)} · Salary {inr(r.salaryAlloc)} · Maint {inr(r.maintenanceAlloc)} ·
+              Other {inr(r.otherAlloc)}
+            </div>
+            <div className={`num ${r.profitLoss >= 0 ? 'text-sage' : 'text-danger'}`}>
+              Cost {inr(r.totalProductionCost)} · P&amp;L {inr(r.profitLoss)}
+            </div>
+          </article>
+        ))}
+      </div>
+      <ShareActions
+        onWhatsApp={() =>
+          shareWhatsApp(
+            `Production P&L ${factory?.date || ''}\n` +
+              rows
+                .map((r) => `${r.machineNo}: ${r.productionMeters.toFixed(0)}m · P&L ${inr(r.profitLoss)}`)
+                .join('\n'),
+          )
+        }
+        onPrint={() =>
+          printSummary(
+            `Production-wise P&L ${factory?.date || ''}`,
+            rowsToHtml(
+              rows.map((r) => [
+                `${r.machineNo} · ${r.productionMeters.toFixed(0)} m`,
+                `Cost ${r.totalProductionCost.toFixed(0)} · P&L ${r.profitLoss.toFixed(0)}`,
+              ]),
+            ),
+          )
+        }
+      />
+    </div>
+  )
+}
+
+function DispatchView({ rows }: { rows: DispatchPnLRow[] }) {
+  return (
+    <div className="form-stack">
+      <p className="text-muted">Rate comes from challan / approved order flow — not re-entered here.</p>
+      <div className="list">
+        {rows.length === 0 ? <p className="text-muted">No dispatches (challans) for this date.</p> : null}
+        {rows.map((r) => (
+          <article key={r.id} className="card-row surface">
+            <strong>
+              {r.challanNo} · {r.party}
+            </strong>
+            <div className="text-muted">
+              DESI {r.desi} · Order {r.orderNo} · Program {r.programNo}
+            </div>
+            <div className="text-muted num">
+              {r.meters.toFixed(0)} m × ₹{r.rate.toFixed(2)} = {inr(r.salesValue)} · rate: {r.rateSource}
+            </div>
+            <div className={`num ${r.profitLoss >= 0 ? 'text-sage' : 'text-danger'}`}>
+              Prod cost {inr(r.productionCost)} · Margin {inr(r.grossMargin)}
+            </div>
+          </article>
+        ))}
+      </div>
+      <ShareActions
+        onWhatsApp={() =>
+          shareWhatsApp(
+            `Dispatch P&L\n` +
+              rows.map((r) => `${r.challanNo} ${r.party}: ${inr(r.salesValue)} · P&L ${inr(r.profitLoss)}`).join('\n'),
+          )
+        }
+        onPrint={() =>
+          printSummary(
+            'Dispatch-wise P&L',
+            rowsToHtml(
+              rows.map((r) => [
+                `${r.challanNo} · ${r.party} · ${r.meters.toFixed(0)} m`,
+                `Sales ${r.salesValue.toFixed(0)} · P&L ${r.profitLoss.toFixed(0)}`,
+              ]),
+            ),
+          )
+        }
+      />
+    </div>
+  )
+}
+
+function PeriodView({ period }: { period: PeriodPnL }) {
+  return (
+    <div className="form-stack">
+      <div className="profit-panel surface">
+        <div>
+          <span className="text-muted">{period.label} Production</span>
+          <div className="num">{period.productionMeters.toFixed(0)} m</div>
+        </div>
+        <div>
+          <span className="text-muted">{period.label} Dispatch</span>
+          <div className="num">{period.dispatchMeters.toFixed(0)} m</div>
+        </div>
+        <div>
+          <span className="text-muted">{period.label} Revenue</span>
+          <div className="num">{inr(period.revenue)}</div>
+        </div>
+        <div>
+          <span className="text-muted">{period.label} Cost</span>
+          <div className="num">{inr(period.totalCost)}</div>
+        </div>
+        <div>
+          <span className="text-muted">{period.label} P&amp;L</span>
+          <div className={`num ${period.netProfit >= 0 ? 'text-sage' : 'text-danger'}`}>
+            {inr(period.netProfit)}
+          </div>
+        </div>
+      </div>
+      <p className="text-muted">
+        Range {period.from} → {period.to} · {period.days.length} day(s) aggregated from daily factory P&amp;L
+      </p>
+      <ShareActions
+        onWhatsApp={() =>
+          shareWhatsApp(
+            `${period.label} P&L ${period.from}–${period.to}\nRevenue ${inr(period.revenue)}\nCost ${inr(period.totalCost)}\nNet ${inr(period.netProfit)}`,
+          )
+        }
+        onPrint={() =>
+          printSummary(
+            `${period.label} P&L`,
+            rowsToHtml([
+              ['From', period.from],
+              ['To', period.to],
+              ['Revenue', period.revenue.toFixed(0)],
+              ['Cost', period.totalCost.toFixed(0)],
+              ['Net P&L', period.netProfit.toFixed(0)],
+            ]),
+          )
+        }
+      />
+    </div>
+  )
+}
+
+function SourcesView({
+  factory,
+  filter,
+  onFilter,
+  rows,
+  onOpenGeb,
+}: {
+  factory: DailyFactoryPnL
+  filter: string
+  onFilter: (v: string) => void
+  rows: CostSourceRef[]
+  onOpenGeb?: () => void
+}) {
+  return (
+    <div className="form-stack">
+      <p className="text-muted">
+        Drill-down to source transactions. Every amount shows table + method. No silent estimates.
+      </p>
+      <label className="field">
+        <span className="text-muted">Filter</span>
+        <select value={filter} onChange={(e) => onFilter(e.target.value)}>
+          <option value="all">All</option>
+          <option value="salary">Salary</option>
+          <option value="electricity">Electricity</option>
+          <option value="warp">Warp</option>
+          <option value="weft">Weft</option>
+          <option value="maint">Maintenance</option>
+          <option value="repair">Repair</option>
+          <option value="cash">Cash</option>
+          <option value="general">General</option>
+        </select>
+      </label>
+      {onOpenGeb ? (
+        <button type="button" className="primary-save" onClick={onOpenGeb}>
+          Open GEB Readings (electricity entry)
+        </button>
+      ) : null}
+      <div className="list">
+        {rows.length === 0 ? <p className="text-muted">No source lines for this filter.</p> : null}
+        {rows.map((r, i) => (
+          <article key={`${r.table}-${r.id || i}`} className="card-row surface">
+            <strong>
+              {r.source}: {inr(r.amount)}
+            </strong>
+            <div>{r.label}</div>
+            <div className="text-muted">
+              {r.table}
+              {r.id ? ` · ${r.id.slice(0, 8)}` : ''} · {r.method}
+            </div>
+          </article>
+        ))}
+      </div>
+      <ShareActions
+        onPrint={() =>
+          printSummary(
+            `Cost Breakdown ${factory.date}`,
+            rowsToHtml(rows.map((r) => [`${r.source} · ${r.label}`, `${r.amount.toFixed(0)} · ${r.table} · ${r.method}`])),
+          )
+        }
+      />
     </div>
   )
 }

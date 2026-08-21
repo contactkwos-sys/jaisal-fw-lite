@@ -58,7 +58,21 @@ function rebuildDerived(row: RowState, manualStatus?: string): RowState {
   return { ...row, status, total_hours, payable_day }
 }
 
-const DEPT_SUGGESTIONS = ['Weaving', 'Folding', 'Security', 'Maintenance', 'Office', 'Quality', 'Other']
+const DEPT_SUGGESTIONS = [
+  'Weaving',
+  'Folding',
+  'Security',
+  'Security Guard',
+  'ASO',
+  'Assistant Security Officer',
+  'Sweeper',
+  'sweeper 1',
+  'sweeper 2',
+  'Maintenance',
+  'Office',
+  'Quality',
+  'Other',
+]
 
 export function AttendanceScreen() {
   const [date, setDate] = useState(todayISO)

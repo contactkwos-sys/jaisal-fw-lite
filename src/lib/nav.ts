@@ -329,6 +329,13 @@ export const MAIN_MODULES: MainModule[] = [
     items: [
       { id: 'hr-dash', label: 'Dashboard', screen: 'hr-payroll', sub: 'dashboard', hint: 'Live attendance & payroll KPIs' },
       { id: 'hr-employees', label: 'Employee Master', screen: 'hr-payroll', sub: 'employees', hint: 'Employees, bank & designation' },
+      {
+        id: 'hr-job-master',
+        label: 'Job Master',
+        screen: 'admin',
+        sub: 'payroll',
+        hint: 'ASO / Security Guard / Sweeper designations',
+      },
       { id: 'hr-attendance', label: 'Attendance', screen: 'attendance', hint: 'Daily attendance by date & shift' },
       { id: 'hr-leave', label: 'Leave / Holiday', screen: 'hr-payroll', sub: 'leave', hint: 'Leave entries & holidays' },
       { id: 'hr-rates', label: 'Salary Rate Master', screen: 'hr-payroll', sub: 'rates', hint: 'Monthly / daily / hourly rates' },
@@ -441,12 +448,12 @@ export const MAIN_MODULES: MainModule[] = [
       { id: 'beam-remaining', label: 'Beam Remaining', screen: 'beam-remaining', hint: 'Beam meters left' },
       {
         id: 'costing-report',
-        label: 'Daily Factory Costing',
+        label: 'Daily Costing & P&L',
         screen: 'costing',
-        sub: 'summary',
-        hint: 'Daily P&L — separate from Design-wise Costing',
+        sub: 'factory',
+        hint: 'Daily factory / production / dispatch P&L — separate from Design-wise Costing',
       },
-      { id: 'geb-readings', label: 'GEB Electricity', screen: 'geb-readings', hint: 'Daily meter units & cost' },
+      { id: 'geb-readings', label: 'GEB Electricity', screen: 'geb-readings', hint: 'Daily meter units & cost (sole electricity entry)' },
       { id: 'loan-tracker', label: 'Loan Tracker', screen: 'loan-tracker', hint: 'Party-wise loan ledger' },
       {
         id: 'attendance-report',
@@ -559,7 +566,7 @@ export const MAIN_MODULES: MainModule[] = [
         label: 'Documents',
         screen: 'security-inventory',
         sub: 'documents',
-        hint: 'Recent gate documents',
+        hint: 'Recent gate documents · invoice / challan / photos',
       },
       {
         id: 'si-reports',
@@ -572,6 +579,7 @@ export const MAIN_MODULES: MainModule[] = [
       { id: 'yarn-inward-sec', label: 'Yarn Inward OCR', screen: 'yarn-inward', hint: 'Invoice OCR assist at gate' },
       { id: 'approvals', label: 'Approvals', screen: 'admin', sub: 'approvals', hint: 'CEO approval queue' },
       { id: 'geb-sec', label: 'GEB Reading', screen: 'geb-readings', hint: 'Electricity meter entry' },
+      { id: 'login-activity', label: 'Login Activity', screen: 'placeholder', filter: 'login-activity', hint: 'Recent sessions' },
     ],
   },
   {
@@ -622,7 +630,7 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   maintenance: 'Machine-wise Maintenance',
   dispatch: 'Classic Dispatch (LEGACY)',
   admin: 'Admin',
-  costing: 'Daily Factory Costing',
+  costing: 'Daily Costing & P&L',
   orders: 'Order Book',
   programs: 'Program Card (LEGACY)',
   security: 'Security Gate',
@@ -832,20 +840,25 @@ export function titleFor(screen: AppScreen, sub?: string, moduleId?: MainModuleI
   if (screen === 'purchase' && sub === 'repair_inv') return 'Repair Invoices'
   if (screen === 'dispatch' && sub === 'folding') return 'Folding'
   if (screen === 'dispatch') return 'Dispatch'
-  if (screen === 'production' && sub === 'report') return 'Production Report'
-  if (screen === 'production' && sub === 'job') return 'Job Card Issue'
-  if (screen === 'production' && sub === 'entry') return 'Production Entry'
+  if (screen === 'production' && sub === 'report') return 'Shift-wise Production Report'
+  if (screen === 'production' && sub === 'job') return 'Machine-wise Job Card'
+  if (screen === 'production' && sub === 'entry') return 'Classic Production Entry (LEGACY)'
   if (screen === 'orders' && sub === 'report') return 'Party Delivery Report'
   if (screen === 'programs' && sub === 'pending') return 'Program Pending'
-  if (screen === 'programs') return 'Program Card'
+  if (screen === 'programs') return 'Program Card (LEGACY)'
   if (screen === 'security') return 'Security Gate'
   if (screen === 'admin' && sub === 'payroll') return 'Payroll Rates (LEGACY)'
   if (screen === 'admin' && sub === 'permissions') return 'Permission Management'
   if (screen === 'admin' && sub === 'approvals') return 'Approvals'
   if (screen === 'admin') return 'User / PIN Management'
-  if (screen === 'costing' && sub === 'electricity') return 'Daily Factory Costing · Electricity'
-  if (screen === 'costing') return 'Daily Factory Costing'
-  if (screen === 'production' && sub === 'job') return 'Machine-wise Job Card'
+  if (screen === 'costing' && sub === 'factory') return 'Daily Factory P&L'
+  if (screen === 'costing' && sub === 'production') return 'Production-wise P&L'
+  if (screen === 'costing' && sub === 'dispatch') return 'Dispatch-wise P&L'
+  if (screen === 'costing' && sub === 'mtd') return 'MTD P&L'
+  if (screen === 'costing' && sub === 'monthly') return 'Monthly P&L'
+  if (screen === 'costing' && sub === 'sources') return 'Cost Breakdown'
+  if (screen === 'costing' && sub === 'electricity') return 'Daily Costing & P&L · Electricity'
+  if (screen === 'costing') return 'Daily Costing & P&L'
   if (screen === 'sample-register') return 'Sample Register (Archive)'
   if (screen === 'placeholder') {
     const labels: Record<string, string> = {

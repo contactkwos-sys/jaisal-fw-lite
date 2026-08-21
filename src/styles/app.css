@@ -1665,6 +1665,24 @@ body.drawer-open {
   display: inline-block;
 }
 
+.payroll-job-list {
+  gap: 0.55rem;
+}
+
+.payroll-job-card {
+  align-items: flex-start;
+}
+
+.payroll-job-code {
+  display: inline-block;
+  margin-top: 0.25rem;
+  padding: 0.15rem 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
 .dwc-cost-badge {
   display: inline-flex;
   margin-top: 0.25rem;

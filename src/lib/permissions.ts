@@ -98,6 +98,7 @@ const SECURITY_SUBS: Partial<Record<MainModuleId, string[]>> = {
     'security-gate',
     'yarn-inward-sec',
     'geb-sec',
+    'login-activity',
   ],
   inventory: ['yarn-stock', 'warp-yarn-link', 'stock-reports'],
   'warp-yarn': ['wy-overview', 'wy-machines', 'wy-godown', 'wy-empty', 'wy-warper'],
@@ -243,8 +244,9 @@ export function firstAllowedLanding(roleName: string): {
   const first = mods[0] || 'production'
   if (first === 'dashboard') return { module: 'dashboard', screen: 'home' }
   const mod = MAIN_MODULES.find((m) => m.id === first)
-  if (!mod) return { module: 'production', screen: 'module-hub', sub: 'production' }
+  if (!mod) return { module: 'production', screen: 'program-dispatch', sub: 'pto' }
   if (mod.hasHub) return { module: mod.id, screen: 'module-hub', sub: mod.id }
+  // Prefer first permitted sub-item when role has sub restrictions
   const perm = getPermissionsForRole(roleName).find((p) => p.moduleId === mod.id)
   if (perm?.subIds?.length) {
     const item = mod.items.find((i) => perm.subIds!.includes(i.id))
