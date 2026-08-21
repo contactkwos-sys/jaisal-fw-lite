@@ -53,6 +53,7 @@ import { DtoFollowupScreen } from './screens/DtoFollowupScreen'
 import { DtoReportsScreen } from './screens/DtoReportsScreen'
 import { HrPayrollScreen } from './screens/HrPayrollScreen'
 import { ProgramDispatchScreen } from './screens/ProgramDispatchScreen'
+import { MachineWiseProductionScreen } from './screens/MachineWiseProductionScreen'
 import { SecurityInventoryScreen, type SiSub } from './screens/SecurityInventoryScreen'
 
 function AuthenticatedApp() {
@@ -181,6 +182,9 @@ function AuthenticatedApp() {
       {tab === 'orders-pending' ? <OrdersPendingScreen /> : null}
       {tab === 'program-dispatch' ? (
         <ProgramDispatchScreen initialSub={sub || 'pto'} onNavigate={go} />
+      ) : null}
+      {tab === 'machine-wise-production' ? (
+        <MachineWiseProductionScreen initialTab={sub || 'weft'} />
       ) : null}
       {tab === 'security-inventory' ? (
         <SecurityInventoryScreen

@@ -500,6 +500,8 @@ export type Program = {
   planned_date?: string | null
   priority?: string | null
   job_card_no?: string | null
+  din_number?: string | null
+  matching_no?: number | null
 }
 
 export type ProgramPetty = {
@@ -935,6 +937,55 @@ export type DesignCostingWeft = {
   weight_kg: number | null
   rate_per_kg: number | null
   amount: number | null
+}
+
+/** Machine-wise weft yarn issue header */
+export type MachineWeftIssue = {
+  id: string
+  issue_no: string
+  issue_date: string
+  shift: string | null
+  machine_no: string
+  program_id: string | null
+  program_no: string | null
+  job_card_no: string | null
+  din_number: string
+  din_id: string | null
+  design_name: string | null
+  party_name: string | null
+  marka: string | null
+  matching_no: number | null
+  program_meter: number
+  total_required_kg: number
+  total_issued_kg: number
+  issued_by: string | null
+  received_by: string | null
+  remarks: string | null
+  status: string
+  allow_over_issue: boolean
+  created_by: string | null
+  created_at: string
+}
+
+export type MachineWeftIssueItem = {
+  id: string
+  issue_id: string
+  matching_no: number
+  matching_id: string | null
+  colour_name: string
+  role_label: string
+  is_main_ground: boolean
+  colour_hex: string | null
+  required_kg: number
+  issued_kg: number
+  balance_kg: number
+  yarn_stock_id: string | null
+  costing_weft_id: string | null
+  denier: number | null
+  pic: number | null
+  width: number | null
+  sr_no: number
+  created_at: string
 }
 
 /** assumed: 6 looms labelled M1–M6 */

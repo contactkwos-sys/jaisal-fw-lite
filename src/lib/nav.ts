@@ -43,6 +43,7 @@ export type AppScreen =
   | 'dto-reports'
   | 'hr-payroll'
   | 'program-dispatch'
+  | 'machine-wise-production'
   | 'security-inventory'
   | 'module-hub'
   | 'settings-hub'
@@ -114,13 +115,26 @@ export const MAIN_MODULES: MainModule[] = [
     mobileNav: true,
     items: [
       { id: 'warp-issue', label: 'Warp Issue', screen: 'warp-yarn', sub: 'machines', hint: 'Issue / return warp pipes on machines' },
-      { id: 'weft-issue', label: 'Weft Issue', screen: 'purchase', sub: 'weft', hint: 'Weft yarn issue' },
+      {
+        id: 'machine-wise',
+        label: 'Machine-wise Production',
+        screen: 'machine-wise-production',
+        sub: 'weft',
+        hint: 'Weft yarn issue · production entry · machine report',
+      },
+      {
+        id: 'weft-issue',
+        label: 'Weft Yarn Issue',
+        screen: 'machine-wise-production',
+        sub: 'weft',
+        hint: 'Matching-wise weft issue from DIN Costing',
+      },
       {
         id: 'prod-entry',
         label: 'Production Entry',
-        screen: 'program-dispatch',
+        screen: 'machine-wise-production',
         sub: 'entry',
-        hint: 'Opens Program & Dispatch entry',
+        hint: 'Shift / operator / lot meters on same program',
       },
       {
         id: 'folding',
@@ -137,11 +151,11 @@ export const MAIN_MODULES: MainModule[] = [
         hint: 'Challan & dispatch',
       },
       {
-        id: 'machine-wise',
-        label: 'Machine-wise Production',
-        screen: 'program-dispatch',
-        sub: 'reports',
-        hint: 'By machine',
+        id: 'mwp-report',
+        label: 'Machine-wise Report',
+        screen: 'machine-wise-production',
+        sub: 'report',
+        hint: 'Production & weft issue reports',
       },
       {
         id: 'shift-wise',
@@ -447,6 +461,13 @@ export const MAIN_MODULES: MainModule[] = [
         sub: 'reports',
         hint: 'Program & Dispatch reports',
       },
+      {
+        id: 'mwp-report',
+        label: 'Machine-wise Production',
+        screen: 'machine-wise-production',
+        sub: 'report',
+        hint: 'Weft issue + machine production reports',
+      },
       { id: 'stock-report', label: 'Stock Report', screen: 'purchase', sub: 'report', hint: 'Stock & purchase' },
       { id: 'party-delivery', label: 'Party Delivery Report', screen: 'orders', sub: 'report', hint: 'Delivery by party' },
       { id: 'beam-remaining', label: 'Beam Remaining', screen: 'beam-remaining', hint: 'Beam meters left' },
@@ -542,6 +563,7 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   'dto-reports': 'Design to Order Reports',
   'hr-payroll': 'HR & Payroll',
   'program-dispatch': 'Program & Dispatch',
+  'machine-wise-production': 'Machine-wise Production',
   'security-inventory': 'Security Inventory',
   'module-hub': 'Module',
   'settings-hub': 'Settings',
@@ -594,6 +616,7 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
   }
 
   if (screen === 'design-wise-costing') return 'design-to-order'
+  if (screen === 'machine-wise-production') return 'production'
   if (screen === 'production' || screen === 'dispatch') return 'production'
   if (screen === 'stock' || screen === 'purchase' || screen === 'yarn-inward') return 'inventory'
   if (screen === 'cash-book') return 'cash-book'
@@ -695,9 +718,14 @@ export function titleFor(screen: AppScreen, sub?: string, moduleId?: MainModuleI
     }
     return labels[sub || 'overview'] || 'Machine-wise Maintenance'
   }
+  if (screen === 'machine-wise-production') {
+    if (sub === 'entry') return 'Machine-wise Production · Entry'
+    if (sub === 'report') return 'Machine-wise Production · Report'
+    return 'Machine-wise Production'
+  }
   if (screen === 'stock' && sub === 'weft') return 'Yarn Stock'
   if (screen === 'stock') return 'Warp Beam Stock (Legacy)'
-  if (screen === 'purchase' && sub === 'weft') return 'Weft Issue'
+  if (screen === 'purchase' && sub === 'weft') return 'Weft Purchase / Inward'
   if (screen === 'purchase' && sub === 'report') return 'Stock Reports'
   if (screen === 'purchase' && sub === 'maint_in') return 'Consumables / Inward'
   if (screen === 'purchase' && sub === 'repair_inv') return 'Repair Invoices'

@@ -195,3 +195,98 @@ export function shareDocWhatsApp(label: string, lines: string[]) {
   const text = [`*${COMPANY.name}*`, `*${label}*`, '', ...lines].join('\n')
   shareWhatsApp(text)
 }
+
+export type WeftSlipPrintGroup = {
+  badge: string
+  lines: Array<{
+    colour_name: string
+    colour_hex: string
+    role_label: string
+    is_main_ground: boolean
+    required_kg: number
+    issued_kg: number
+  }>
+  total_required_kg: number
+}
+
+/** A4 Weft Yarn Issue Slip — for yarn store handoff with signature lines. */
+export function printWeftYarnIssueSlip(opts: {
+  issueNo: string
+  date: string
+  machineNo: string
+  dinNumber: string
+  design: string
+  programNo: string
+  jobCardNo: string
+  party: string
+  marka: string
+  programMeter: number
+  shift: string
+  issuedBy: string
+  receivedBy: string
+  groups: WeftSlipPrintGroup[]
+  totalRequiredKg: number
+  totalIssuedKg: number
+}) {
+  const matchingBlocks = opts.groups
+    .map((g) => {
+      const rows = g.lines
+        .map((l) => {
+          const role = l.is_main_ground
+            ? `<strong style="text-transform:uppercase">${esc(l.role_label)}</strong>`
+            : esc(l.role_label)
+          return `<tr class="${l.is_main_ground ? 'main-ground' : ''}">
+            <td><span class="dot" style="background:${esc(l.colour_hex)}"></span> ${esc(l.colour_name)}</td>
+            <td>${role}</td>
+            <td>${esc(l.required_kg.toFixed(2))}</td>
+            <td>${esc(l.issued_kg.toFixed(2))}</td>
+          </tr>`
+        })
+        .join('')
+      return `<div class="matching-block">
+        <div class="matching-badge">${esc(g.badge)}</div>
+        <table>
+          <thead><tr><th>Color / Item</th><th>Role</th><th>Required KG</th><th>Issued KG</th></tr></thead>
+          <tbody>${rows}</tbody>
+          <tfoot><tr><td colspan="2"><strong>TOTAL ${esc(g.badge)}</strong></td>
+            <td colspan="2"><strong>${esc(g.total_required_kg.toFixed(2))} KG</strong></td></tr></tfoot>
+        </table>
+      </div>`
+    })
+    .join('')
+
+  openPrintWindow(
+    `Weft Yarn Issue ${opts.issueNo}`,
+    `<style>
+      .din-badge{display:inline-block;background:#1254a0;color:#fff;font-weight:700;padding:6px 14px;border-radius:999px;font-size:14px;letter-spacing:0.04em;margin:8px 0}
+      .matching-badge{display:inline-block;background:#e8f1fb;color:#1254a0;border:1px solid #1769c2;font-weight:700;padding:4px 12px;border-radius:999px;margin:12px 0 6px;font-size:12px}
+      .dot{display:inline-block;width:12px;height:12px;border-radius:50%;border:1px solid #94a3b8;vertical-align:middle;margin-right:6px}
+      tr.main-ground td{background:#f0f7ff;font-weight:600}
+      .sign-wide{margin-top:48px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px}
+      .sign-wide div{text-align:center;border-top:1px solid #94a3b8;padding-top:6px;min-height:48px}
+      .sign-wide .hint{font-size:10px;color:#64748b;margin-top:2px}
+    </style>
+    <div class="doc-title">Weft Yarn Issue Slip</div>
+    <div style="text-align:center"><span class="din-badge">DIN: ${esc(opts.dinNumber)}</span></div>
+    <div class="meta">
+      <div><span>Issue No.</span><strong>${esc(opts.issueNo)}</strong></div>
+      <div><span>Date</span><strong>${esc(opts.date)}</strong></div>
+      <div><span>Machine No.</span><strong>${esc(opts.machineNo)}</strong></div>
+      <div><span>Shift</span><strong>${esc(opts.shift || '—')}</strong></div>
+      <div><span>Design</span><strong>${esc(opts.design)}</strong></div>
+      <div><span>Program No.</span><strong>${esc(opts.programNo)}</strong></div>
+      <div><span>Job Card No.</span><strong>${esc(opts.jobCardNo || '—')}</strong></div>
+      <div><span>Program Meter</span><strong>${esc(opts.programMeter)} MTR</strong></div>
+      <div><span>Party</span><strong>${esc(opts.party)}</strong></div>
+      <div><span>Marka</span><strong>${esc(opts.marka || '—')}</strong></div>
+    </div>
+    <p style="font-weight:700;margin:14px 0 4px;text-transform:uppercase;letter-spacing:0.03em">Matching-wise Yarn Requirement</p>
+    ${matchingBlocks}
+    <p class="tot">TOTAL WEFT KG: ${esc(opts.totalRequiredKg.toFixed(2))} &nbsp;·&nbsp; Issued this slip: ${esc(opts.totalIssuedKg.toFixed(2))} KG</p>
+    <div class="sign-wide">
+      <div>Issued By<br/><strong>${esc(opts.issuedBy || 'Yarn Store')}</strong><div class="hint">Signature &nbsp;____________________</div><div class="hint">Date &nbsp;____________________</div></div>
+      <div>Received By<br/><strong>${esc(opts.receivedBy || 'Machine / Operator')}</strong><div class="hint">Signature &nbsp;____________________</div><div class="hint">Date &nbsp;____________________</div></div>
+      <div>Store Verification<div class="hint">Signature &nbsp;____________________</div><div class="hint">Date &nbsp;____________________</div></div>
+    </div>`,
+  )
+}
