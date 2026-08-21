@@ -92,7 +92,7 @@ const SALESMAN_SUBS: Partial<Record<MainModuleId, string[]>> = {
 
 /** Operator may only open production entry / related entry screens */
 const OPERATOR_SUBS: Partial<Record<MainModuleId, string[]>> = {
-  production: ['prod-entry', 'weft-issue', 'warp-issue', 'folding'],
+  production: ['machine-wise', 'prod-entry', 'weft-issue', 'mwp-report', 'warp-issue', 'folding'],
   'program-dispatch': ['prod-entry', 'folding', 'tracking'],
 }
 
