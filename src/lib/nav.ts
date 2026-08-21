@@ -310,6 +310,13 @@ export const MAIN_MODULES: MainModule[] = [
     items: [
       { id: 'hr-dash', label: 'Dashboard', screen: 'hr-payroll', sub: 'dashboard', hint: 'Live attendance & payroll KPIs' },
       { id: 'hr-employees', label: 'Employee Master', screen: 'hr-payroll', sub: 'employees', hint: 'Employees, bank & designation' },
+      {
+        id: 'hr-job-master',
+        label: 'Job Master',
+        screen: 'admin',
+        sub: 'payroll',
+        hint: 'ASO / Security Guard / Sweeper designations',
+      },
       { id: 'hr-attendance', label: 'Attendance', screen: 'attendance', hint: 'Daily attendance by date & shift' },
       { id: 'hr-leave', label: 'Leave / Holiday', screen: 'hr-payroll', sub: 'leave', hint: 'Leave entries & holidays' },
       { id: 'hr-rates', label: 'Salary Rate Master', screen: 'hr-payroll', sub: 'rates', hint: 'Monthly / daily / hourly rates' },
