@@ -185,13 +185,13 @@ For each decision below, tick **one**:
 | **1. Decision No.** | **D-07** |
 | **2. Current situation** | GEB Readings (`geb_readings`) exist under Security and Reports. Daily Costing still uses older `electricity_entries`. Settings “System Preferences” wrongly opens electricity. |
 | **3. Existing pages involved** | `geb-readings`; Costing → Electricity; Settings Preferences (mislink); Security GEB; Reports GEB |
-| **4. Proposed final solution** | **One meter entry = GEB Readings.** Daily Factory Costing **reads GEB**. Fix Settings Preferences (no electricity). Decide menu homes: Security entry allowed? Reports deep link only? |
+| **4. Proposed final solution** | **One meter entry = GEB Readings.** **Daily Costing & Profit / Loss** reads GEB (never a second electricity DB — see D-25). Fix Settings Preferences (no electricity). Decide menu homes: Security entry allowed? Reports deep link only? |
 | **5. Preserved** | All GEB rows; migrate/read historical `electricity_entries` without delete |
 | **6. Becomes legacy** | `electricity_entries` entry UI; Preferences mislink |
-| **7. Merged** | Electricity entry → GEB; costing consumes GEB |
+| **7. Merged** | Electricity entry → GEB; Daily Costing consumes GEB |
 | **8. Removed later** | Electricity entry UI only after CEO OK; **tables not dropped** without D-09 |
 | **9. Risk if merged** | Daily Costing numbers change if GEB series ≠ old electricity series |
-| **10. Recommended option** | Entry: **Security + Reports deep link**. Costing reads GEB. Reconcile old electricity history as read-only. |
+| **10. Recommended option** | Entry: **Security + Reports deep link**. Daily Costing & P&L reads GEB. Reconcile old electricity history as read-only. |
 
 **11. CEO decision**
 
@@ -546,18 +546,18 @@ For each decision below, tick **one**:
 
 ---
 
-# DECISION 22 — Daily Factory Costing vs Design-wise Costing (naming & separation)
+# DECISION 22 — Daily Costing & P&L vs Design-wise Costing (naming & separation)
 
 | Field | Detail |
 |-------|--------|
 | **1. Decision No.** | **D-22** |
-| **2. Current situation** | Reports “Costing Report” is Daily P&L (`CostingScreen`). “DIN Costing” is Design-wise Costing. Easy to confuse. |
-| **3. Existing pages involved** | `costing`; `design-wise-costing`; Reports hub |
-| **4. Proposed final solution** | Keep **both systems**. Rename daily one to **Daily Factory Costing**. Design-wise Costing stays the DESI costing engine. |
+| **2. Current situation** | Reports “Costing Report” is a thin Daily P&L (`CostingScreen`). “DIN Costing” is Design-wise Costing. Easy to confuse. Full Daily Costing / P&L architecture is decided in **D-25**. |
+| **3. Existing pages involved** | `costing`; `design-wise-costing`; Reports hub; CEO Dashboard |
+| **4. Proposed final solution** | Keep **both systems forever — do not merge**. Rename daily system to **Daily Costing & Profit / Loss** (also “Daily Factory P&L”). Design-wise Costing stays the DESI/design production-cost engine. Never label either as “Matching-wise Costing”. |
 | **5. Preserved** | Both engines and histories |
-| **6–8.** | Label cleanup only |
-| **9. Risk** | Low if renamed; high if someone merges them |
-| **10. Recommended option** | KEEP SEPARATE + rename Daily Factory Costing |
+| **6–8.** | Label cleanup only (architecture = D-25) |
+| **9. Risk** | Low if renamed; **high if someone merges them** |
+| **10. Recommended option** | KEEP SEPARATE + rename to **Daily Costing & Profit / Loss** |
 
 **11. CEO decision**
 
@@ -616,6 +616,174 @@ For each decision below, tick **one**:
 
 ---
 
+# DECISION 25 — Daily Costing & P&L architecture
+
+| Field | Detail |
+|-------|--------|
+| **1. Decision No.** | **D-25** |
+| **2. Current situation** | Thin Daily P&L exists in `CostingScreen` (`costing` / summary). It already aggregates some live data (attendance + `payroll_rates`, `production_entries`, legacy `design_warp`/`design_weft`, `electricity_entries`, maintenance/repair costs, `challans` billing) **and** still allows separate electricity entry into `electricity_entries`. It does **not** yet deliver Production-wise P&L, Dispatch-wise P&L, full Daily Factory P&L with opening/previous day, drill-down source references, cash/general expenses, GEB as sole electricity source, HR `salary_rates`/`payroll_entries`, Design-wise Costing yarn values, or CEO Dashboard P&L cards. Design-wise Costing (`design_costing*`) is a **different** product (DESI/design cost of production). |
+| **3. Existing pages involved** | `costing` (Daily); `design-wise-costing` (Design-wise — **must stay separate**); Dashboard (`home`); GEB (`geb-readings`); HR & Payroll; Machine-wise Production / `production_entries`; Program & Dispatch / `challans` / `gst_invoices` / `order_book*`; Warp Yarn / Weft issue; Machine-wise Maintenance; Cash Book; Reports hub |
+| **4. Proposed final solution** | One canonical **Daily Costing & Profit / Loss** system that **reads/aggregates** existing module data. Deliver three linked views plus dashboard drill-downs: **(A) Daily Factory P&L**, **(B) Production-wise P&L**, **(C) Dispatch-wise P&L**, plus supporting cost reports. **Do not** create duplicate electricity / salary / production / dispatch / billing databases for P&L. **Do not** merge with Design-wise Costing. |
+
+### 4A. Separation (locked)
+
+| Concept | Meaning | Must NOT |
+|---------|---------|----------|
+| **Design-wise Costing** | Cost of producing a particular DESI/design (warp, weft, processing, ₹/mtr, etc.) | Be called Matching-wise Costing; be merged into Daily P&L |
+| **Daily Costing & Profit / Loss** | Actual factory-level daily operating cost and profitability | Be called Matching-wise Costing; re-enter data that already exists elsewhere |
+| **Matching-wise** | Weft yarn requirement / weft yarn issue only | Be used as a costing label |
+
+### 4B. Canonical source modules / tables (READ — no duplicate P&L stores)
+
+| Daily input | Canonical source module | Primary tables / records (today) | Notes |
+|-------------|-------------------------|----------------------------------|-------|
+| Electricity / GEB | GEB Readings (D-07) | `geb_readings` | Sole meter entry; migrate/read-only freeze `electricity_entries` |
+| Salary / manpower | HR & Payroll | `attendance`, `salary_rates` (canonical), `payroll_runs` / `payroll_entries`, `workers` | Stop preferring legacy `payroll_rates` once HR rates are canonical (D-23) |
+| Production meters / value | Machine-wise Production | `production_entries` (+ program/DESI links as available) | One production writer after D-03 |
+| Yarn consumption (warp) | Warp Yarn Management + Design-wise Costing rates where needed | Warp issue/transactions / beam loading; design warp cost from `design_costing_warp` (or historical `design_warp` until retired) | Prefer **actual issue/consumption**; Design-wise supplies rate/structure, not a second daily entry |
+| Yarn consumption (weft) | Machine-wise Production Weft Issue + Design-wise Costing | `machine_weft_issues*`, weft stock/issue; `design_costing_weft` | Matching-wise = requirement/issue only |
+| Chemical / processing | Design-wise Costing + any processing purchase/inward | `design_costing*` processing lines; purchase/inward where chemicals are bought | Pull actuals where recorded |
+| Maintenance cost | Machine-wise Maintenance | `maintenance_requests.cost`, machine breakdown/service costs | Prefer **machine-wise actual** |
+| Repair cost | Canonical Repair + invoices | `maintenance_material`, `repairing_tracker`, `maintenance_repair_invoices` | One repair workflow (D-12) |
+| General / other factory expenses | Purchase / Security general inward + Inventory | `general_purchases*`, SI general, consumables | Aggregate approved operating costs |
+| Cash expenses | Cash Book | `cashbook_entries`, `cashbook_entry_items` | Only where applicable / approved categories |
+| Billing / sales value | Program & Dispatch | `challans.total`, `gst_invoices` | Revenue from dispatch/invoice flow — not retyped in P&L |
+| Dispatch value / rate | Program & Dispatch + Customer Order | `challans.rate`, `order_book_items.rate`, program links | Rate **must** come from approved order/program/dispatch; no unnecessary re-entry |
+| Opening / previous day | Daily Costing & P&L itself (derived) | Prior day closing / MTD roll-forward | Calculated, not a second ledger DB |
+
+**Hard rule:** Daily Costing **aggregates**. If a cost already lives in GEB / Payroll / Production / Yarn / Maintenance / Dispatch / Billing / Cash Book, P&L **pulls it**. Do not ask the user to enter the same fact again.
+
+### 4C. Electricity allocation
+
+| Priority | Method | When |
+|----------|--------|------|
+| 1 | **Machine-wise** from GEB / machine meters if available | Preferred |
+| 2 | **Production-based allocation** (share of day’s meters / machine-day production) | When only factory/total GEB exists |
+| Display | Show allocated ₹ **and** source reference (GEB reading id / date / units × rate) | Always — never silent estimate |
+
+Do **not** invent electricity figures inside Daily Costing. Entry remains GEB only (D-07).
+
+### 4D. Salary allocation
+
+| Priority | Method | When |
+|----------|--------|------|
+| 1 | Department / machine / production allocation from attendance + role/department | Where worker department/machine known |
+| 2 | Present-headcount × approved daily rate from HR Rate Master / payroll day cost | Fallback |
+| Display | Source = attendance date + rate master / payroll entry ids | Always |
+
+Prefer HR canonical rates over legacy Admin `payroll_rates`.
+
+### 4E. Production cost calculation (Production-wise P&L)
+
+For each day (and drill-down by machine / DESI / order / program where linked):
+
+| Field | Source principle |
+|-------|------------------|
+| Date | Production entry date |
+| Production meters | Sum of `production_entries` (canonical) |
+| Production value | Meters × linked approved rate **or** Design-wise ₹/mtr where rate not yet sales-linked — **label which** |
+| Warp consumption/value | Actual warp issue/consumption × cost; reference warp docs |
+| Weft consumption/value | Actual weft issue/consumption × cost; reference weft issue |
+| Processing / manufacturing cost | Design-wise processing + actual chemical/process costs where recorded |
+| Electricity allocation | Per 4C |
+| Salary allocation | Per 4D |
+| Maintenance allocation | Machine-wise actual where possible; else production-share with reference |
+| Other allocated costs | Cash / general / repair shares with explicit method |
+| Total production cost | Sum of above |
+| Production gross margin / P&L | Production value − total production cost |
+
+Allocation must prefer **actual production data**, not arbitrary manual splits. Every calculated line needs a **source/reference** for CEO drill-down.
+
+### 4F. Dispatch profitability (Dispatch-wise P&L)
+
+For each dispatch/challan (and invoice link):
+
+| Field | Source principle |
+|-------|------------------|
+| Dispatch date, Party, DESI, Order no., Program no., Meters | From Program & Dispatch / challan / program / order links |
+| Rate | **Auto** from approved Customer Order / program / dispatch flow (`order_book_items.rate` → challan/invoice). **Do not** re-enter rate in P&L |
+| Sales value | Challan / GST invoice totals |
+| Production cost linked to the order | From Production-wise cost rolled to order/program/DESI meters dispatched |
+| Dispatch-related / other applicable costs | Gate, packing, cash, allocated factory share — only if sourced |
+| Gross margin / Profit-Loss | Sales value − linked costs |
+
+### 4G. Daily Factory P&L (overall)
+
+Example shape (must be clear on screen):
+
+```
+Opening / Previous Day
++ Today's Production (value / cost as defined)
++ Today's Dispatch (sales value)
+− Today's actual operating costs
+= Daily Profit / Loss
+```
+
+Show clearly: **Revenue · Production Cost · Electricity · Salary · Yarn · Maintenance · Other Expenses · Total Cost · Gross Profit · Net Operating Profit/Loss**.
+
+### 4H. CEO Dashboard cards + drill-down
+
+Compact cards (Today + MTD):
+
+| Card | Drill-down opens |
+|------|------------------|
+| Today’s Production / Production Value | Production-wise P&L (or production report) |
+| Today’s Dispatch / Dispatch Value | Dispatch-wise P&L |
+| Today’s Total Cost | Daily Costing & P&L / Cost Breakdown |
+| Today’s Gross Profit | Daily Costing & P&L |
+| **Today’s Net Profit/Loss** | **Daily Costing & P&L report** |
+| Production Profit (if shown) | Production-wise P&L |
+| Dispatch Profit (if shown) | Dispatch-wise P&L |
+| MTD Production / Dispatch / Revenue / Cost / Profit-Loss | MTD P&L / Monthly P&L |
+
+### 4I. Report types to create/retain
+
+1. Daily Costing  
+2. Daily Factory P&L  
+3. Production-wise P&L  
+4. Dispatch-wise P&L  
+5. Machine-wise Cost  
+6. Department-wise Cost  
+7. Monthly P&L  
+8. MTD P&L  
+9. Cost vs Revenue  
+10. Cost Breakdown  
+
+**Filters (where appropriate):** Date · Date Range · Machine · Department · DESI · Order · Party · Program · Production · Dispatch  
+
+**Export:** Print · A4 · PDF · Excel/CSV  
+
+### 4J. How duplicates are avoided
+
+| Avoid | How |
+|-------|-----|
+| Second electricity DB for P&L | GEB only; Daily Costing reads `geb_readings`; freeze `electricity_entries` entry UI |
+| Second salary DB for P&L | HR attendance + rates/payroll only |
+| Second production DB for P&L | `production_entries` only |
+| Second dispatch/billing DB for P&L | `challans` / `gst_invoices` / order rates only |
+| Merging Design-wise into Daily | Forbidden — Design-wise remains DESI cost engine; Daily may **reference** its rates/structure for valuation |
+| Matching-wise Costing label | Forbidden |
+
+| Field | Detail |
+|-------|--------|
+| **5. Preserved** | All existing GEB, payroll, production, yarn, maintenance, dispatch, billing, cash, and Design-wise Costing history |
+| **6. Becomes legacy** | Manual re-entry of electricity inside Daily Costing; opaque P&L numbers without source refs; “Costing Report” vague label; any “Matching-wise Costing” wording |
+| **7. Merged** | Electricity entry → GEB (already D-07); Daily Costing becomes **read/aggregate layer** over canonical modules; Dashboard cards deep-link into the three P&L views |
+| **8. Removed later (if approved)** | `electricity_entries` **entry UI** only after GEB parity (tables not dropped without D-09) |
+| **9. Risk if wrong** | **High** if a parallel costing database is built; **High** if Design-wise and Daily are merged; **Medium** while yarn/allocation methods are incomplete (must show method + gaps, never silent fake numbers) |
+| **10. Recommended option** | **APPROVE** one canonical **Daily Costing & Profit / Loss** architecture as above: aggregate-only, three P&L views, Dashboard drill-down, explicit allocation + source references, Design-wise kept separate |
+
+**11. CEO decision**
+
+- [ ] APPROVE  
+- [ ] MODIFY _______________________________  
+- [ ] KEEP SEPARATE (keep today’s thin CostingScreen only)  
+- [ ] DO NOT CHANGE  
+
+**CEO notes (allocation overrides / revenue definition):** _______________________________
+
+---
+
 # CEO APPROVAL SUMMARY
 
 Numbered list of every decision that needs your answer:
@@ -628,7 +796,7 @@ Numbered list of every decision that needs your answer:
 | 4 | D-04 | Job Card location | Primary in MWP; PD opens same Job Card |
 | 5 | D-05 | Purchase vs Security entry | Security = gate entry; Purchase → report/soft-legacy |
 | 6 | D-06 | Approvals location | Stay under **Security** |
-| 7 | D-07 | GEB / Electricity | GEB = only meter entry; Costing reads GEB; Security + Reports |
+| 7 | D-07 | GEB / Electricity | GEB = only meter entry; Daily Costing & P&L reads GEB; Security + Reports |
 | 8 | D-08 | Sample Register vs Tracking | Register = archive/report; Tracking = live DESI |
 | 9 | D-09 | Legacy table retirement | **No table drops** in compaction; review after 6+ months |
 | 10 | D-10 | DESI terminology | UI DESI + Design-wise Costing; optional “formerly DIN” |
@@ -643,9 +811,10 @@ Numbered list of every decision that needs your answer:
 | 19 | D-19 | Mobile bottom-nav 4 modules | Dashboard · DTO · MWP · Program & Dispatch |
 | 20 | D-20 | Orphan DispatchScreen | LEGACY → merge into Program & Dispatch |
 | 21 | D-21 | Greige Stock false link | Hide/rename until real greige built |
-| 22 | D-22 | Daily vs Design-wise Costing | Keep separate; rename Daily Factory Costing |
+| 22 | D-22 | Daily vs Design-wise Costing | Keep separate; rename **Daily Costing & Profit / Loss** |
 | 23 | D-23 | Batch legacy policy (Program/Beam/Payroll) | Standard LEGACY → hide → later UI remove |
 | 24 | D-24 | Yarn Inward OCR single menu | One home under Security |
+| 25 | D-25 | Daily Costing & P&L architecture | One aggregate P&L; Production + Dispatch + Factory views; no duplicate cost DBs |
 
 ---
 
@@ -655,7 +824,7 @@ Numbered list of every decision that needs your answer:
 |--|--|
 | CEO name | _______________________________ |
 | Date | _______________________________ |
-| Decisions completed | _____ / 24 |
+| Decisions completed | _____ / 25 |
 | Permission to start Phase 1 (UI labels / planning only)? | [ ] YES [ ] NO |
 | Permission to change sidebar/routes? | [ ] YES [ ] NO (default NO until you say) |
 | Permission to migrate data? | [ ] YES [ ] NO (default NO until you say) |
@@ -678,8 +847,9 @@ This file is a **decision sheet only**.
 
 - No software was modified  
 - No merges, deletes, renames, migrations, or deploys were performed  
+- **D-25 documents architecture only — Daily Costing & P&L is not implemented in this phase**  
 
-Return this sheet with your ticks (or a message listing D-01…D-24 answers) before any compaction implementation begins.
+Return this sheet with your ticks (or a message listing D-01…D-25 answers) before any compaction implementation begins.
 
 ---
 
