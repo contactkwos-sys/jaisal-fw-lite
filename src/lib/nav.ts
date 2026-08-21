@@ -405,6 +405,13 @@ export const MAIN_MODULES: MainModule[] = [
         hint: 'Pending outward / repair / docs',
       },
       {
+        id: 'si-documents',
+        label: 'Recent Documents',
+        screen: 'security-inventory',
+        sub: 'documents',
+        hint: 'Invoice / challan / photos',
+      },
+      {
         id: 'si-reports',
         label: 'Security Reports',
         screen: 'security-inventory',
@@ -417,6 +424,7 @@ export const MAIN_MODULES: MainModule[] = [
       { id: 'perm-mgmt', label: 'Permission Management', screen: 'admin', sub: 'permissions', hint: 'Module access by role' },
       { id: 'approvals', label: 'Approvals', screen: 'admin', sub: 'approvals', hint: 'CEO approval queue' },
       { id: 'geb-sec', label: 'GEB Reading', screen: 'geb-readings', hint: 'Electricity meter entry' },
+      { id: 'login-activity', label: 'Login Activity', screen: 'placeholder', filter: 'login-activity', hint: 'Recent sessions' },
     ],
   },
   {
