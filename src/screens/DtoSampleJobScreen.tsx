@@ -152,10 +152,16 @@ export function DtoSampleJobScreen({ onNavigate, initialDinId }: Props) {
       <header className="screen-header no-print">
         <div>
           <h1>Sample Job Card</h1>
-          <p className="text-muted">Select matching(s) from a DIN and issue a sample job card (Print / WhatsApp).</p>
+          <p className="text-muted">
+            Select matching(s) from a DESI and issue a sample job card (Print / WhatsApp).
+          </p>
         </div>
-        <button type="button" className="btn-warp" onClick={() => onNavigate({ screen: 'sample-job-card', module: 'orders' })}>
-          Open classic Sample Job Card
+        <button
+          type="button"
+          className="btn-warp"
+          onClick={() => onNavigate({ screen: 'sample-job-card', module: 'orders' })}
+        >
+          Open Sample Job Card (LEGACY)
         </button>
       </header>
 
@@ -165,7 +171,7 @@ export function DtoSampleJobScreen({ onNavigate, initialDinId }: Props) {
       <form className="surface dto-panel no-print" onSubmit={(e) => void issueCard(e)}>
         <div className="dto-form-grid">
           <label className="field">
-            <span>DIN No.</span>
+            <span>DESI No.</span>
             <select
               value={dinId}
               onChange={(e) => {
@@ -174,7 +180,7 @@ export function DtoSampleJobScreen({ onNavigate, initialDinId }: Props) {
               }}
               required
             >
-              <option value="">Select DIN…</option>
+              <option value="">Select DESI…</option>
               {dins.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.din_number} {d.design_name ? `· ${d.design_name}` : ''}
@@ -241,7 +247,7 @@ export function DtoSampleJobScreen({ onNavigate, initialDinId }: Props) {
         <div className="dto-match-select">
           <h3 className="section-title">Select Matching(s)</h3>
           {matchings.length === 0 ? (
-            <p className="text-muted">No matchings on this DIN. Add them in DIN Intake first.</p>
+            <p className="text-muted">No matchings on this DESI. Add them in DESI Intake first.</p>
           ) : (
             <div className="dto-check-grid">
               {matchings.map((m) => (

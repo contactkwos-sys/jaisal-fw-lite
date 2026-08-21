@@ -55,6 +55,7 @@ import { HrPayrollScreen } from './screens/HrPayrollScreen'
 import { ProgramDispatchScreen } from './screens/ProgramDispatchScreen'
 import { MachineWiseProductionScreen } from './screens/MachineWiseProductionScreen'
 import { SecurityInventoryScreen, type SiSub } from './screens/SecurityInventoryScreen'
+import { ItemMasterScreen } from './screens/ItemMasterScreen'
 
 function AuthenticatedApp() {
   const { session, loading, isCeo, isManager, roleName } = useAuth()
@@ -209,6 +210,7 @@ function AuthenticatedApp() {
         />
        ) : null}
       {tab === 'parties' ? <PartyMasterScreen /> : null}
+      {tab === 'item-master' ? <ItemMasterScreen /> : null}
       {tab === 'purchase' ? <PurchaseScreen initialSub={sub || 'general'} /> : null}
       {tab === 'orders' ? <OrderBookScreen initialSub={sub || 'entry'} /> : null}
       {tab === 'programs' ? <ProgramScreen initialSub={sub || 'create'} /> : null}
@@ -267,6 +269,7 @@ function AuthenticatedApp() {
               'hr-payroll',
               'program-dispatch',
               'warp-yarn',
+              'item-master',
             ].includes(filter)
               ? filter
               : ''

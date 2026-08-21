@@ -101,8 +101,10 @@ export function OrdersPendingScreen({ initialPendingOnly = false }: Props) {
   return (
     <div className="screen">
       <header className="screen-header">
-        <h1>Orders & Pending</h1>
-        <p className="text-muted">Raise orders · track pending · Manager marks done</p>
+        <h1>Internal Pending</h1>
+        <p className="text-muted">
+          Internal store / repair / factory pending list · not customer fabric orders (those use Customer Order)
+        </p>
         <SubTabs
           value={tab}
           onChange={(id) => setTab(id as TabId)}

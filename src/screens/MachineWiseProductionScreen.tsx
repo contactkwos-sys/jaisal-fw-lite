@@ -193,7 +193,7 @@ export function MachineWiseProductionScreen({ initialTab }: { initialTab?: strin
     setMessage(null)
     const din = (dinManual.trim() || selected?.din_number || '').trim()
     if (!din) {
-      setError('Select a program or enter a DIN No.')
+      setError('Select a program or enter a DESI No.')
       return
     }
 
@@ -221,7 +221,7 @@ export function MachineWiseProductionScreen({ initialTab }: { initialTab?: strin
         setGroups([])
         setCostingOk(false)
         setError(
-          `No matching structure or DIN Costing weft rows found for ${din}. Complete DIN Intake + DIN Costing first.`,
+          `No matching structure or Design-wise Costing weft rows found for ${din}. Complete DESI Intake + Design-wise Costing first.`,
         )
         return
       }
@@ -265,9 +265,9 @@ export function MachineWiseProductionScreen({ initialTab }: { initialTab?: strin
       setIssueQty(qty)
 
       if (!costing.wefts.length) {
-        setMessage(`Loaded matchings for ${din}, but no DIN Costing weft params — KG may be 0.`)
+        setMessage(`Loaded matchings for ${din}, but no Design-wise Costing weft params — KG may be 0.`)
       } else {
-        setMessage(`Loaded ${built.length} matching(s) · weft KG from DIN Costing`)
+        setMessage(`Loaded ${built.length} matching(s) · weft KG from Design-wise Costing`)
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Load failed')
@@ -605,7 +605,7 @@ export function MachineWiseProductionScreen({ initialTab }: { initialTab?: strin
             </select>
           </label>
           <label>
-            <span>DIN No.</span>
+            <span>DESI No.</span>
             <input
               value={dinManual}
               onChange={(e) => setDinManual(e.target.value)}

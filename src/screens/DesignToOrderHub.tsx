@@ -61,10 +61,10 @@ export function DesignToOrderHub({ onNavigate }: Props) {
   const matchings = detail?.din_matchings?.slice().sort((a, b) => a.matching_no - b.matching_no) || []
 
   const quick = [
-    { id: 'intake', label: 'DIN Intake', onClick: () => onNavigate({ screen: 'dto-intake', module: 'design-to-order' }) },
+    { id: 'intake', label: 'DESI Intake', onClick: () => onNavigate({ screen: 'dto-intake', module: 'design-to-order' }) },
     {
       id: 'costing',
-      label: 'DIN Costing',
+      label: 'Design-wise Costing',
       onClick: () =>
         onNavigate({
           screen: 'design-wise-costing',
@@ -84,7 +84,7 @@ export function DesignToOrderHub({ onNavigate }: Props) {
     },
     {
       id: 'book',
-      label: 'Order Booking',
+      label: 'Customer Order',
       onClick: () => onNavigate({ screen: 'dto-order-booking', filter: detail?.din_number, module: 'design-to-order' }),
     },
     {
@@ -114,7 +114,9 @@ export function DesignToOrderHub({ onNavigate }: Props) {
       <header className="screen-header dto-header">
         <div>
           <h1>Design to Order</h1>
-          <p className="text-muted">Complete workflow from DIN intake to Final Delivery &amp; Tracking.</p>
+          <p className="text-muted">
+            DESI (formerly DIN) · Design-wise Costing · Sample · Customer Order · Dispatch tracking
+          </p>
         </div>
         <div className="dto-header-actions">
           <button
@@ -161,14 +163,14 @@ export function DesignToOrderHub({ onNavigate }: Props) {
             />
           </div>
           {filtered.length === 0 ? (
-            <DtoEmpty>No DINs yet. Start with DIN Intake.</DtoEmpty>
+            <DtoEmpty>No DESI records yet. Start with DESI Intake.</DtoEmpty>
           ) : (
             <div className="table-wrap">
               <table className="data-table dto-table">
                 <thead>
                   <tr>
                     <th>Date</th>
-                    <th>DIN No.</th>
+                    <th>DESI No.</th>
                     <th>Design</th>
                     <th>Party</th>
                     <th>Warp</th>
@@ -371,7 +373,7 @@ export function DesignToOrderHub({ onNavigate }: Props) {
                   onNavigate({ screen: 'dto-order-booking', filter: detail.din_number, module: 'design-to-order' })
                 }
               >
-                Order Booking
+                Customer Order
               </button>
               . Rates carry into Program &amp; Dispatch automatically.
             </p>

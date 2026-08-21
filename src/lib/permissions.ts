@@ -76,23 +76,9 @@ const ROLE_DEFAULTS: Record<string, MainModuleId[]> = {
   payroll: ['hr-payroll', 'reports'],
 }
 
-/** Salesman — Design to Order without costing rates */
-const SALESMAN_SUBS: Partial<Record<MainModuleId, string[]>> = {
-  'design-to-order': [
-    'din-intake',
-    'sample-job',
-    'sample-tracking',
-    'order-booking',
-    'order-status',
-    'sample-promotion',
-    'followup',
-    'dto-reports',
-  ],
-}
-
 /** Operator may only open production entry / related entry screens */
 const OPERATOR_SUBS: Partial<Record<MainModuleId, string[]>> = {
-  production: ['machine-wise', 'prod-entry', 'weft-issue', 'mwp-report', 'warp-issue', 'folding'],
+  production: ['weft-issue', 'job-card', 'prod-entry', 'mwp-report', 'shift-wise'],
   'program-dispatch': ['prod-entry', 'folding', 'tracking'],
 }
 
@@ -114,9 +100,23 @@ const SECURITY_SUBS: Partial<Record<MainModuleId, string[]>> = {
     'geb-sec',
     'login-activity',
   ],
-  inventory: ['yarn-inward', 'warp-yarn-link'],
+  inventory: ['yarn-stock', 'warp-yarn-link', 'stock-reports'],
   'warp-yarn': ['wy-overview', 'wy-machines', 'wy-godown', 'wy-empty', 'wy-warper'],
   'hr-payroll': ['hr-attendance', 'hr-dash'],
+}
+
+/** Salesman — Design to Order without costing rates */
+const SALESMAN_SUBS: Partial<Record<MainModuleId, string[]>> = {
+  'design-to-order': [
+    'din-intake',
+    'sample-job',
+    'sample-tracking',
+    'order-booking',
+    'order-status',
+    'sample-promotion',
+    'followup',
+    'dto-reports',
+  ],
 }
 
 function normalizeRole(name: string): string {
@@ -207,7 +207,7 @@ export function canAccessSub(roleName: string, moduleId: MainModuleId, subId: st
   const n = normalizeRole(roleName)
   if (n === 'ceo' || n === 'md' || n === 'managing director' || n === 'owner') return true
   if (n === 'manager' && moduleId === 'dashboard') return false
-  // DIN Costing is CEO / MD / Owner / Manager only
+  // Design-wise Costing is CEO / MD / Owner / Manager only
   if (
     (subId === 'din-costing' || subId === 'design-costing') &&
     !(n === 'manager' || n.includes('ceo') || n === 'md' || n.includes('director') || n === 'owner')

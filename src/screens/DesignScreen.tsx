@@ -227,7 +227,7 @@ export function DesignScreen({ onOpenDesignCosting }: Props) {
         </div>
         {onOpenDesignCosting ? (
           <button type="button" className="btn-warp" onClick={() => onOpenDesignCosting()}>
-            Design Wise Costing
+            Design-wise Costing
           </button>
         ) : null}
       </header>
@@ -310,7 +310,7 @@ export function DesignScreen({ onOpenDesignCosting }: Props) {
             </article>
           ))}
           {!recentCostings.length ? (
-            <p className="text-muted">No design costings saved yet — use Design Wise Costing</p>
+            <p className="text-muted">No design costings saved yet — use Design-wise Costing</p>
           ) : null}
         </div>
       </section>

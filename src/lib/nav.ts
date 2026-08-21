@@ -31,6 +31,7 @@ export type AppScreen =
   | 'maint-material'
   | 'loan-tracker'
   | 'geb-readings'
+  | 'item-master'
   | 'orders-pending'
   | 'dto-hub'
   | 'dto-intake'
@@ -97,6 +98,10 @@ export type MainModule = {
   mobileNav?: boolean
 }
 
+/**
+ * FINAL COMPACTION (approved CEO decisions D-01…D-24).
+ * Module id `production` kept for permission compatibility; label = Machine-wise Production.
+ */
 export const MAIN_MODULES: MainModule[] = [
   {
     id: 'dashboard',
@@ -107,111 +112,26 @@ export const MAIN_MODULES: MainModule[] = [
     mobileNav: true,
   },
   {
-    id: 'production',
-    label: 'Production',
-    icon: 'production',
-    screen: 'module-hub',
-    hasHub: true,
-    mobileNav: true,
-    items: [
-      { id: 'warp-issue', label: 'Warp Issue', screen: 'warp-yarn', sub: 'machines', hint: 'Issue / return warp pipes on machines' },
-      {
-        id: 'machine-wise',
-        label: 'Machine-wise Production',
-        screen: 'machine-wise-production',
-        sub: 'weft',
-        hint: 'Weft yarn issue · production entry · machine report',
-      },
-      {
-        id: 'weft-issue',
-        label: 'Weft Yarn Issue',
-        screen: 'machine-wise-production',
-        sub: 'weft',
-        hint: 'Matching-wise weft issue from DIN Costing',
-      },
-      {
-        id: 'prod-entry',
-        label: 'Production Entry',
-        screen: 'machine-wise-production',
-        sub: 'entry',
-        hint: 'Shift / operator / lot meters on same program',
-      },
-      {
-        id: 'folding',
-        label: 'Folding',
-        screen: 'program-dispatch',
-        sub: 'folding',
-        hint: 'Folding & checking lots',
-      },
-      {
-        id: 'dispatch',
-        label: 'Dispatch',
-        screen: 'program-dispatch',
-        sub: 'challan',
-        hint: 'Challan & dispatch',
-      },
-      {
-        id: 'mwp-report',
-        label: 'Machine-wise Report',
-        screen: 'machine-wise-production',
-        sub: 'report',
-        hint: 'Production & weft issue reports',
-      },
-      {
-        id: 'shift-wise',
-        label: 'Shift-wise Production',
-        screen: 'production',
-        sub: 'report',
-        filter: 'shift',
-        hint: 'By shift',
-      },
-    ],
-  },
-  {
-    id: 'inventory',
-    label: 'Inventory',
-    icon: 'inventory',
-    screen: 'module-hub',
-    hasHub: true,
-    mobileNav: true,
-    items: [
-      { id: 'yarn-stock', label: 'Yarn Stock', screen: 'stock', sub: 'weft', hint: 'Opening stock & yarn item master' },
-      {
-        id: 'warp-yarn-link',
-        label: 'Warp Yarn Management',
-        screen: 'warp-yarn',
-        sub: 'overview',
-        hint: 'Open Warp Yarn Management module',
-      },
-      { id: 'yarn-inward', label: 'Yarn Inward OCR', screen: 'yarn-inward', hint: 'Warp/Weft invoice OCR' },
-      { id: 'greige-stock', label: 'Greige Stock', screen: 'production', sub: 'report', hint: 'Greige / production stock' },
-      { id: 'consumables', label: 'Consumables', screen: 'purchase', sub: 'maint_in', hint: 'Maintenance inward' },
-      { id: 'inward', label: 'Inward', screen: 'purchase', sub: 'general', hint: 'General purchase inward' },
-      { id: 'stock-adj', label: 'Stock Adjustment', screen: 'admin', sub: 'approvals', hint: 'Approval / adjust queue' },
-      { id: 'stock-reports', label: 'Stock Reports', screen: 'purchase', sub: 'report', hint: 'Purchase & stock reports' },
-    ],
-  },
-  {
     id: 'design-to-order',
     label: 'Design to Order',
     icon: 'design-to-order',
     screen: 'dto-hub',
     mobileNav: true,
     items: [
-      { id: 'din-intake', label: 'DIN Intake', screen: 'dto-intake', hint: 'DIN Inbox · Upload · Photo · Email' },
+      { id: 'din-intake', label: 'DESI Intake', screen: 'dto-intake', hint: 'DESI Inbox · Upload · Photo · Email' },
       {
         id: 'din-costing',
-        label: 'DIN Costing',
+        label: 'Design-wise Costing',
         screen: 'design-wise-costing',
-        hint: 'Same Design Wise Costing engine (CEO)',
+        hint: 'Canonical Design-wise Costing engine (CEO)',
       },
-      { id: 'sample-job', label: 'Sample Job Card', screen: 'dto-sample-job', hint: 'Issue sample cards' },
-      { id: 'sample-tracking', label: 'Sample Tracking', screen: 'dto-tracking', hint: 'Produce · receive · approve' },
-      { id: 'order-booking', label: 'Order Booking', screen: 'dto-order-booking', hint: 'Customer order entry' },
+      { id: 'sample-job', label: 'Sample Job Card', screen: 'dto-sample-job', hint: 'Issue sample cards from DESI' },
+      { id: 'sample-tracking', label: 'Sample Tracking', screen: 'dto-tracking', hint: 'Produce · receive · approve matching' },
+      { id: 'order-booking', label: 'Customer Order', screen: 'dto-order-booking', hint: 'Customer fabric order from DESI' },
       { id: 'order-status', label: 'Order Status', screen: 'dto-order-status', hint: 'Pending & status tracking' },
-      { id: 'sample-promotion', label: 'Customer Promotion', screen: 'dto-promotion', hint: 'Share to parties' },
+      { id: 'sample-promotion', label: 'Customer Promotion', screen: 'dto-promotion', hint: 'Share approved matching' },
       { id: 'followup', label: 'Order Follow-up', screen: 'dto-followup', hint: 'Party follow-ups' },
-      { id: 'dto-reports', label: 'Reports', screen: 'dto-reports', hint: 'Design to Order reports' },
+      { id: 'dto-reports', label: 'DESI Reports', screen: 'dto-reports', hint: 'Design to Order reports' },
     ],
   },
   {
@@ -234,7 +154,7 @@ export const MAIN_MODULES: MainModule[] = [
         label: 'Production Entry',
         screen: 'program-dispatch',
         sub: 'entry',
-        hint: 'Shift / machine / operator meters',
+        hint: 'Canonical MWP Production Entry (embedded)',
       },
       {
         id: 'tracking',
@@ -278,8 +198,73 @@ export const MAIN_MODULES: MainModule[] = [
         sub: 'reports',
         hint: 'Production · checking · dispatch',
       },
-      { id: 'legacy-program', label: 'Program Card (Legacy)', screen: 'programs', sub: 'create', hint: 'Classic program card' },
-      { id: 'legacy-job', label: 'Job Card Issue (Legacy)', screen: 'production', sub: 'job', hint: 'Classic job cards' },
+      {
+        id: 'legacy-program',
+        label: 'Program Card (LEGACY)',
+        screen: 'programs',
+        sub: 'create',
+        hint: 'Legacy — use Program to Production',
+      },
+      {
+        id: 'legacy-dispatch',
+        label: 'Classic Dispatch (LEGACY)',
+        screen: 'dispatch',
+        sub: 'folding',
+        hint: 'Legacy — use Folding / Challan / Gate Pass above',
+      },
+    ],
+  },
+  {
+    id: 'production',
+    label: 'Machine-wise Production',
+    icon: 'production',
+    screen: 'module-hub',
+    hasHub: true,
+    mobileNav: true,
+    items: [
+      {
+        id: 'weft-issue',
+        label: 'Weft Yarn Issue',
+        screen: 'machine-wise-production',
+        sub: 'weft',
+        hint: 'Matching-wise weft requirement & issue from Design-wise Costing',
+      },
+      {
+        id: 'job-card',
+        label: 'Machine-wise Job Card',
+        screen: 'production',
+        sub: 'job',
+        hint: 'Job card issue linked to program',
+      },
+      {
+        id: 'prod-entry',
+        label: 'Production Entry',
+        screen: 'machine-wise-production',
+        sub: 'entry',
+        hint: 'Canonical shift / operator / meters entry',
+      },
+      {
+        id: 'mwp-report',
+        label: 'Machine-wise Report',
+        screen: 'machine-wise-production',
+        sub: 'report',
+        hint: 'Production & weft issue reports',
+      },
+      {
+        id: 'shift-wise',
+        label: 'Shift-wise Production Report',
+        screen: 'production',
+        sub: 'report',
+        filter: 'shift',
+        hint: 'By shift',
+      },
+      {
+        id: 'legacy-entry',
+        label: 'Classic Production Entry (LEGACY)',
+        screen: 'production',
+        sub: 'entry',
+        hint: 'Legacy — use Production Entry above',
+      },
     ],
   },
   {
@@ -288,7 +273,6 @@ export const MAIN_MODULES: MainModule[] = [
     icon: 'warp-yarn',
     screen: 'warp-yarn',
     sub: 'overview',
-    mobileNav: true,
     items: [
       { id: 'wy-overview', label: 'Overview', screen: 'warp-yarn', sub: 'overview', hint: 'Live beam / pipe KPIs' },
       { id: 'wy-machines', label: 'Machine Beam Stock', screen: 'warp-yarn', sub: 'machines', hint: 'M1–M6 beams on loom' },
@@ -297,7 +281,43 @@ export const MAIN_MODULES: MainModule[] = [
       { id: 'wy-warper', label: 'Warper / Job Worker', screen: 'warp-yarn', sub: 'warper', hint: 'Issue · return · KG/meter' },
       { id: 'wy-reports', label: 'Warp Reports', screen: 'warp-yarn', sub: 'reports', hint: 'Transactions & history' },
       { id: 'beam-remaining', label: 'Beam Remaining', screen: 'beam-remaining', hint: 'Beam meters left' },
-      { id: 'legacy-beam', label: 'Beam Pipe (Legacy)', screen: 'warp-beam-pipe', hint: 'Legacy beam pipe screen' },
+      {
+        id: 'legacy-beam',
+        label: 'Beam Pipe (LEGACY)',
+        screen: 'warp-beam-pipe',
+        hint: 'Legacy — prefer Warp Yarn Management tabs',
+      },
+    ],
+  },
+  {
+    id: 'inventory',
+    label: 'Inventory',
+    icon: 'inventory',
+    screen: 'module-hub',
+    hasHub: true,
+    items: [
+      { id: 'yarn-stock', label: 'Yarn Stock', screen: 'stock', sub: 'weft', hint: 'Opening stock & yarn item master' },
+      {
+        id: 'warp-yarn-link',
+        label: 'Warp Yarn Management',
+        screen: 'warp-yarn',
+        sub: 'overview',
+        hint: 'Open Warp Yarn Management module',
+      },
+      {
+        id: 'stock-reports',
+        label: 'Stock Reports',
+        screen: 'purchase',
+        sub: 'report',
+        hint: 'Purchase & stock accounting reports',
+      },
+      {
+        id: 'purchase-legacy',
+        label: 'Purchase Entry (LEGACY)',
+        screen: 'purchase',
+        sub: 'general',
+        hint: 'Legacy entry — prefer Security gate inward',
+      },
     ],
   },
   {
@@ -306,7 +326,6 @@ export const MAIN_MODULES: MainModule[] = [
     icon: 'hr-payroll',
     screen: 'module-hub',
     hasHub: true,
-    mobileNav: true,
     items: [
       { id: 'hr-dash', label: 'Dashboard', screen: 'hr-payroll', sub: 'dashboard', hint: 'Live attendance & payroll KPIs' },
       { id: 'hr-employees', label: 'Employee Master', screen: 'hr-payroll', sub: 'employees', hint: 'Employees, bank & designation' },
@@ -343,14 +362,145 @@ export const MAIN_MODULES: MainModule[] = [
       { id: 'service-history', label: 'Service History', screen: 'maintenance', sub: 'history', hint: 'Auto history from entries' },
       { id: 'spare-parts', label: 'Spare Parts', screen: 'maintenance', sub: 'spares', hint: 'Stock & low-stock alerts' },
       { id: 'contacts', label: 'Contacts Directory', screen: 'maintenance', sub: 'contacts', hint: 'Technicians & contractors' },
+      {
+        id: 'maint-material',
+        label: 'Repair / Material Out · In',
+        screen: 'maint-material',
+        hint: 'Canonical material + auto gate pass',
+      },
+      {
+        id: 'si-repair-link',
+        label: 'Security Repair Gate',
+        screen: 'security-inventory',
+        sub: 'maint-out',
+        hint: 'Gate record for repair outward / return',
+      },
       { id: 'maint-reports', label: 'Maintenance Reports', screen: 'maintenance', sub: 'reports', hint: 'A4 print & CSV reports' },
-      { id: 'maint-material', label: 'Material Out / In', screen: 'maint-material', hint: 'Material + auto gate pass' },
-      { id: 'repair-out', label: 'Repair Out / In', screen: 'maintenance', sub: 'repair', hint: 'Legacy repair tracker / gatepass' },
+      {
+        id: 'repair-out',
+        label: 'Repair Tracker (LEGACY)',
+        screen: 'maintenance',
+        sub: 'repair',
+        hint: 'Legacy repairing tracker',
+      },
+    ],
+  },
+  {
+    id: 'orders',
+    label: 'Orders',
+    icon: 'orders',
+    screen: 'module-hub',
+    hasHub: true,
+    items: [
+      {
+        id: 'orders-pending',
+        label: 'Internal Pending',
+        screen: 'orders-pending',
+        hint: 'Internal store / repair / factory pending list (not customer fabric orders)',
+      },
+      {
+        id: 'order-book',
+        label: 'Order Book (Report / Adjust)',
+        screen: 'orders',
+        sub: 'entry',
+        hint: 'View / adjust customer order book · party delivery',
+      },
+      { id: 'design-job', label: 'Design Master', screen: 'design', hint: 'Design register' },
+      { id: 'design-catalog', label: 'Design Catalog', screen: 'design-catalog', hint: 'Design DNA catalog' },
+      { id: 'broadcast', label: 'Design Broadcast', screen: 'broadcast', hint: 'Post & share new designs' },
+      {
+        id: 'sample-register',
+        label: 'Sample Register (Archive)',
+        screen: 'sample-register',
+        hint: 'Archive / report of sample cards',
+      },
+    ],
+  },
+  {
+    id: 'reports',
+    label: 'Reports',
+    icon: 'reports',
+    screen: 'module-hub',
+    hasHub: true,
+    items: [
+      {
+        id: 'design-costing',
+        label: 'Design-wise Costing',
+        screen: 'design-wise-costing',
+        hint: 'Same Design-wise Costing engine (deep link)',
+      },
+      {
+        id: 'prod-report',
+        label: 'Production Report',
+        screen: 'program-dispatch',
+        sub: 'reports',
+        hint: 'Program & Dispatch reports',
+      },
+      {
+        id: 'mwp-report',
+        label: 'Machine-wise Production',
+        screen: 'machine-wise-production',
+        sub: 'report',
+        hint: 'Weft issue + machine production reports',
+      },
+      { id: 'stock-report', label: 'Stock Report', screen: 'purchase', sub: 'report', hint: 'Stock & purchase' },
+      { id: 'party-delivery', label: 'Party Delivery Report', screen: 'orders', sub: 'report', hint: 'Delivery by party' },
+      { id: 'beam-remaining', label: 'Beam Remaining', screen: 'beam-remaining', hint: 'Beam meters left' },
+      {
+        id: 'costing-report',
+        label: 'Daily Costing & P&L',
+        screen: 'costing',
+        sub: 'factory',
+        hint: 'Daily factory / production / dispatch P&L — separate from Design-wise Costing',
+      },
+      { id: 'geb-readings', label: 'GEB Electricity', screen: 'geb-readings', hint: 'Daily meter units & cost (sole electricity entry)' },
+      { id: 'loan-tracker', label: 'Loan Tracker', screen: 'loan-tracker', hint: 'Party-wise loan ledger' },
+      {
+        id: 'attendance-report',
+        label: 'Attendance Report',
+        screen: 'hr-payroll',
+        sub: 'reports',
+        hint: 'Open HR & Payroll reports',
+      },
+    ],
+  },
+  {
+    id: 'masters',
+    label: 'Masters',
+    icon: 'masters',
+    screen: 'module-hub',
+    hasHub: true,
+    items: [
+      { id: 'party-master', label: 'Party Master', screen: 'parties', hint: 'Customers / parties + Marka' },
+      {
+        id: 'item-master',
+        label: 'Item Master',
+        screen: 'item-master',
+        hint: 'Store / inventory item master',
+      },
+      {
+        id: 'machine-master',
+        label: 'Machine Overview',
+        screen: 'maintenance',
+        sub: 'overview',
+        hint: 'Machine 1–6 overview (M1–M6)',
+      },
+      {
+        id: 'employee-master',
+        label: 'Employee Master',
+        screen: 'hr-payroll',
+        sub: 'employees',
+        hint: 'Open HR & Payroll → Employee Master',
+      },
+      { id: 'design-master', label: 'Design Master', screen: 'design', hint: 'Design register' },
+      { id: 'dept-master', label: 'Department Master', screen: 'placeholder', filter: 'dept-master', hint: 'Departments' },
+      { id: 'shift-master', label: 'Shift Master', screen: 'placeholder', filter: 'shift-master', hint: 'Shift definitions' },
+      { id: 'crm', label: 'CRM Customer Master', screen: 'crm', hint: 'WhatsApp customers' },
     ],
   },
   {
     id: 'security',
-    label: 'Security / Inward',
+    label: 'Security',
     icon: 'security',
     screen: 'module-hub',
     hasHub: true,
@@ -360,35 +510,35 @@ export const MAIN_MODULES: MainModule[] = [
         label: 'Security Inventory',
         screen: 'security-inventory',
         sub: 'dashboard',
-        hint: 'Dashboard · Warp · Weft · Maintenance · General',
+        hint: 'Gate dashboard · Warp · Weft · Maintenance · General',
       },
       {
         id: 'si-warp',
         label: 'Warp Yarn Inward/Outward',
         screen: 'security-inventory',
         sub: 'warp',
-        hint: 'Syncs to Warp Yarn Management',
+        hint: 'Gate record · syncs to Warp Yarn / Inventory',
       },
       {
         id: 'si-weft',
         label: 'Weft Yarn Inward',
         screen: 'security-inventory',
         sub: 'weft',
-        hint: 'Colour-wise weft + GST + photo',
+        hint: 'Canonical weft gate inward + stock post',
       },
       {
         id: 'si-maint-in',
         label: 'Maintenance Material Inward',
         screen: 'security-inventory',
         sub: 'maint-in',
-        hint: 'Parts / store inward',
+        hint: 'Parts / store inward at gate',
       },
       {
         id: 'si-maint-out',
-        label: 'Repair Out / In',
+        label: 'Repair Out / In (Gate)',
         screen: 'security-inventory',
         sub: 'maint-out',
-        hint: 'Maintenance repair outward + return',
+        hint: 'Repair outward + return gate record',
       },
       {
         id: 'si-general',
@@ -413,10 +563,10 @@ export const MAIN_MODULES: MainModule[] = [
       },
       {
         id: 'si-documents',
-        label: 'Recent Documents',
+        label: 'Documents',
         screen: 'security-inventory',
         sub: 'documents',
-        hint: 'Invoice / challan / photos',
+        hint: 'Recent gate documents · invoice / challan / photos',
       },
       {
         id: 'si-reports',
@@ -426,27 +576,10 @@ export const MAIN_MODULES: MainModule[] = [
         hint: 'Daily & A4 printable reports',
       },
       { id: 'security-gate', label: 'Security Gate Logs', screen: 'security', sub: 'inward', hint: 'Consolidated gate logs' },
-      { id: 'yarn-inward-sec', label: 'Yarn Inward OCR', screen: 'yarn-inward', hint: 'Invoice scan' },
-      { id: 'user-mgmt', label: 'User / PIN Management', screen: 'admin', sub: 'roles', hint: 'Users & roles' },
-      { id: 'perm-mgmt', label: 'Permission Management', screen: 'admin', sub: 'permissions', hint: 'Module access by role' },
+      { id: 'yarn-inward-sec', label: 'Yarn Inward OCR', screen: 'yarn-inward', hint: 'Invoice OCR assist at gate' },
       { id: 'approvals', label: 'Approvals', screen: 'admin', sub: 'approvals', hint: 'CEO approval queue' },
       { id: 'geb-sec', label: 'GEB Reading', screen: 'geb-readings', hint: 'Electricity meter entry' },
       { id: 'login-activity', label: 'Login Activity', screen: 'placeholder', filter: 'login-activity', hint: 'Recent sessions' },
-    ],
-  },
-  {
-    id: 'orders',
-    label: 'Orders & Pending',
-    icon: 'orders',
-    screen: 'module-hub',
-    hasHub: true,
-    items: [
-      { id: 'orders-pending', label: 'Orders & Pending', screen: 'orders-pending', hint: 'Raise & track pending orders' },
-      { id: 'order-book', label: 'Order Book', screen: 'orders', sub: 'entry', hint: 'Party orders' },
-      { id: 'design-job', label: 'Design & Job Card', screen: 'design', hint: 'Design register' },
-      { id: 'design-catalog', label: 'Design Catalog', screen: 'design-catalog', hint: 'Design DNA catalog' },
-      { id: 'broadcast', label: 'Design Broadcast', screen: 'broadcast', hint: 'Post & share designs' },
-      { id: 'sample-register', label: 'Sample Register', screen: 'sample-register', hint: 'Sample log' },
     ],
   },
   {
@@ -455,71 +588,6 @@ export const MAIN_MODULES: MainModule[] = [
     icon: 'cash-book',
     screen: 'cash-book',
     items: [],
-  },
-  {
-    id: 'reports',
-    label: 'Reports',
-    icon: 'reports',
-    screen: 'module-hub',
-    hasHub: true,
-    items: [
-      {
-        id: 'design-costing',
-        label: 'DIN Costing',
-        screen: 'design-wise-costing',
-        hint: 'CEO Design Wise Costing (same engine)',
-      },
-      {
-        id: 'prod-report',
-        label: 'Production Report',
-        screen: 'program-dispatch',
-        sub: 'reports',
-        hint: 'Program & Dispatch reports',
-      },
-      {
-        id: 'mwp-report',
-        label: 'Machine-wise Production',
-        screen: 'machine-wise-production',
-        sub: 'report',
-        hint: 'Weft issue + machine production reports',
-      },
-      { id: 'stock-report', label: 'Stock Report', screen: 'purchase', sub: 'report', hint: 'Stock & purchase' },
-      { id: 'party-delivery', label: 'Party Delivery Report', screen: 'orders', sub: 'report', hint: 'Delivery by party' },
-      { id: 'beam-remaining', label: 'Beam Remaining', screen: 'beam-remaining', hint: 'Beam meters left' },
-      { id: 'costing-report', label: 'Daily Costing & P&L', screen: 'costing', sub: 'factory', hint: 'Daily factory / production / dispatch P&L' },
-      { id: 'geb-readings', label: 'GEB Electricity', screen: 'geb-readings', hint: 'Daily meter units & cost (sole electricity entry)' },
-      { id: 'loan-tracker', label: 'Loan Tracker', screen: 'loan-tracker', hint: 'Party-wise loan ledger' },
-      {
-        id: 'attendance-report',
-        label: 'Attendance Report',
-        screen: 'hr-payroll',
-        sub: 'reports',
-        hint: 'Open HR & Payroll reports',
-      },
-    ],
-  },
-  {
-    id: 'masters',
-    label: 'Masters',
-    icon: 'masters',
-    screen: 'module-hub',
-    hasHub: true,
-    items: [
-      { id: 'party-master', label: 'Party Master', screen: 'parties', hint: 'Customers / parties + Marka' },
-      { id: 'item-master', label: 'Item Master', screen: 'design-catalog', hint: 'Design / item catalog' },
-      { id: 'machine-master', label: 'Machine Master', screen: 'maintenance', sub: 'overview', hint: 'Machine 1–6 overview (M1–M6)' },
-      {
-        id: 'employee-master',
-        label: 'Employee Master',
-        screen: 'hr-payroll',
-        sub: 'employees',
-        hint: 'Open HR & Payroll → Employee Master',
-      },
-      { id: 'design-master', label: 'Design Master', screen: 'design', hint: 'Design register' },
-      { id: 'dept-master', label: 'Department Master', screen: 'placeholder', filter: 'dept-master', hint: 'Departments' },
-      { id: 'shift-master', label: 'Shift Master', screen: 'placeholder', filter: 'shift-master', hint: 'Shift definitions' },
-      { id: 'crm', label: 'CRM Customers', screen: 'crm', hint: 'WhatsApp customers' },
-    ],
   },
   {
     id: 'settings',
@@ -532,7 +600,22 @@ export const MAIN_MODULES: MainModule[] = [
       { id: 'shift-settings', label: 'Shift Settings', screen: 'placeholder', filter: 'shift-settings', hint: 'Day / night shifts' },
       { id: 'notifications', label: 'Notification Settings', screen: 'placeholder', filter: 'notifications', hint: 'Alerts preferences' },
       { id: 'backup', label: 'Backup', screen: 'placeholder', filter: 'backup', hint: 'Data backup notes' },
-      { id: 'preferences', label: 'System Preferences', screen: 'placeholder', filter: 'preferences', hint: 'System preferences' },
+      {
+        id: 'preferences',
+        label: 'System Preferences',
+        screen: 'placeholder',
+        filter: 'preferences',
+        hint: 'System preferences (placeholder)',
+      },
+      { id: 'user-mgmt', label: 'User / PIN Management', screen: 'admin', sub: 'roles', hint: 'Users & roles' },
+      { id: 'perm-mgmt', label: 'Permission Management', screen: 'admin', sub: 'permissions', hint: 'Module access by role' },
+      {
+        id: 'legacy-payroll',
+        label: 'Payroll Rates (LEGACY)',
+        screen: 'admin',
+        sub: 'payroll',
+        hint: 'Legacy — use HR & Payroll → Salary Rate Master',
+      },
     ],
   },
 ]
@@ -541,41 +624,42 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   home: 'Dashboard',
   attendance: 'Attendance',
   stock: 'Stock',
-  design: 'Design & Job Card',
+  design: 'Design Master',
   purchase: 'Purchase & Inward',
-  production: 'Production',
+  production: 'Machine-wise Production',
   maintenance: 'Machine-wise Maintenance',
-  dispatch: 'Dispatch',
-  admin: 'Security / Admin',
+  dispatch: 'Classic Dispatch (LEGACY)',
+  admin: 'Admin',
   costing: 'Daily Costing & P&L',
   orders: 'Order Book',
-  programs: 'Program Card',
+  programs: 'Program Card (LEGACY)',
   security: 'Security Gate',
   broadcast: 'Design Broadcast',
   parties: 'Party Master',
-  'sample-job-card': 'Sample Job Card',
-  'sample-register': 'Sample Register',
+  'sample-job-card': 'Sample Job Card (LEGACY)',
+  'sample-register': 'Sample Register (Archive)',
   'beam-remaining': 'Beam Remaining',
   'design-wise-costing': 'Design-wise Costing',
   'design-catalog': 'Design Catalog',
   crm: 'CRM',
   'cash-book': 'Cash Book',
-  'warp-beam-pipe': 'Warp Beam Pipe',
+  'warp-beam-pipe': 'Warp Beam Pipe (LEGACY)',
   'warp-yarn': 'Warp Yarn Management',
   'yarn-inward': 'Yarn Inward OCR',
-  'maint-material': 'Maintenance Material',
+  'maint-material': 'Repair / Material Out · In',
   'loan-tracker': 'Loan Tracker',
   'geb-readings': 'GEB Electricity',
-  'orders-pending': 'Orders & Pending',
+  'item-master': 'Item Master',
+  'orders-pending': 'Internal Pending',
   'dto-hub': 'Design to Order',
-  'dto-intake': 'DIN Intake',
+  'dto-intake': 'DESI Intake',
   'dto-sample-job': 'Sample Job Card',
   'dto-tracking': 'Sample Tracking',
-  'dto-order-booking': 'Order Booking',
+  'dto-order-booking': 'Customer Order',
   'dto-order-status': 'Order Status',
   'dto-promotion': 'Customer Promotion',
   'dto-followup': 'Order Follow-up',
-  'dto-reports': 'Design to Order Reports',
+  'dto-reports': 'DESI Reports',
   'hr-payroll': 'HR & Payroll',
   'program-dispatch': 'Program & Dispatch',
   'machine-wise-production': 'Machine-wise Production',
@@ -649,10 +733,20 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
   }
   if (screen === 'costing' || screen === 'loan-tracker' || screen === 'geb-readings') return 'reports'
   if (screen === 'maintenance' || screen === 'maint-material') return 'maintenance'
-  if (screen === 'parties' || screen === 'crm') return 'masters'
-  if (screen === 'admin' || screen === 'security') return 'security'
+  if (screen === 'parties' || screen === 'crm' || screen === 'item-master') return 'masters'
+  if (screen === 'security') return 'security'
+  if (screen === 'admin') {
+    if (sub === 'roles' || sub === 'permissions' || sub === 'payroll') return 'settings'
+    return 'security'
+  }
   if (screen === 'placeholder') {
-    if (filter?.includes('shift') || filter === 'company' || filter === 'notifications' || filter === 'backup') {
+    if (
+      filter?.includes('shift') ||
+      filter === 'company' ||
+      filter === 'notifications' ||
+      filter === 'backup' ||
+      filter === 'preferences'
+    ) {
       return 'settings'
     }
     if (filter?.includes('machine') || filter?.includes('dept')) return 'masters'
@@ -746,23 +840,26 @@ export function titleFor(screen: AppScreen, sub?: string, moduleId?: MainModuleI
   if (screen === 'purchase' && sub === 'repair_inv') return 'Repair Invoices'
   if (screen === 'dispatch' && sub === 'folding') return 'Folding'
   if (screen === 'dispatch') return 'Dispatch'
-  if (screen === 'production' && sub === 'report') return 'Production Report'
-  if (screen === 'production' && sub === 'job') return 'Job Card Issue'
-  if (screen === 'production' && sub === 'entry') return 'Production Entry'
+  if (screen === 'production' && sub === 'report') return 'Shift-wise Production Report'
+  if (screen === 'production' && sub === 'job') return 'Machine-wise Job Card'
+  if (screen === 'production' && sub === 'entry') return 'Classic Production Entry (LEGACY)'
   if (screen === 'orders' && sub === 'report') return 'Party Delivery Report'
   if (screen === 'programs' && sub === 'pending') return 'Program Pending'
-  if (screen === 'programs') return 'Program Card'
+  if (screen === 'programs') return 'Program Card (LEGACY)'
   if (screen === 'security') return 'Security Gate'
-  if (screen === 'admin' && sub === 'payroll') return 'Payroll (Legacy Rates)'
+  if (screen === 'admin' && sub === 'payroll') return 'Payroll Rates (LEGACY)'
   if (screen === 'admin' && sub === 'permissions') return 'Permission Management'
   if (screen === 'admin' && sub === 'approvals') return 'Approvals'
-  if (screen === 'admin') return 'PIN Management'
+  if (screen === 'admin') return 'User / PIN Management'
+  if (screen === 'costing' && sub === 'factory') return 'Daily Factory P&L'
   if (screen === 'costing' && sub === 'production') return 'Production-wise P&L'
   if (screen === 'costing' && sub === 'dispatch') return 'Dispatch-wise P&L'
   if (screen === 'costing' && sub === 'mtd') return 'MTD P&L'
   if (screen === 'costing' && sub === 'monthly') return 'Monthly P&L'
   if (screen === 'costing' && sub === 'sources') return 'Cost Breakdown'
+  if (screen === 'costing' && sub === 'electricity') return 'Daily Costing & P&L · Electricity'
   if (screen === 'costing') return 'Daily Costing & P&L'
+  if (screen === 'sample-register') return 'Sample Register (Archive)'
   if (screen === 'placeholder') {
     const labels: Record<string, string> = {
       'machine-master': 'Machine Master',
