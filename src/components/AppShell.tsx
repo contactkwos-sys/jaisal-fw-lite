@@ -96,6 +96,22 @@ const ICONS: Record<string, ReactNode> = {
       />
     </svg>
   ),
+  'program-dispatch': (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="nav-ico">
+      <path
+        fill="currentColor"
+        d="M3 5h18v2H3V5zm0 4h12v2H3V9zm0 4h18v2H3v-2zm0 4h12v2H3v-2zm16-5l4 3-4 3v-6z"
+      />
+    </svg>
+  ),
+  'warp-yarn': (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="nav-ico">
+      <path
+        fill="currentColor"
+        d="M4 6h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zm2 3v6h12V9H6zm2 2h2v2H8v-2zm4 0h2v2h-2v-2z"
+      />
+    </svg>
+  ),
   masters: (
     <svg viewBox="0 0 24 24" aria-hidden="true" className="nav-ico">
       <path

@@ -752,14 +752,14 @@ export function WarpYarnManagementScreen({
           <button
             type="button"
             className="btn-ghost"
-            onClick={() => onNavigate?.({ screen: 'yarn-inward', module: 'inventory' })}
+            onClick={() => onNavigate?.({ screen: 'yarn-inward', module: 'warp-yarn' })}
           >
             Yarn Inward OCR
           </button>
           <button
             type="button"
             className="btn-ghost"
-            onClick={() => onNavigate?.({ screen: 'warp-beam-pipe', module: 'inventory' })}
+            onClick={() => onNavigate?.({ screen: 'warp-beam-pipe', module: 'warp-yarn' })}
           >
             Legacy Pipe Out / In
           </button>
