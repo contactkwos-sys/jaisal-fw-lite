@@ -405,23 +405,69 @@ export function PurchaseScreen({ initialSub }: Props) {
               .eq('supplier', wParty.trim())
               .eq('colour_name', it.quality)
               .maybeSingle()
+            let yarnId: string
+            let newStock: number
             if (existing) {
+              newStock = Number(existing.stock_kg) + it.weight_kg
+              yarnId = existing.id
               const { error: uErr } = await supabase
                 .from('weft_yarn_stock')
                 .update({
-                  stock_kg: Number(existing.stock_kg) + it.weight_kg,
+                  stock_kg: newStock,
+                  rate_per_kg: it.rate,
                   updated_at: new Date().toISOString(),
                 })
                 .eq('id', existing.id)
               if (uErr) throw uErr
             } else {
-              const { error: sErr } = await supabase.from('weft_yarn_stock').insert({
-                supplier: wParty.trim() || null,
-                colour_name: it.quality,
-                stock_kg: it.weight_kg,
-              })
+              newStock = it.weight_kg
+              const { data: inserted, error: sErr } = await supabase
+                .from('weft_yarn_stock')
+                .insert({
+                  supplier: wParty.trim() || null,
+                  colour_name: it.quality,
+                  quality: it.quality,
+                  stock_kg: it.weight_kg,
+                  opening_stock: it.weight_kg,
+                  rate_per_kg: it.rate,
+                })
+                .select('id')
+                .single()
               if (sErr) throw sErr
+              yarnId = inserted.id
             }
+
+            const year = new Date().getFullYear()
+            const { data: lastTxn } = await supabase
+              .from('yarn_stock_ledger')
+              .select('txn_no')
+              .like('txn_no', `INW-${year}-%`)
+              .order('created_at', { ascending: false })
+              .limit(1)
+            let seq = 1
+            const last = lastTxn?.[0]?.txn_no
+            if (last) {
+              const m = String(last).match(/(\d+)\s*$/)
+              if (m) seq = Number(m[1]) + 1
+            }
+            const txn_no = `INW-${year}-${String(seq).padStart(4, '0')}`
+            await supabase.from('yarn_stock_ledger').insert({
+              yarn_id: yarnId,
+              txn_date: wDate,
+              txn_no,
+              txn_type: 'purchase',
+              reference: wChallan.trim() || data.id,
+              inward_kg: it.weight_kg,
+              outward_kg: 0,
+              balance_kg: newStock,
+              rate: it.rate,
+              value_amount: it.weight_kg * it.rate,
+              invoice_no: wChallan.trim() || null,
+              gst_pct: wGst,
+              remarks: 'Weft purchase inward',
+              created_by: profile.id,
+              created_by_name: profile.full_name || profile.roles?.role_name || null,
+            })
           }
         },
       })

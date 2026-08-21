@@ -1292,6 +1292,12 @@ body.drawer-open {
     padding: 0.5rem 1.25rem 1.5rem;
   }
 
+  .yarn-stock-screen.screen,
+  .screen.yarn-stock-screen {
+    max-width: none;
+    width: 100%;
+  }
+
   .kpi-grid-5,
   .kpi-grid-6 {
     grid-template-columns: repeat(3, minmax(0, 1fr));

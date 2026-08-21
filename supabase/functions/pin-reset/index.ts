@@ -89,7 +89,6 @@ Deno.serve(async (req) => {
       role_name: roleName,
       full_name: displayName,
       pin_hash,
-      pin_hint: displayPin,
     }
 
     // Update existing public.users for role, else create auth user + row
@@ -107,7 +106,7 @@ Deno.serve(async (req) => {
         password: authPassword,
         user_metadata: meta,
       })
-      return new Response(JSON.stringify({ ok: true, user_id: existing.id, pin_hint: displayPin }), {
+      return new Response(JSON.stringify({ ok: true, user_id: existing.id }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
@@ -138,7 +137,7 @@ Deno.serve(async (req) => {
         pin_hash,
         is_active: true,
       })
-      return new Response(JSON.stringify({ ok: true, user_id: match.id, pin_hint: displayPin }), {
+      return new Response(JSON.stringify({ ok: true, user_id: match.id }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
@@ -152,7 +151,7 @@ Deno.serve(async (req) => {
       is_active: true,
     })
 
-    return new Response(JSON.stringify({ ok: true, user_id: userId, pin_hint: displayPin }), {
+    return new Response(JSON.stringify({ ok: true, user_id: userId }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (err) {

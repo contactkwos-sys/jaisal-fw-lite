@@ -211,7 +211,7 @@ export const MAIN_MODULES: MainModule[] = [
     items: [
       { id: 'user-mgmt', label: 'User Management', screen: 'admin', sub: 'roles', hint: 'Users & roles' },
       { id: 'role-mgmt', label: 'Role Management', screen: 'admin', sub: 'roles', hint: 'Create / rename roles' },
-      { id: 'pin-mgmt', label: 'Individual PIN Management', screen: 'admin', sub: 'roles', hint: 'Reset PINs' },
+      { id: 'pin-mgmt', label: 'PIN Management', screen: 'admin', sub: 'roles', hint: 'Roles & PIN on one page' },
       { id: 'perm-mgmt', label: 'Permission Management', screen: 'admin', sub: 'permissions', hint: 'Module access by role' },
       { id: 'security-gate', label: 'Security Gate', screen: 'security', sub: 'inward', hint: 'Gate logs' },
       { id: 'yarn-inward-sec', label: 'Yarn Inward OCR', screen: 'yarn-inward', hint: 'Invoice scan (Security)' },
@@ -355,7 +355,7 @@ export function titleFor(screen: AppScreen, sub?: string, moduleId?: MainModuleI
   if (screen === 'admin' && sub === 'payroll') return 'Payroll'
   if (screen === 'admin' && sub === 'permissions') return 'Permission Management'
   if (screen === 'admin' && sub === 'approvals') return 'Approvals'
-  if (screen === 'admin') return 'Roles & PIN'
+  if (screen === 'admin') return 'PIN Management'
   if (screen === 'costing' && sub === 'electricity') return 'System Preferences'
   if (screen === 'placeholder') {
     const labels: Record<string, string> = {
