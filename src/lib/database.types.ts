@@ -513,6 +513,17 @@ export type WarpBeamPipe = {
   created_at: string
 }
 
+/** Re-export pipe lifecycle types from warpYarn module */
+export type {
+  WarpPipe,
+  WarpYarnTransaction,
+  WarpYarnPurchase,
+  WarpWarperJob,
+  WarpPipeStatus,
+  WarpTxnType,
+  WarperJobStatus,
+} from './warpYarn'
+
 export type YarnInward = {
   id: string
   yarn_type: 'warp' | 'weft'
