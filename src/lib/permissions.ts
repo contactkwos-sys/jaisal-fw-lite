@@ -65,10 +65,25 @@ const OPERATOR_SUBS: Partial<Record<MainModuleId, string[]>> = {
   production: ['prod-entry', 'weft-issue', 'warp-issue', 'folding'],
 }
 
-/** Security role — gate + yarn OCR + GEB */
+/** Security role — Security Inventory entry + gate + yarn OCR + GEB */
 const SECURITY_SUBS: Partial<Record<MainModuleId, string[]>> = {
-  security: ['security-gate', 'yarn-inward-sec', 'geb-sec', 'login-activity'],
-  inventory: ['yarn-inward'],
+  security: [
+    'security-inventory',
+    'si-warp',
+    'si-weft',
+    'si-maint-in',
+    'si-maint-out',
+    'si-general',
+    'si-others',
+    'si-pending',
+    'si-documents',
+    'si-reports',
+    'security-gate',
+    'yarn-inward-sec',
+    'geb-sec',
+    'login-activity',
+  ],
+  inventory: ['yarn-inward', 'security-inventory'],
 }
 
 function normalizeRole(name: string): string {
@@ -179,6 +194,11 @@ export function allowedModules(roleName: string): MainModuleId[] {
 }
 
 export function firstAllowedLanding(roleName: string): { module: MainModuleId; screen: import('./nav').AppScreen; sub?: string } {
+  const n = normalizeRole(roleName)
+  const isSecurity = n === 'security' || (n.includes('security') && !n.includes('supervisor'))
+  if (isSecurity) {
+    return { module: 'security', screen: 'security-inventory', sub: 'dashboard' }
+  }
   const mods = allowedModules(roleName)
   const first = mods[0] || 'production'
   if (first === 'dashboard') return { module: 'dashboard', screen: 'home' }

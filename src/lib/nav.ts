@@ -31,6 +31,7 @@ export type AppScreen =
   | 'loan-tracker'
   | 'geb-readings'
   | 'orders-pending'
+  | 'security-inventory'
   | 'module-hub'
   | 'settings-hub'
   | 'placeholder'
@@ -122,6 +123,13 @@ export const MAIN_MODULES: MainModule[] = [
         hint: 'Overview · Machines · Godown · Empty · Warper · Reports',
       },
       { id: 'yarn-inward', label: 'Yarn Inward OCR', screen: 'yarn-inward', hint: 'Warp/Weft invoice OCR' },
+      {
+        id: 'security-inventory',
+        label: 'Security Inventory',
+        screen: 'security-inventory',
+        sub: 'dashboard',
+        hint: 'Gate-level warp / weft / maintenance / general entry',
+      },
       { id: 'greige-stock', label: 'Greige Stock', screen: 'production', sub: 'report', hint: 'Greige / production stock' },
       { id: 'consumables', label: 'Consumables', screen: 'purchase', sub: 'maint_in', hint: 'Maintenance inward' },
       { id: 'inward', label: 'Inward', screen: 'purchase', sub: 'general', hint: 'General purchase inward' },
@@ -216,12 +224,82 @@ export const MAIN_MODULES: MainModule[] = [
     screen: 'module-hub',
     hasHub: true,
     items: [
+      {
+        id: 'security-inventory',
+        label: 'Security Inventory',
+        screen: 'security-inventory',
+        sub: 'dashboard',
+        hint: 'Dashboard · Warp · Weft · Maintenance · General · Reports',
+      },
+      {
+        id: 'si-warp',
+        label: 'Warp Inward / Outward',
+        screen: 'security-inventory',
+        sub: 'warp',
+        hint: 'Security warp entry → Warp Yarn Management',
+      },
+      {
+        id: 'si-weft',
+        label: 'Weft Inward',
+        screen: 'security-inventory',
+        sub: 'weft',
+        hint: 'Colour-wise weft inward + OCR',
+      },
+      {
+        id: 'si-maint-in',
+        label: 'Maintenance Inward',
+        screen: 'security-inventory',
+        sub: 'maint-in',
+        hint: 'Maintenance store inward',
+      },
+      {
+        id: 'si-maint-out',
+        label: 'Maintenance Outward / Repairing',
+        screen: 'security-inventory',
+        sub: 'maint-out',
+        hint: 'Out for repair + return tracking',
+      },
+      {
+        id: 'si-general',
+        label: 'General Items',
+        screen: 'security-inventory',
+        sub: 'general',
+        hint: 'General material inward',
+      },
+      {
+        id: 'si-others',
+        label: 'Others',
+        screen: 'security-inventory',
+        sub: 'others',
+        hint: 'Uncommon material entry',
+      },
+      {
+        id: 'si-pending',
+        label: 'Pending Entries',
+        screen: 'security-inventory',
+        sub: 'pending',
+        hint: 'Pending outward / repair / docs',
+      },
+      {
+        id: 'si-documents',
+        label: 'Recent Documents',
+        screen: 'security-inventory',
+        sub: 'documents',
+        hint: 'Invoice / challan / photos',
+      },
+      {
+        id: 'si-reports',
+        label: 'Security Inventory Reports',
+        screen: 'security-inventory',
+        sub: 'reports',
+        hint: 'Daily & A4 printable reports',
+      },
+      { id: 'security-gate', label: 'Security Gate', screen: 'security', sub: 'inward', hint: 'Gate logs' },
+      { id: 'yarn-inward-sec', label: 'Yarn Inward OCR', screen: 'yarn-inward', hint: 'Invoice scan (Security)' },
       { id: 'user-mgmt', label: 'User Management', screen: 'admin', sub: 'roles', hint: 'Users & roles' },
       { id: 'role-mgmt', label: 'Role Management', screen: 'admin', sub: 'roles', hint: 'Create / rename roles' },
       { id: 'pin-mgmt', label: 'PIN Management', screen: 'admin', sub: 'roles', hint: 'Roles & PIN on one page' },
       { id: 'perm-mgmt', label: 'Permission Management', screen: 'admin', sub: 'permissions', hint: 'Module access by role' },
-      { id: 'security-gate', label: 'Security Gate', screen: 'security', sub: 'inward', hint: 'Gate logs' },
-      { id: 'yarn-inward-sec', label: 'Yarn Inward OCR', screen: 'yarn-inward', hint: 'Invoice scan (Security)' },
       { id: 'geb-sec', label: 'GEB Reading', screen: 'geb-readings', hint: 'Electricity meter entry' },
       { id: 'login-activity', label: 'Login Activity', screen: 'placeholder', filter: 'login-activity', hint: 'Recent sessions' },
       { id: 'payroll', label: 'Payroll', screen: 'admin', sub: 'payroll', hint: 'Rates & payables' },
@@ -274,6 +352,7 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   'loan-tracker': 'Loan Tracker',
   'geb-readings': 'GEB Electricity',
   'orders-pending': 'Orders & Pending',
+  'security-inventory': 'Security Inventory',
   'module-hub': 'Module',
   'settings-hub': 'Settings',
   placeholder: 'Coming Soon',
@@ -313,6 +392,7 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
   ) {
     return 'inventory'
   }
+  if (screen === 'security-inventory') return 'security'
   if (screen === 'cash-book') return 'cash-book'
   if (
     screen === 'orders' ||
@@ -377,6 +457,21 @@ export function titleFor(screen: AppScreen, sub?: string, moduleId?: MainModuleI
   if (screen === 'programs' && sub === 'pending') return 'Program Pending'
   if (screen === 'programs') return 'Program Card'
   if (screen === 'security') return 'Security Gate'
+  if (screen === 'security-inventory') {
+    const labels: Record<string, string> = {
+      dashboard: 'Security Inventory',
+      warp: 'Warp Inward / Outward',
+      weft: 'Weft Yarn Inward',
+      'maint-in': 'Maintenance Inward',
+      'maint-out': 'Maintenance Outward / Repairing',
+      general: 'General Items',
+      others: 'Others',
+      pending: 'Pending Entries',
+      documents: 'Recent Documents',
+      reports: 'Security Inventory Reports',
+    }
+    return labels[sub || 'dashboard'] || 'Security Inventory'
+  }
   if (screen === 'admin' && sub === 'payroll') return 'Payroll'
   if (screen === 'admin' && sub === 'permissions') return 'Permission Management'
   if (screen === 'admin' && sub === 'approvals') return 'Approvals'

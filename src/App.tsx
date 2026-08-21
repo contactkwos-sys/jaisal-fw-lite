@@ -41,6 +41,7 @@ import { MaintenanceMaterialScreen } from './screens/MaintenanceMaterialScreen'
 import { LoanTrackerScreen } from './screens/LoanTrackerScreen'
 import { GebReadingScreen } from './screens/GebReadingScreen'
 import { OrdersPendingScreen } from './screens/OrdersPendingScreen'
+import { SecurityInventoryScreen, type SiSub } from './screens/SecurityInventoryScreen'
 
 function AuthenticatedApp() {
   const { session, loading, isCeo, isManager, roleName } = useAuth()
@@ -160,6 +161,28 @@ function AuthenticatedApp() {
       {tab === 'loan-tracker' ? <LoanTrackerScreen /> : null}
       {tab === 'geb-readings' ? <GebReadingScreen /> : null}
       {tab === 'orders-pending' ? <OrdersPendingScreen /> : null}
+      {tab === 'security-inventory' ? (
+        <SecurityInventoryScreen
+          initialSub={
+            ([
+              'dashboard',
+              'warp',
+              'weft',
+              'maint-in',
+              'maint-out',
+              'general',
+              'others',
+              'pending',
+              'documents',
+              'reports',
+            ].includes(sub || '')
+              ? sub
+              : 'dashboard') as SiSub
+          }
+          onSubChange={(s) => setSub(s)}
+          onNavigate={go}
+        />
+      ) : null}
       {tab === 'parties' ? <PartyMasterScreen /> : null}
       {tab === 'purchase' ? <PurchaseScreen initialSub={sub || 'general'} /> : null}
       {tab === 'orders' ? <OrderBookScreen initialSub={sub || 'entry'} /> : null}
