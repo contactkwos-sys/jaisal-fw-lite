@@ -142,19 +142,20 @@ export function masterPayloadFromForm(
 
 export function validateYarnForm(form: YarnFormValues, isNew: boolean): string | null {
   if (!form.supplier.trim()) return 'Supplier is required'
-  if (!form.colour_name.trim()) return 'Colour Name is required'
-  if (!form.colour_no.trim()) return 'Colour Number is required'
-  if (!form.quality.trim()) return 'Quality is required'
-  if (!form.yarn_specification.trim()) return 'Yarn Specification is required'
+  if (!form.colour_name.trim()) return 'Master Name is required'
+  if (!form.colour_no.trim()) return 'Colour / Item No. is required'
+  if (!form.hsn_code.trim()) return 'HSN No. is required'
   if (!form.unit.trim()) return 'Unit is required'
   if (isNew) {
     const openingRaw = form.opening_stock.trim()
-    if (openingRaw === '') return 'Opening Stock Quantity (KG) is required'
+    if (openingRaw === '') return 'Opening Stock Quantity is required'
     if (Number.isNaN(Number(openingRaw))) return 'Opening Stock Quantity must be a number'
     if (Number(openingRaw) < 0) return 'Opening Stock Quantity cannot be negative'
   }
-  if (Number.isNaN(Number(form.rate_per_kg))) return 'Rate / KG must be a number'
-  if (Number(form.rate_per_kg) < 0) return 'Rate / KG cannot be negative'
+  if (form.rate_per_kg.trim() === '' || Number.isNaN(Number(form.rate_per_kg))) {
+    return 'Purchase Rate w/ GST must be a number'
+  }
+  if (Number(form.rate_per_kg) < 0) return 'Purchase Rate w/ GST cannot be negative'
   return null
 }
 
