@@ -112,7 +112,7 @@ export const MAIN_MODULES: MainModule[] = [
     hasHub: true,
     mobileNav: true,
     items: [
-      { id: 'yarn-stock', label: 'Item Setup', screen: 'stock', sub: 'weft', hint: 'Opening stock & yarn item master' },
+      { id: 'yarn-stock', label: 'Yarn Stock', screen: 'stock', sub: 'weft', hint: 'Opening stock & yarn item master' },
       { id: 'beam-stock', label: 'Warp Beam Stock', screen: 'stock', sub: 'beam', hint: 'Beam pipe stock' },
       { id: 'warp-beam-pipe', label: 'Warp Beam Pipe', screen: 'warp-beam-pipe', hint: 'Pipe out / in tracking' },
       { id: 'yarn-inward', label: 'Yarn Inward OCR', screen: 'yarn-inward', hint: 'Warp/Weft invoice OCR' },
@@ -338,7 +338,7 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
 
 export function titleFor(screen: AppScreen, sub?: string, moduleId?: MainModuleId, filter?: string): string {
   if (screen === 'module-hub' && moduleId) return moduleById(moduleId).label
-  if (screen === 'stock' && sub === 'weft') return 'Item Setup'
+  if (screen === 'stock' && sub === 'weft') return 'Yarn Stock'
   if (screen === 'stock') return 'Warp Beam Stock'
   if (screen === 'purchase' && sub === 'weft') return 'Weft Issue'
   if (screen === 'purchase' && sub === 'report') return 'Stock Reports'

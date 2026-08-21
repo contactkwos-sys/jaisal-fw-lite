@@ -6,7 +6,9 @@ import { supabase } from '../lib/supabase'
 import {
   EMPTY_YARN_FILTERS,
   EMPTY_YARN_FORM,
+  clearEntryFields,
   filterYarnRows,
+  findDuplicateYarn,
   formFromYarn,
   formatInr,
   formatKg,
@@ -16,9 +18,10 @@ import {
   loadYarnLedger,
   masterPayloadFromForm,
   nextYarnTxnNo,
+  type YarnFieldErrors,
   type YarnFilters,
   type YarnFormValues,
-  validateYarnForm,
+  validateYarnFormFields,
   yarnDisplayName,
   yarnKpis,
   yarnReorderLevel,
@@ -26,6 +29,7 @@ import {
   yarnStatusLabel,
   yarnStockValue,
 } from '../lib/yarnStock'
+import { YarnAddForm, type YarnFormTab } from './YarnAddForm'
 
 type View =
   | { mode: 'list' }
@@ -78,7 +82,7 @@ export function YarnStockPanel() {
     invoice_no: '',
     quantity: '',
     rate: '',
-    gst_pct: '0',
+    gst_pct: '5',
     lot_number: '',
     location: '',
     remarks: '',
@@ -86,6 +90,11 @@ export function YarnStockPanel() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [formTab, setFormTab] = useState<YarnFormTab>('opening')
+  const [fieldErrors, setFieldErrors] = useState<YarnFieldErrors>({})
+  const [duplicateCandidate, setDuplicateCandidate] = useState<WeftYarnStock | null>(null)
+  const [pendingSaveAnother, setPendingSaveAnother] = useState(false)
+  const [skipDuplicateCheck, setSkipDuplicateCheck] = useState(false)
 
   const load = useCallback(async () => {
     const { data, error: err } = await supabase
@@ -138,6 +147,10 @@ export function YarnStockPanel() {
 
   function openAdd() {
     setForm({ ...EMPTY_YARN_FORM })
+    setFormTab('opening')
+    setFieldErrors({})
+    setDuplicateCandidate(null)
+    setSkipDuplicateCheck(false)
     setError(null)
     setMessage(null)
     setView({ mode: 'form', yarnId: null })
@@ -146,6 +159,10 @@ export function YarnStockPanel() {
   function openEdit(row: WeftYarnStock, e?: React.MouseEvent) {
     e?.stopPropagation()
     setForm(formFromYarn(row))
+    setFormTab('opening')
+    setFieldErrors({})
+    setDuplicateCandidate(null)
+    setSkipDuplicateCheck(false)
     setError(null)
     setMessage(null)
     setView({ mode: 'form', yarnId: row.id })
@@ -165,7 +182,7 @@ export function YarnStockPanel() {
       invoice_no: '',
       quantity: '',
       rate: String(row.rate_per_kg ?? 0),
-      gst_pct: String(row.gst_pct ?? 0),
+      gst_pct: String(row.gst_pct ?? 5),
       lot_number: row.lot_number || '',
       location: row.location || '',
       remarks: '',
@@ -175,17 +192,31 @@ export function YarnStockPanel() {
     setView({ mode: 'inward', yarnId: row.id })
   }
 
-  async function saveYarn(andAnother: boolean) {
+  async function saveYarn(andAnother: boolean, opts?: { allowDuplicate?: boolean }) {
     if (!profile) return
     const isNew = view.mode === 'form' && view.yarnId == null
-    const validation = validateYarnForm(form, isNew)
-    if (validation) {
-      setError(validation)
+    const errors = validateYarnFormFields(form, isNew)
+    setFieldErrors(errors)
+    if (Object.keys(errors).length > 0) {
+      setError('Please fix the highlighted fields.')
       return
     }
+
+    const allowDup = opts?.allowDuplicate || skipDuplicateCheck
+    if (!allowDup) {
+      const dup = findDuplicateYarn(yarns, form, view.mode === 'form' ? view.yarnId : null)
+      if (dup) {
+        setDuplicateCandidate(dup)
+        setPendingSaveAnother(andAnother)
+        return
+      }
+    }
+
     setBusy(true)
     setError(null)
     setMessage(null)
+    setDuplicateCandidate(null)
+    setSkipDuplicateCheck(false)
     try {
       if (isNew) {
         const payload = masterPayloadFromForm(form, { includeOpening: true })
@@ -229,7 +260,9 @@ export function YarnStockPanel() {
             }
           },
         })
-        setMessage(result === 'applied' ? 'Item saved' : 'Sent to approval queue')
+        setMessage(
+          result === 'applied' ? 'Yarn added successfully.' : 'Sent to approval queue',
+        )
       } else if (view.mode === 'form' && view.yarnId) {
         const yarnId = view.yarnId
         // Master fields only — do not overwrite transaction-derived stock_kg
@@ -249,11 +282,15 @@ export function YarnStockPanel() {
             if (err) throw err
           },
         })
-        setMessage(result === 'applied' ? 'Item updated' : 'Sent to approval queue')
+        setMessage(
+          result === 'applied' ? 'Yarn updated successfully.' : 'Sent to approval queue',
+        )
       }
       await load()
       if (andAnother) {
-        setForm({ ...EMPTY_YARN_FORM })
+        setForm(clearEntryFields(form))
+        setFieldErrors({})
+        setFormTab('opening')
         setView({ mode: 'form', yarnId: null })
       } else {
         setView({ mode: 'list' })
@@ -413,390 +450,44 @@ export function YarnStockPanel() {
 
   if (view.mode === 'form') {
     const isNew = view.yarnId == null
-    const unit = form.unit || 'KG'
-    const rate = Number(form.rate_per_kg || 0)
-    const gstPct = Number(form.gst_pct || 0)
-    const gstCost = rate * (1 + (Number.isFinite(gstPct) ? gstPct : 0) / 100)
-    const masterNames = [
-      ...new Set(yarns.map((y) => y.colour_name).filter(Boolean) as string[]),
-    ].sort()
-    const locations = [
-      ...new Set(yarns.map((y) => y.location).filter(Boolean) as string[]),
-    ].sort()
-
     return (
-      <div className="yarn-form-page yarn-item-setup">
-        <p className="yarn-crumb">
-          Inventory &gt; Item Setup &gt; <strong>{isNew ? 'Add Item' : 'Edit Item'}</strong>
-        </p>
-        <header className="yarn-detail-head">
-          <div>
-            <h2 className="yarn-detail-title">{isNew ? 'Add Item' : 'Edit Item'}</h2>
-            <p className="yarn-detail-sub">
-              {isNew
-                ? 'Set opening stock quantity in KG, then save the item master.'
-                : 'Update master information. Current stock is driven by transactions.'}
-            </p>
-          </div>
-        </header>
-
-        <div className="yarn-mode-cards" role="tablist" aria-label="Item entry mode">
-          <button
-            type="button"
-            role="tab"
-            aria-selected="true"
-            className="yarn-mode-card is-active"
-          >
-            <strong>Opening Stock</strong>
-            <span>Start balance in shop</span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected="false"
-            className="yarn-mode-card"
-            disabled={isNew || !view.yarnId}
-            onClick={() => {
-              if (view.yarnId) {
-                const row = yarns.find((y) => y.id === view.yarnId)
-                if (row) openInward(row)
-              }
-            }}
-          >
-            <strong>Purchase Item</strong>
-            <span>Add inward purchase</span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected="false"
-            className="yarn-mode-card"
-            disabled
-            title="Coming soon"
-          >
-            <strong>Repair Item</strong>
-            <span>Repair / return stock</span>
-          </button>
-        </div>
-
-        <div className="yarn-form-tabs" role="tablist">
-          <button type="button" className="yarn-form-tab is-active" role="tab" aria-selected="true">
-            Opening Stock
-          </button>
-        </div>
-
-        <div className="yarn-form-sections">
-          <section className="yarn-form-section">
-            <h2>Item Details</h2>
-            <div className="yarn-form-grid cols-3">
-              <label className="field">
-                <span>
-                  Supplier <em className="req">*</em>
-                </span>
-                <input
-                  value={form.supplier}
-                  onChange={(e) => setField('supplier', e.target.value)}
-                  placeholder="Select or type supplier"
-                  list="yarn-supplier-suggestions"
-                />
-              </label>
-              <label className="field">
-                <span>
-                  Master Name <em className="req">*</em>
-                </span>
-                <input
-                  value={form.colour_name}
-                  onChange={(e) => {
-                    const name = e.target.value
-                    setForm((f) => ({
-                      ...f,
-                      colour_name: name,
-                      colour_no: f.colour_no.trim() ? f.colour_no : name.trim(),
-                    }))
-                  }}
-                  placeholder="Select or type master name"
-                  list="yarn-master-suggestions"
-                />
-              </label>
-              <label className="field">
-                <span>
-                  Colour / Item No. <em className="req">*</em>
-                </span>
-                <input
-                  value={form.colour_no}
-                  onChange={(e) => setField('colour_no', e.target.value)}
-                  placeholder="eg. RB-101"
-                />
-              </label>
-              <label className="field">
-                <span>
-                  HSN No. <em className="req">*</em>
-                </span>
-                <input
-                  value={form.hsn_code}
-                  onChange={(e) => setField('hsn_code', e.target.value)}
-                  placeholder="eg. 5205"
-                />
-              </label>
-              <label className="field">
-                <span>Quality / Brand</span>
-                <input
-                  value={form.quality}
-                  onChange={(e) => setField('quality', e.target.value)}
-                  placeholder="eg. 400 lbs"
-                  list="yarn-quality-suggestions"
-                />
-              </label>
-              <label className="field">
-                <span>Item Description</span>
-                <input
-                  value={form.yarn_specification}
-                  onChange={(e) => setField('yarn_specification', e.target.value)}
-                  placeholder="eg. white color, long size"
-                  list="yarn-spec-suggestions"
-                />
-              </label>
-              <label className="field">
-                <span>
-                  Unit <em className="req">*</em>
-                </span>
-                <select value={form.unit} onChange={(e) => setField('unit', e.target.value)}>
-                  <option value="KG">KG</option>
-                  <option value="Cone">Cone</option>
-                  <option value="Bag">Bag</option>
-                </select>
-              </label>
-            </div>
-          </section>
-
-          <section className="yarn-form-section">
-            <h2>Stock Details</h2>
-            <div className="yarn-form-grid cols-3">
-              {isNew ? (
-                <label className="field">
-                  <span>
-                    Opening Stock Quantity <em className="req">*</em>
-                  </span>
-                  <div className="yarn-qty-input">
-                    <input
-                      className="num"
-                      inputMode="decimal"
-                      required
-                      value={form.opening_stock}
-                      onChange={(e) => setField('opening_stock', e.target.value)}
-                      placeholder="0.00"
-                      aria-label="Opening Stock Quantity"
-                    />
-                    <span className="yarn-qty-unit" aria-hidden="true">
-                      {unit}
-                    </span>
-                  </div>
-                  <small className="yarn-field-hint">Quantity of stock available in shop</small>
-                </label>
-              ) : (
-                <label className="field">
-                  <span>Current Stock (read-only)</span>
-                  <div className="yarn-qty-input">
-                    <input
-                      className="num"
-                      readOnly
-                      value={formatKg(Number(activeYarn?.stock_kg || 0))}
-                    />
-                    <span className="yarn-qty-unit" aria-hidden="true">
-                      {activeYarn?.unit || unit}
-                    </span>
-                  </div>
-                  <small className="yarn-field-hint">Live balance from ledger</small>
-                </label>
-              )}
-              <label className="field">
-                <span>Reorder level</span>
-                <div className="yarn-qty-input">
-                  <input
-                    className="num"
-                    inputMode="decimal"
-                    value={form.reorder_level}
-                    onChange={(e) => setField('reorder_level', e.target.value)}
-                    placeholder="0.00"
-                  />
-                  <span className="yarn-qty-unit" aria-hidden="true">
-                    {unit}
-                  </span>
-                </div>
-                <small className="yarn-field-hint">Alert when stock low</small>
-              </label>
-              <label className="field">
-                <span>Measure Price</span>
-                <div className="yarn-qty-input">
-                  <input
-                    className="num"
-                    inputMode="decimal"
-                    value={form.rate_per_kg}
-                    onChange={(e) => setField('rate_per_kg', e.target.value)}
-                    placeholder="0.00"
-                  />
-                  <span className="yarn-qty-unit" aria-hidden="true">
-                    INR
-                  </span>
-                </div>
-                <small className="yarn-field-hint">Measure value of an item</small>
-              </label>
-              <label className="field">
-                <span>Measure Weight</span>
-                <div className="yarn-qty-input">
-                  <input
-                    className="num"
-                    inputMode="decimal"
-                    value={form.min_stock}
-                    onChange={(e) => setField('min_stock', e.target.value)}
-                    placeholder="0.00"
-                  />
-                  <span className="yarn-qty-unit" aria-hidden="true">
-                    {unit}
-                  </span>
-                </div>
-                <small className="yarn-field-hint">Minimum weight for stock alert</small>
-              </label>
-              <label className="field">
-                <span>Location</span>
-                <input
-                  value={form.location}
-                  onChange={(e) => setField('location', e.target.value)}
-                  placeholder="Select a location"
-                  list="yarn-location-suggestions"
-                />
-              </label>
-              <label className="field">
-                <span>Lot / Batch No.</span>
-                <input
-                  value={form.lot_number}
-                  onChange={(e) => setField('lot_number', e.target.value)}
-                  placeholder="Enter a lot/batch number"
-                />
-              </label>
-            </div>
-          </section>
-
-          <section className="yarn-form-section">
-            <h2>Purchase Information</h2>
-            <div className="yarn-form-grid cols-3">
-              <label className="field">
-                <span>
-                  Purchase Rate w/ GST <em className="req">*</em>
-                </span>
-                <div className="yarn-qty-input">
-                  <input
-                    className="num"
-                    inputMode="decimal"
-                    value={form.rate_per_kg}
-                    onChange={(e) => setField('rate_per_kg', e.target.value)}
-                    placeholder="0.00"
-                  />
-                  <span className="yarn-qty-unit" aria-hidden="true">
-                    INR
-                  </span>
-                </div>
-              </label>
-              <label className="field">
-                <span>GST %</span>
-                <select value={form.gst_pct} onChange={(e) => setField('gst_pct', e.target.value)}>
-                  <option value="0">0</option>
-                  <option value="5">5</option>
-                  <option value="12">12</option>
-                  <option value="18">18</option>
-                  <option value="28">28</option>
-                </select>
-                <small className="yarn-field-hint">Tax percentage on purchase</small>
-              </label>
-              <label className="field">
-                <span>GST Cost</span>
-                <div className="yarn-qty-input">
-                  <input className="num" readOnly value={gstCost.toFixed(2)} />
-                  <span className="yarn-qty-unit" aria-hidden="true">
-                    INR
-                  </span>
-                </div>
-                <small className="yarn-field-hint">Value after adding tax cost</small>
-              </label>
-            </div>
-          </section>
-
-          <section className="yarn-form-section">
-            <h2>Additional Information</h2>
-            <div className="yarn-form-grid">
-              <label className="field" style={{ gridColumn: '1 / -1' }}>
-                <span>Remarks</span>
-                <textarea
-                  value={form.remarks}
-                  onChange={(e) => setField('remarks', e.target.value)}
-                  placeholder="Add any additional notes"
-                  rows={3}
-                />
-              </label>
-              <label className="yarn-check">
-                <input
-                  type="checkbox"
-                  checked={form.is_active}
-                  onChange={(e) => setField('is_active', e.target.checked)}
-                />
-                Active
-              </label>
-            </div>
-          </section>
-        </div>
-
-        <datalist id="yarn-supplier-suggestions">
-          {suppliers.map((s) => (
-            <option key={s} value={s} />
-          ))}
-        </datalist>
-        <datalist id="yarn-master-suggestions">
-          {masterNames.map((n) => (
-            <option key={n} value={n} />
-          ))}
-        </datalist>
-        <datalist id="yarn-location-suggestions">
-          {locations.map((loc) => (
-            <option key={loc} value={loc} />
-          ))}
-          <option value="Store A" />
-          <option value="Store B" />
-          <option value="Godown" />
-        </datalist>
-        <datalist id="yarn-quality-suggestions">
-          {qualities.map((q) => (
-            <option key={q} value={q} />
-          ))}
-        </datalist>
-        <datalist id="yarn-spec-suggestions">
-          {specs.map((s) => (
-            <option key={s} value={s} />
-          ))}
-          <option value="300 Tex" />
-          <option value="300 Lichi" />
-          <option value="300 Denier" />
-          <option value="150 Denier" />
-          <option value="450 Denier" />
-          <option value="150 Tex" />
-        </datalist>
-
-        {error ? <p className="form-error text-danger">{error}</p> : null}
-        {message ? <p className="form-ok text-sage">{message}</p> : null}
-
-        <p className="yarn-form-note">All fields with asterisk (*) are mandatory.</p>
-
-        <div className="yarn-form-actions">
-          <button type="button" className="btn-secondary" disabled={busy} onClick={() => setView({ mode: 'list' })}>
-            Discard
-          </button>
-          <button type="button" className="btn-secondary" disabled={busy} onClick={() => void saveYarn(true)}>
-            Save &amp; Add Another
-          </button>
-          <button type="button" className="btn-primary" disabled={busy} onClick={() => void saveYarn(false)}>
-            {isNew ? 'Add Item' : 'Save Item'}
-          </button>
-        </div>
-      </div>
+      <YarnAddForm
+        form={form}
+        isNew={isNew}
+        busy={busy}
+        error={error}
+        message={message}
+        fieldErrors={fieldErrors}
+        yarns={yarns}
+        activeYarn={activeYarn}
+        formTab={formTab}
+        duplicate={duplicateCandidate}
+        onField={setField}
+        onFormChange={setForm}
+        onTabChange={setFormTab}
+        onBack={() => setView({ mode: 'list' })}
+        onCancel={() => setView({ mode: 'list' })}
+        onSave={(andAnother) => void saveYarn(andAnother)}
+        onContinueDuplicate={() => {
+          setSkipDuplicateCheck(true)
+          setDuplicateCandidate(null)
+          void saveYarn(pendingSaveAnother, { allowDuplicate: true })
+        }}
+        onOpenExisting={(row) => {
+          setDuplicateCandidate(null)
+          openEdit(row)
+        }}
+        onDismissDuplicate={() => setDuplicateCandidate(null)}
+        onPurchaseYarn={(row) => openInward(row)}
+        onClearFieldError={(key) =>
+          setFieldErrors((prev) => {
+            if (!prev[key]) return prev
+            const next = { ...prev }
+            delete next[key]
+            return next
+          })
+        }
+      />
     )
   }
 
@@ -1166,7 +857,7 @@ export function YarnStockPanel() {
   return (
     <div className="yarn-screen">
       <p className="yarn-crumb">
-        Inventory &gt; <strong>Item Setup</strong>
+        Inventory &gt; <strong>Yarn Stock</strong>
       </p>
 
       <div className="yarn-kpi-grid">
@@ -1241,7 +932,7 @@ export function YarnStockPanel() {
             Refresh
           </button>
           <button type="button" className="btn-primary" onClick={openAdd}>
-            + Add Item
+            + Add Yarn
           </button>
         </div>
 
@@ -1494,7 +1185,7 @@ export function YarnStockPanel() {
 
         <div className="yarn-sticky-add">
           <button type="button" className="btn-primary" onClick={openAdd}>
-            + Add Item
+            + Add Yarn
           </button>
         </div>
       </div>
