@@ -207,7 +207,7 @@ function AuthenticatedApp() {
           onSubChange={(s) => setSub(s)}
           onNavigate={go}
         />
-      ) : null}
+       ) : null}
       {tab === 'parties' ? <PartyMasterScreen /> : null}
       {tab === 'purchase' ? <PurchaseScreen initialSub={sub || 'general'} /> : null}
       {tab === 'orders' ? <OrderBookScreen initialSub={sub || 'entry'} /> : null}
