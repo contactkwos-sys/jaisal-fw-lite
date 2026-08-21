@@ -369,14 +369,14 @@ export function DashboardScreen({ onNavigate }: Props) {
   }
 
   const quick: Array<{ label: string; screen: AppScreen; sub?: string; module?: import('../lib/nav').MainModuleId }> = [
+    { label: 'DIN Costing', screen: 'design-wise-costing', module: 'design-to-order' },
+    { label: 'Design to Order', screen: 'dto-hub', module: 'design-to-order' },
     { label: 'Production Entry', screen: 'production', sub: 'entry', module: 'production' },
     { label: 'Job Card Issue', screen: 'production', sub: 'job', module: 'orders' },
     { label: 'Program Card', screen: 'programs', sub: 'create', module: 'orders' },
     { label: 'Weft Issue', screen: 'purchase', sub: 'weft', module: 'production' },
     { label: 'Folding', screen: 'dispatch', sub: 'folding', module: 'production' },
     { label: 'Dispatch', screen: 'dispatch', sub: 'challan', module: 'production' },
-    { label: 'Inward', screen: 'purchase', sub: 'general', module: 'inventory' },
-    { label: 'Attendance', screen: 'attendance', module: 'reports' },
   ]
 
   const alertRows = (

@@ -64,6 +64,14 @@ const ICONS: Record<string, ReactNode> = {
       />
     </svg>
   ),
+  'design-to-order': (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="nav-ico">
+      <path
+        fill="currentColor"
+        d="M4 4h7v7H4V4zm9 0h7v4h-7V4zM4 13h7v7H4v-7zm9 2h3v2h-3v-2zm4 0h3v5h-7v-2h4v-3zm-4 3h3v2h-3v-2z"
+      />
+    </svg>
+  ),
   reports: (
     <svg viewBox="0 0 24 24" aria-hidden="true" className="nav-ico">
       <path

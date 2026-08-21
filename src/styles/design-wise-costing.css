@@ -245,6 +245,43 @@
   letter-spacing: -0.02em;
 }
 
+.dwc-gst-split {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0.85rem 0 0.5rem;
+}
+
+.dwc-gst-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.dwc-gst-card strong {
+  font-size: 1.25rem;
+  color: var(--text);
+}
+
+.dwc-gst-final {
+  border-color: color-mix(in srgb, var(--teal) 45%, var(--line));
+  background: var(--teal-soft);
+}
+
+.dwc-gst-final strong {
+  color: var(--teal-deep);
+}
+
+@media (max-width: 720px) {
+  .dwc-gst-split {
+    grid-template-columns: 1fr;
+  }
+}
+
 .dwc-actions {
   display: flex;
   flex-wrap: wrap;

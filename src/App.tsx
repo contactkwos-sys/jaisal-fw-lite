@@ -41,6 +41,15 @@ import { MaintenanceMaterialScreen } from './screens/MaintenanceMaterialScreen'
 import { LoanTrackerScreen } from './screens/LoanTrackerScreen'
 import { GebReadingScreen } from './screens/GebReadingScreen'
 import { OrdersPendingScreen } from './screens/OrdersPendingScreen'
+import { DesignToOrderHub } from './screens/DesignToOrderHub'
+import { DinIntakeScreen } from './screens/DinIntakeScreen'
+import { DtoSampleJobScreen } from './screens/DtoSampleJobScreen'
+import { DtoSampleTrackingScreen } from './screens/DtoSampleTrackingScreen'
+import { DtoOrderBookingScreen } from './screens/DtoOrderBookingScreen'
+import { DtoOrderStatusScreen } from './screens/DtoOrderStatusScreen'
+import { DtoSamplePromotionScreen } from './screens/DtoSamplePromotionScreen'
+import { DtoFollowupScreen } from './screens/DtoFollowupScreen'
+import { DtoReportsScreen } from './screens/DtoReportsScreen'
 import { HrPayrollScreen } from './screens/HrPayrollScreen'
 
 function AuthenticatedApp() {
@@ -214,6 +223,7 @@ function AuthenticatedApp() {
               'security',
               'settings',
               'cash-book',
+              'design-to-order',
               'hr-payroll',
             ].includes(filter)
               ? filter
@@ -221,6 +231,19 @@ function AuthenticatedApp() {
           }
         />
       ) : null}
+      {tab === 'dto-hub' ? <DesignToOrderHub onNavigate={go} /> : null}
+      {tab === 'dto-intake' ? <DinIntakeScreen onNavigate={go} /> : null}
+      {tab === 'dto-sample-job' ? <DtoSampleJobScreen onNavigate={go} initialDinId={filter} /> : null}
+      {tab === 'dto-tracking' ? <DtoSampleTrackingScreen onNavigate={go} initialDinId={filter} /> : null}
+      {tab === 'dto-order-booking' ? (
+        <DtoOrderBookingScreen onNavigate={go} initialDinNumber={filter} />
+      ) : null}
+      {tab === 'dto-order-status' ? <DtoOrderStatusScreen onNavigate={go} /> : null}
+      {tab === 'dto-promotion' ? (
+        <DtoSamplePromotionScreen onNavigate={go} initialDinId={filter} />
+      ) : null}
+      {tab === 'dto-followup' ? <DtoFollowupScreen /> : null}
+      {tab === 'dto-reports' ? <DtoReportsScreen onNavigate={go} /> : null}
     </AppShell>
   )
 }
