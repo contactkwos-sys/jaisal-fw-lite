@@ -616,6 +616,8 @@ export type DesignCosting = {
   conversion_charge: number
   mu_percent: number
   gst_percent: number
+  /** GST ₹ amount (after MU × GST %) — stored separately from final cost */
+  gst_amount: number | null
   total_pic: number | null
   total_warp_weight_kg: number | null
   total_weft_weight_kg: number | null
