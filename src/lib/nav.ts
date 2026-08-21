@@ -40,6 +40,7 @@ export type AppScreen =
   | 'dto-promotion'
   | 'dto-followup'
   | 'dto-reports'
+  | 'hr-payroll'
   | 'module-hub'
   | 'settings-hub'
   | 'placeholder'
@@ -50,6 +51,7 @@ export type MainModuleId =
   | 'production'
   | 'inventory'
   | 'cash-book'
+  | 'hr-payroll'
   | 'orders'
   | 'reports'
   | 'maintenance'
@@ -170,6 +172,27 @@ export const MAIN_MODULES: MainModule[] = [
     items: [],
   },
   {
+    id: 'hr-payroll',
+    label: 'HR & Payroll',
+    icon: 'hr-payroll',
+    screen: 'module-hub',
+    hasHub: true,
+    mobileNav: true,
+    items: [
+      { id: 'hr-dash', label: 'Dashboard', screen: 'hr-payroll', sub: 'dashboard', hint: 'Live attendance & payroll KPIs' },
+      { id: 'hr-employees', label: 'Employee Master', screen: 'hr-payroll', sub: 'employees', hint: 'Employees, bank & designation' },
+      { id: 'hr-attendance', label: 'Attendance', screen: 'attendance', hint: 'Daily attendance by date & shift' },
+      { id: 'hr-leave', label: 'Leave / Holiday', screen: 'hr-payroll', sub: 'leave', hint: 'Leave entries & holidays' },
+      { id: 'hr-rates', label: 'Salary Rate Master', screen: 'hr-payroll', sub: 'rates', hint: 'Monthly / daily / hourly rates' },
+      { id: 'hr-payroll-run', label: 'Payroll', screen: 'hr-payroll', sub: 'payroll', hint: 'Calculate & approve payroll' },
+      { id: 'hr-statutory', label: 'ESI / PF / PT', screen: 'hr-payroll', sub: 'statutory', hint: 'Toggle statutory deductions' },
+      { id: 'hr-register', label: 'Salary Register', screen: 'hr-payroll', sub: 'register', hint: 'Monthly salary history' },
+      { id: 'hr-payment', label: 'Salary Payment', screen: 'hr-payroll', sub: 'payment', hint: 'Ready for bank transfer' },
+      { id: 'hr-bank-letter', label: 'Bank Salary Letter', screen: 'hr-payroll', sub: 'bank-letter', hint: 'Consolidated payment instruction' },
+      { id: 'hr-reports', label: 'Reports', screen: 'hr-payroll', sub: 'reports', hint: 'Attendance & payroll reports' },
+    ],
+  },
+  {
     id: 'orders',
     label: 'Orders & Pending',
     icon: 'orders',
@@ -205,7 +228,13 @@ export const MAIN_MODULES: MainModule[] = [
       { id: 'costing-report', label: 'Costing Report', screen: 'costing', sub: 'summary', hint: 'Daily costing' },
       { id: 'geb-readings', label: 'GEB Electricity', screen: 'geb-readings', hint: 'Daily meter units & cost' },
       { id: 'loan-tracker', label: 'Loan Tracker', screen: 'loan-tracker', hint: 'Party-wise loan ledger' },
-      { id: 'attendance-report', label: 'Attendance Report', screen: 'attendance', hint: 'Attendance today' },
+      {
+        id: 'attendance-report',
+        label: 'Attendance Report',
+        screen: 'hr-payroll',
+        sub: 'reports',
+        hint: 'Open HR & Payroll reports',
+      },
       { id: 'sample-register', label: 'Sample Register', screen: 'sample-register', hint: 'Sample log' },
     ],
   },
@@ -235,7 +264,13 @@ export const MAIN_MODULES: MainModule[] = [
       { id: 'party-master', label: 'Party Master', screen: 'parties', hint: 'Customers / parties' },
       { id: 'item-master', label: 'Item Master', screen: 'design-catalog', hint: 'Design / item catalog' },
       { id: 'machine-master', label: 'Machine Master', screen: 'placeholder', filter: 'machine-master', hint: 'Machine list (M1–M6)' },
-      { id: 'employee-master', label: 'Employee Master', screen: 'attendance', hint: 'Workers & attendance' },
+      {
+        id: 'employee-master',
+        label: 'Employee Master',
+        screen: 'hr-payroll',
+        sub: 'employees',
+        hint: 'Open HR & Payroll → Employee Master',
+      },
       { id: 'design-master', label: 'Design Master', screen: 'design', hint: 'Design register' },
       { id: 'dept-master', label: 'Department Master', screen: 'placeholder', filter: 'dept-master', hint: 'Departments' },
       { id: 'shift-master', label: 'Shift Master', screen: 'placeholder', filter: 'shift-master', hint: 'Shift definitions' },
@@ -257,7 +292,13 @@ export const MAIN_MODULES: MainModule[] = [
       { id: 'yarn-inward-sec', label: 'Yarn Inward OCR', screen: 'yarn-inward', hint: 'Invoice scan (Security)' },
       { id: 'geb-sec', label: 'GEB Reading', screen: 'geb-readings', hint: 'Electricity meter entry' },
       { id: 'login-activity', label: 'Login Activity', screen: 'placeholder', filter: 'login-activity', hint: 'Recent sessions' },
-      { id: 'payroll', label: 'Payroll', screen: 'admin', sub: 'payroll', hint: 'Rates & payables' },
+      {
+        id: 'payroll',
+        label: 'Payroll',
+        screen: 'hr-payroll',
+        sub: 'payroll',
+        hint: 'Open HR & Payroll → Payroll',
+      },
       { id: 'approvals', label: 'Approvals', screen: 'admin', sub: 'approvals', hint: 'CEO approval queue' },
     ],
   },
@@ -316,6 +357,7 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   'dto-promotion': 'Sample Promotion',
   'dto-followup': 'Follow-up / Reminders',
   'dto-reports': 'Design to Order Reports',
+  'hr-payroll': 'HR & Payroll',
   'module-hub': 'Module',
   'settings-hub': 'Settings',
   placeholder: 'Coming Soon',
@@ -331,6 +373,7 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
   if (screen === 'module-hub' || screen === 'settings-hub') {
     return (filter as MainModuleId) || 'dashboard'
   }
+  if (screen === 'hr-payroll' || screen === 'attendance') return 'hr-payroll'
 
   for (const mod of MAIN_MODULES) {
     for (const item of mod.items) {
@@ -388,7 +431,6 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
     screen === 'costing' ||
     screen === 'beam-remaining' ||
     screen === 'sample-register' ||
-    screen === 'attendance' ||
     screen === 'loan-tracker' ||
     screen === 'geb-readings'
   ) {
@@ -409,6 +451,21 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
 
 export function titleFor(screen: AppScreen, sub?: string, moduleId?: MainModuleId, filter?: string): string {
   if (screen === 'module-hub' && moduleId) return moduleById(moduleId).label
+  if (screen === 'hr-payroll') {
+    const labels: Record<string, string> = {
+      dashboard: 'HR & Payroll Dashboard',
+      employees: 'Employee Master',
+      leave: 'Leave / Holiday',
+      rates: 'Salary Rate Master',
+      payroll: 'Payroll',
+      statutory: 'ESI / PF / PT',
+      register: 'Salary Register',
+      payment: 'Salary Payment',
+      'bank-letter': 'Bank Salary Letter',
+      reports: 'HR & Payroll Reports',
+    }
+    return labels[sub || 'dashboard'] || 'HR & Payroll'
+  }
   if (screen === 'warp-yarn') {
     const labels: Record<string, string> = {
       overview: 'Warp Yarn Management',
@@ -435,7 +492,7 @@ export function titleFor(screen: AppScreen, sub?: string, moduleId?: MainModuleI
   if (screen === 'programs' && sub === 'pending') return 'Program Pending'
   if (screen === 'programs') return 'Program Card'
   if (screen === 'security') return 'Security Gate'
-  if (screen === 'admin' && sub === 'payroll') return 'Payroll'
+  if (screen === 'admin' && sub === 'payroll') return 'Payroll (Legacy Rates)'
   if (screen === 'admin' && sub === 'permissions') return 'Permission Management'
   if (screen === 'admin' && sub === 'approvals') return 'Approvals'
   if (screen === 'admin') return 'PIN Management'

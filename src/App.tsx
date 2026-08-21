@@ -50,6 +50,7 @@ import { DtoOrderStatusScreen } from './screens/DtoOrderStatusScreen'
 import { DtoSamplePromotionScreen } from './screens/DtoSamplePromotionScreen'
 import { DtoFollowupScreen } from './screens/DtoFollowupScreen'
 import { DtoReportsScreen } from './screens/DtoReportsScreen'
+import { HrPayrollScreen } from './screens/HrPayrollScreen'
 
 function AuthenticatedApp() {
   const { session, loading, isCeo, isManager, roleName } = useAuth()
@@ -139,6 +140,12 @@ function AuthenticatedApp() {
         <PlaceholderScreen title={titleFor('placeholder', undefined, undefined, filter)} />
       ) : null}
       {tab === 'attendance' ? <AttendanceScreen /> : null}
+      {tab === 'hr-payroll' ? (
+        <HrPayrollScreen
+          initialSub={sub || 'dashboard'}
+          onNavigate={go}
+        />
+      ) : null}
       {tab === 'stock' ? (
         <StockScreen
           initialTab={(sub as 'beam' | 'weft') || 'beam'}
@@ -217,6 +224,7 @@ function AuthenticatedApp() {
               'settings',
               'cash-book',
               'design-to-order',
+              'hr-payroll',
             ].includes(filter)
               ? filter
               : ''

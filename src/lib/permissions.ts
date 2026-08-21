@@ -15,6 +15,7 @@ const CEO_MODULES: MainModuleId[] = [
   'production',
   'inventory',
   'cash-book',
+  'hr-payroll',
   'orders',
   'reports',
   'maintenance',
@@ -28,6 +29,7 @@ const MANAGER_MODULES: MainModuleId[] = [
   'production',
   'inventory',
   'cash-book',
+  'hr-payroll',
   'orders',
   'reports',
   'maintenance',
@@ -49,17 +51,37 @@ const ROLE_DEFAULTS: Record<string, MainModuleId[]> = {
   salesman: ['design-to-order', 'orders', 'masters', 'reports', 'cash-book'],
   'checker & dispatch': ['production', 'inventory', 'security'],
   'program supervisor': ['production', 'orders', 'reports', 'design-to-order'],
-  'mill incharge': ['production', 'inventory', 'cash-book', 'orders', 'reports', 'maintenance', 'design-to-order'],
-  mill: ['production', 'inventory', 'cash-book', 'orders', 'reports', 'maintenance', 'design-to-order'],
+  'mill incharge': [
+    'production',
+    'inventory',
+    'cash-book',
+    'hr-payroll',
+    'orders',
+    'reports',
+    'maintenance',
+    'design-to-order',
+  ],
+  mill: [
+    'production',
+    'inventory',
+    'cash-book',
+    'hr-payroll',
+    'orders',
+    'reports',
+    'maintenance',
+    'design-to-order',
+  ],
   'store incharge': ['inventory', 'cash-book', 'reports'],
   store: ['inventory', 'cash-book', 'reports'],
   'production incharge': ['production', 'orders', 'reports', 'design-to-order'],
   programmer: ['production', 'orders', 'reports', 'design-to-order'],
   operator: ['production'],
-  security: ['security', 'inventory'],
-  account: ['cash-book', 'reports', 'masters', 'security'],
-  admin: ['cash-book', 'reports', 'masters', 'security', 'settings'],
-  accounts: ['cash-book', 'reports', 'masters'],
+  security: ['security', 'inventory', 'hr-payroll'],
+  account: ['cash-book', 'hr-payroll', 'reports', 'masters', 'security'],
+  admin: ['cash-book', 'hr-payroll', 'reports', 'masters', 'security', 'settings'],
+  accounts: ['cash-book', 'hr-payroll', 'reports', 'masters'],
+  hr: ['hr-payroll', 'masters', 'reports'],
+  payroll: ['hr-payroll', 'reports'],
 }
 
 /** Operator may only open production entry / related entry screens */
@@ -67,10 +89,11 @@ const OPERATOR_SUBS: Partial<Record<MainModuleId, string[]>> = {
   production: ['prod-entry', 'weft-issue', 'warp-issue', 'folding'],
 }
 
-/** Security role — gate + yarn OCR + GEB */
+/** Security role — gate + yarn OCR + GEB + attendance */
 const SECURITY_SUBS: Partial<Record<MainModuleId, string[]>> = {
   security: ['security-gate', 'yarn-inward-sec', 'geb-sec', 'login-activity'],
   inventory: ['yarn-inward'],
+  'hr-payroll': ['hr-attendance', 'hr-dash'],
 }
 
 function normalizeRole(name: string): string {

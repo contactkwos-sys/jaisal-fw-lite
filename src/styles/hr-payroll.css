@@ -1,0 +1,415 @@
+/* HR & Payroll — JAISAL FW professional light ERP */
+
+.hr-screen {
+  gap: 1rem;
+}
+
+.hr-subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0.35rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.hr-subnav button {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-family: "Outfit", sans-serif;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.4rem 0.7rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.hr-subnav button:hover {
+  background: var(--teal-soft);
+  color: var(--teal-deep);
+}
+
+.hr-subnav button.active {
+  background: var(--teal);
+  color: #fff;
+  border-color: var(--teal-deep);
+}
+
+.hr-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: 0.75rem;
+}
+
+.hr-kpi {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 0.85rem 1rem;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.hr-kpi-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.hr-kpi-value {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 1.45rem;
+  font-weight: 700;
+  color: var(--teal-deep);
+}
+
+.hr-kpi.ok .hr-kpi-value { color: var(--success); }
+.hr-kpi.warn .hr-kpi-value { color: var(--warning); }
+.hr-kpi.danger .hr-kpi-value { color: var(--danger); }
+
+.hr-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.hr-quick-actions button {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.85rem;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--teal-deep);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+
+.hr-quick-actions button:hover {
+  border-color: var(--teal);
+  background: var(--teal-soft);
+}
+
+.hr-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: end;
+  padding: 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.hr-toolbar .field {
+  min-width: 8rem;
+}
+
+.hr-totals-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.7rem 0.9rem;
+  background: var(--teal-soft);
+  border: 1px solid color-mix(in srgb, var(--teal) 30%, var(--line));
+  border-radius: var(--radius);
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--teal-deep);
+}
+
+.hr-totals-bar .num {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+.hr-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+}
+
+.hr-toggle.on {
+  background: var(--success-soft);
+  border-color: color-mix(in srgb, var(--success) 40%, var(--line));
+  color: var(--success);
+}
+
+.hr-toggle.off {
+  background: var(--danger-soft);
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--line));
+  color: var(--danger);
+}
+
+.hr-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: var(--surface2);
+  color: var(--muted);
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.hr-badge-ok {
+  background: var(--success-soft);
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 35%, var(--line));
+}
+
+.hr-badge-warn {
+  background: var(--warning-soft);
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 35%, var(--line));
+}
+
+.hr-badge-danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--line));
+}
+
+.hr-badge-info {
+  background: var(--info-soft);
+  color: var(--info);
+  border-color: color-mix(in srgb, var(--info) 35%, var(--line));
+}
+
+.hr-table-wrap {
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  -webkit-overflow-scrolling: touch;
+}
+
+.hr-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 960px;
+  font-size: 0.82rem;
+}
+
+.hr-table th,
+.hr-table td {
+  padding: 0.55rem 0.6rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.hr-table th {
+  position: sticky;
+  top: 0;
+  background: var(--surface2);
+  font-family: "Outfit", sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+  z-index: 1;
+}
+
+.hr-table tbody tr:hover {
+  background: color-mix(in srgb, var(--teal-soft) 55%, transparent);
+}
+
+.hr-table input[type="time"],
+.hr-table input[type="text"],
+.hr-table input[type="number"],
+.hr-table select {
+  width: 100%;
+  min-width: 5.5rem;
+  font-size: 0.8rem;
+}
+
+.hr-row-dirty {
+  background: var(--warning-soft);
+}
+
+.hr-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.65rem;
+}
+
+.hr-att-cards {
+  display: none;
+}
+
+.hr-report-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.75rem;
+}
+
+.hr-report-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1rem;
+  box-shadow: var(--shadow-sm);
+  display: grid;
+  gap: 0.4rem;
+  cursor: pointer;
+}
+
+.hr-report-card:hover {
+  border-color: var(--teal);
+}
+
+.hr-report-card strong {
+  font-family: "Outfit", sans-serif;
+  color: var(--teal-deep);
+}
+
+/* Bank salary letter — A4 print */
+.hr-letter {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  padding: 1.5rem;
+  max-width: 210mm;
+  margin: 0 auto;
+  color: #111;
+}
+
+.hr-letter-head {
+  text-align: center;
+  border-bottom: 2px solid var(--teal);
+  padding-bottom: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.hr-letter-head h1 {
+  margin: 0;
+  font-family: "Outfit", sans-serif;
+  font-size: 1.25rem;
+  letter-spacing: 0.04em;
+  color: var(--teal-deep);
+}
+
+.hr-letter-head p {
+  margin: 0.2rem 0 0;
+  color: #555;
+  font-size: 0.85rem;
+}
+
+.hr-letter h2 {
+  text-align: center;
+  font-family: "Outfit", sans-serif;
+  font-size: 1.05rem;
+  letter-spacing: 0.08em;
+  margin: 1rem 0;
+}
+
+.hr-letter-meta {
+  display: grid;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.hr-letter table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.hr-letter th,
+.hr-letter td {
+  border: 1px solid #c9d4e0;
+  padding: 0.4rem 0.45rem;
+  text-align: left;
+}
+
+.hr-letter th {
+  background: #eef3f8;
+}
+
+.hr-letter-totals {
+  margin-top: 1rem;
+  font-size: 0.9rem;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.hr-letter-auth {
+  margin-top: 2rem;
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.hr-letter-sign {
+  margin-top: 1.5rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+.hr-letter-sign .box {
+  border-top: 1px solid #999;
+  padding-top: 0.4rem;
+  min-height: 4rem;
+  font-size: 0.82rem;
+  color: #444;
+}
+
+@media (max-width: 900px) {
+  .hr-table-wrap {
+    display: none;
+  }
+  .hr-att-cards {
+    display: grid;
+  }
+  .hr-screen .hr-table-wrap.hr-force-table {
+    display: block;
+  }
+}
+
+@media print {
+  .app-sidebar,
+  .mobile-topbar,
+  .bottom-nav,
+  .hr-subnav,
+  .hr-toolbar,
+  .hr-quick-actions,
+  .primary-save,
+  .share-actions,
+  .screen-header button,
+  .btn-ghost {
+    display: none !important;
+  }
+  .hr-letter {
+    box-shadow: none;
+    border: none;
+    max-width: none;
+    padding: 0;
+  }
+  .hr-letter-print {
+    break-inside: avoid;
+  }
+}
