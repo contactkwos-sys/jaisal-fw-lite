@@ -440,6 +440,15 @@ export type PayrollRate = {
   created_at: string
 }
 
+export type PayrollJob = {
+  id: string
+  job_name: string
+  job_code: string | null
+  is_active: boolean
+  created_at?: string
+  updated_at?: string
+}
+
 export type ElectricityEntry = {
   id: string
   entry_date: string

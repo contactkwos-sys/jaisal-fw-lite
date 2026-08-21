@@ -21,7 +21,20 @@ function emptyTimes(): Pick<RowState, 'in_time' | 'break_out' | 'break_in' | 'ou
   return { in_time: '', break_out: '', break_in: '', out_time: '', status: 'Absent' }
 }
 
-const DEPT_SUGGESTIONS = ['Weaving', 'Folding', 'Security', 'Maintenance', 'Office', 'Other']
+const DEPT_SUGGESTIONS = [
+  'Weaving',
+  'Folding',
+  'Security',
+  'Security Guard',
+  'ASO',
+  'Assistant Security Officer',
+  'Sweeper',
+  'sweeper 1',
+  'sweeper 2',
+  'Maintenance',
+  'Office',
+  'Other',
+]
 
 export function AttendanceScreen() {
   const [date, setDate] = useState(todayISO)
