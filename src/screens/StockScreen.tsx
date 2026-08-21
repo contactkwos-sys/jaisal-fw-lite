@@ -141,7 +141,7 @@ export function StockScreen({ initialTab = 'beam', onTabChange }: Props) {
   return (
     <div className="screen">
       <header className="screen-header">
-        <h1>Warp Beam Stock</h1>
+        <h1>Warp Beam Stock (Legacy)</h1>
         <div className="segment">
           <button
             type="button"
@@ -159,6 +159,11 @@ export function StockScreen({ initialTab = 'beam', onTabChange }: Props) {
           </button>
         </div>
       </header>
+
+      <p className="text-muted" style={{ margin: '0 0 0.75rem' }}>
+        Variety-level beam stock is retained here. Day-to-day pipe control lives under{' '}
+        <strong>Inventory → Warp Yarn Management</strong>.
+      </p>
 
       <div className="list">
         {beams.map((row) => (
@@ -184,7 +189,7 @@ export function StockScreen({ initialTab = 'beam', onTabChange }: Props) {
                 aria-label="Delete"
                 onClick={() => void deleteBeam(row)}
               >
-                Del
+                Delete
               </button>
             </div>
           </article>

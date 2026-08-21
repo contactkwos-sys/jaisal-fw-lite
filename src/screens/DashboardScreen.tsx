@@ -21,6 +21,10 @@ type Kpis = {
   weftYarnStock: number
   greigeToday: number
   dispatchToday: number
+  pendingDin: number
+  pendingSamples: number
+  pendingOrders: number
+  openBreakdowns: number
 }
 
 type Alerts = {
@@ -62,6 +66,10 @@ export function DashboardScreen({ onNavigate }: Props) {
     weftYarnStock: 0,
     greigeToday: 0,
     dispatchToday: 0,
+    pendingDin: 0,
+    pendingSamples: 0,
+    pendingOrders: 0,
+    openBreakdowns: 0,
   })
   const [alerts, setAlerts] = useState<Alerts>({
     beamPending: 0,
@@ -140,11 +148,21 @@ export function DashboardScreen({ onNavigate }: Props) {
         .select('id, party_name, grand_total, created_at')
         .order('created_at', { ascending: false })
         .limit(6),
-      supabase
-        .from('production_entries')
-        .select('machine_no, total_meter')
-        .eq('entry_date', today),
+      supabase.from('production_entries').select('machine_no, total_meter').eq('entry_date', today),
     ])
+
+    // Optional module tables — never fail the whole dashboard if migrations lag
+    const [dinsRes, samplesRes, orderBookRes, maintOpenRes] = await Promise.all([
+      supabase.from('dins').select('id, status').limit(500),
+      supabase.from('sample_job_cards').select('id, status').limit(500),
+      supabase.from('order_book').select('id, status').limit(500),
+      supabase.from('maintenance_requests').select('id, status, resolved_at').limit(500),
+    ])
+
+    const dins = dinsRes.error ? [] : (dinsRes.data ?? [])
+    const samples = samplesRes.error ? [] : (samplesRes.data ?? [])
+    const orderBook = orderBookRes.error ? [] : (orderBookRes.data ?? [])
+    const maintOpen = maintOpenRes.error ? [] : (maintOpenRes.data ?? [])
 
     const present = (att.data ?? []).filter((a) => {
       const s = String(a.status || '').toLowerCase()
@@ -156,12 +174,37 @@ export function DashboardScreen({ onNavigate }: Props) {
     const greige = (prod.data ?? []).reduce((s, p) => s + Number(p.total_meter || 0), 0)
     const dispatchM = (challan.data ?? []).reduce((s, c) => s + Number(c.meter || 0), 0)
 
+    const pendingDin = dins.filter((d: { status?: string | null }) => {
+      const st = String(d.status || '').toLowerCase()
+      return !st.includes('closed') && !st.includes('cancelled') && !st.includes('dispatched')
+    }).length
+
+    const pendingSamples = samples.filter((s: { status?: string | null }) => {
+      const st = String(s.status || '').toLowerCase()
+      return !st.includes('approved') && !st.includes('closed') && !st.includes('cancelled')
+    }).length
+
+    const pendingOrders = orderBook.filter((o: { status?: string | null }) => {
+      const st = String(o.status || 'pending').toLowerCase()
+      return st.includes('pending') || st === '' || st.includes('open')
+    }).length
+
+    const openBreakdowns = maintOpen.filter((m: { status?: string | null; resolved_at?: string | null }) => {
+      if (m.resolved_at) return false
+      const st = String(m.status || '').toLowerCase()
+      return st !== 'resolved' && st !== 'closed'
+    }).length
+
     setKpis({
       attendanceToday: present,
       warpBeamStock: beamPcs,
       weftYarnStock: weftKg,
       greigeToday: greige,
       dispatchToday: dispatchM,
+      pendingDin,
+      pendingSamples,
+      pendingOrders,
+      openBreakdowns,
     })
     setBeams((beamStock.data as BeamPipeStock[]) ?? [])
     setYarns((weftStock.data as WeftYarnStock[]) ?? [])
@@ -177,14 +220,6 @@ export function DashboardScreen({ onNavigate }: Props) {
         .select('machine_no, entry_date')
         .eq('entry_date', today)
       const machinesWithProd = new Set((pe ?? []).map((p) => p.machine_no))
-      programPending = jobIds.filter((j) => j.created_at?.startsWith(today) && !machinesWithProd.size).length
-        || jobIds.filter((j) => {
-          // fallback: count today's job cards if no production at all
-          return String(j.created_at || '').startsWith(today)
-        }).length && !(pe ?? []).length
-        ? jobIds.filter((j) => String(j.created_at || '').startsWith(today)).length
-        : 0
-      // simpler: today's job cards minus distinct machines that produced today
       const todayJobs = jobIds.filter((j) => String(j.created_at || '').startsWith(today))
       programPending = Math.max(0, todayJobs.length - machinesWithProd.size)
     }
@@ -192,7 +227,7 @@ export function DashboardScreen({ onNavigate }: Props) {
     setAlerts({
       beamPending: beamOut.count ?? 0,
       weftLow,
-      repairOut: repair.count ?? 0,
+      repairOut: (repair.count ?? 0) + openBreakdowns,
       programPending,
       gatepassPending: gp.count ?? 0,
     })
@@ -369,14 +404,14 @@ export function DashboardScreen({ onNavigate }: Props) {
   }
 
   const quick: Array<{ label: string; screen: AppScreen; sub?: string; module?: import('../lib/nav').MainModuleId }> = [
-    { label: 'Production Entry', screen: 'production', sub: 'entry', module: 'production' },
-    { label: 'Job Card Issue', screen: 'production', sub: 'job', module: 'orders' },
-    { label: 'Program Card', screen: 'programs', sub: 'create', module: 'orders' },
-    { label: 'Weft Issue', screen: 'purchase', sub: 'weft', module: 'production' },
-    { label: 'Folding', screen: 'dispatch', sub: 'folding', module: 'production' },
-    { label: 'Dispatch', screen: 'dispatch', sub: 'challan', module: 'production' },
-    { label: 'Inward', screen: 'purchase', sub: 'general', module: 'inventory' },
-    { label: 'Attendance', screen: 'attendance', module: 'reports' },
+    { label: 'Design to Order', screen: 'dto-hub', module: 'design-to-order' },
+    { label: 'DIN Costing', screen: 'design-wise-costing', module: 'design-to-order' },
+    { label: 'Program & Dispatch', screen: 'program-dispatch', sub: 'pto', module: 'program-dispatch' },
+    { label: 'Warp Yarn Management', screen: 'warp-yarn', sub: 'overview', module: 'warp-yarn' },
+    { label: 'Attendance & Payroll', screen: 'hr-payroll', sub: 'dashboard', module: 'hr-payroll' },
+    { label: 'Machine-wise Maintenance', screen: 'maintenance', sub: 'overview', module: 'maintenance' },
+    { label: 'Security / Inward', screen: 'security-inventory', sub: 'dashboard', module: 'security' },
+    { label: 'Orders & Pending', screen: 'orders-pending', module: 'orders' },
   ]
 
   const alertRows = (
@@ -385,7 +420,7 @@ export function DashboardScreen({ onNavigate }: Props) {
       [`Weft Low Stock <${WEFT_LOW_STOCK_KG}kg (${alerts.weftLow})`, { screen: 'stock' as AppScreen, sub: 'weft', module: 'inventory' as const }],
       [`Repair Out Pending (${alerts.repairOut})`, { screen: 'maintenance' as AppScreen, sub: 'repair', module: 'maintenance' as const }],
       [`Program Pending (${alerts.programPending})`, { screen: 'programs' as AppScreen, sub: 'pending', module: 'orders' as const }],
-      [`Gatepass Pending Sign (${alerts.gatepassPending})`, { screen: 'dispatch' as AppScreen, sub: 'gatepass', module: 'production' as const }],
+      [`Gatepass Pending Sign (${alerts.gatepassPending})`, { screen: 'program-dispatch' as AppScreen, sub: 'gatepass', module: 'program-dispatch' as const }],
     ] as const
   ).filter((row) => !row[0].includes('(0)'))
 
@@ -416,11 +451,11 @@ export function DashboardScreen({ onNavigate }: Props) {
       <section className="kpi-grid kpi-grid-6">
         {(
           [
-            ['Attendance Today', kpis.attendanceToday, 'att', { screen: 'attendance' as AppScreen, module: 'reports' as const }],
-            ['Warp Beam Stock', `${kpis.warpBeamStock} Beams`, 'beam', { screen: 'stock' as AppScreen, sub: 'beam', module: 'inventory' as const }],
+            ['Attendance Today', kpis.attendanceToday, 'att', { screen: 'attendance' as AppScreen, module: 'hr-payroll' as const }],
+            ['Warp Yarn Mgmt', `${kpis.warpBeamStock} Beams`, 'beam', { screen: 'warp-yarn' as AppScreen, sub: 'overview', module: 'warp-yarn' as const }],
             ['Weft Yarn Stock', `${kpis.weftYarnStock.toFixed(0)} kg`, 'yarn', { screen: 'stock' as AppScreen, sub: 'weft', module: 'inventory' as const }],
-            ['Greige Production', `${kpis.greigeToday.toFixed(0)} m`, 'greige', { screen: 'production' as AppScreen, sub: 'report', module: 'production' as const }],
-            ['Dispatch Today', `${kpis.dispatchToday.toFixed(0)} m`, 'dispatch', { screen: 'dispatch' as AppScreen, sub: 'challan', module: 'production' as const }],
+            ['Greige Production', `${kpis.greigeToday.toFixed(0)} m`, 'greige', { screen: 'program-dispatch' as AppScreen, sub: 'reports', module: 'program-dispatch' as const }],
+            ['Dispatch Today', `${kpis.dispatchToday.toFixed(0)} m`, 'dispatch', { screen: 'program-dispatch' as AppScreen, sub: 'challan', module: 'program-dispatch' as const }],
             ['Alerts & Reminders', `${alertCount} Alert${alertCount === 1 ? '' : 's'}`, 'alerts', { screen: 'home' as AppScreen, module: 'dashboard' as const }],
           ] as const
         ).map(([label, value, tone, nav]) => (
@@ -428,6 +463,29 @@ export function DashboardScreen({ onNavigate }: Props) {
             key={label}
             type="button"
             className={`kpi-card surface kpi-tone-${tone}`}
+            onClick={() => onNavigate(nav)}
+          >
+            <span className="text-muted">{label}</span>
+            <strong className="num">{value}</strong>
+          </button>
+        ))}
+      </section>
+
+      <section className="kpi-grid kpi-grid-6" style={{ marginTop: 12 }}>
+        {(
+          [
+            ['Pending DIN', kpis.pendingDin, { screen: 'dto-hub' as AppScreen, module: 'design-to-order' as const }],
+            ['Pending Samples', kpis.pendingSamples, { screen: 'dto-tracking' as AppScreen, module: 'design-to-order' as const }],
+            ['Pending Orders', kpis.pendingOrders, { screen: 'orders-pending' as AppScreen, module: 'orders' as const }],
+            ['Open Breakdowns', kpis.openBreakdowns, { screen: 'maintenance' as AppScreen, sub: 'overview', module: 'maintenance' as const }],
+            ['Today Production', `${kpis.greigeToday.toFixed(0)} m`, { screen: 'program-dispatch' as AppScreen, sub: 'entry', module: 'program-dispatch' as const }],
+            ['Today Dispatch', `${kpis.dispatchToday.toFixed(0)} m`, { screen: 'program-dispatch' as AppScreen, sub: 'challan', module: 'program-dispatch' as const }],
+          ] as const
+        ).map(([label, value, nav]) => (
+          <button
+            key={label}
+            type="button"
+            className="kpi-card surface kpi-tone-beam"
             onClick={() => onNavigate(nav)}
           >
             <span className="text-muted">{label}</span>
@@ -574,7 +632,7 @@ export function DashboardScreen({ onNavigate }: Props) {
       </div>
 
       <section className="dash-panel">
-        <h2 className="section-title">Quick Actions</h2>
+        <h2 className="section-title">Module Quick Access</h2>
         <div className="quick-grid quick-grid-8">
           {quick.map((q) => (
             <button
@@ -611,7 +669,7 @@ export function DashboardScreen({ onNavigate }: Props) {
                     Edit
                   </button>
                   <button type="button" className="btn-ghost icon-btn" disabled={busy} onClick={() => void deleteBeam(b)}>
-                    Del
+                    Delete
                   </button>
                 </div>
               </article>
@@ -627,7 +685,7 @@ export function DashboardScreen({ onNavigate }: Props) {
                     Edit
                   </button>
                   <button type="button" className="btn-ghost icon-btn" disabled={busy} onClick={() => void deleteYarn(y)}>
-                    Del
+                    Delete
                   </button>
                 </div>
               </article>

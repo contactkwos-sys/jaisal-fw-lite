@@ -790,10 +790,14 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
 
       {sub === 'payroll' ? (
         <div className="form-stack">
+          <p className="text-muted">
+            Payroll processing has moved to <strong>HR & Payroll</strong>. This page keeps the Master Job List and
+            role-day rates for costing compatibility.
+          </p>
           <h2 className="section-title">Master Job List</h2>
           <p className="text-muted2">
             Payroll designations (ASO, Security Guard, Sweeper, sweeper 1 / 2, …). Use these names as
-            worker department in Attendance / Employee Master.
+            worker department / designation in Attendance or HR Employee Master.
           </p>
           <div className="list payroll-job-list">
             {payrollJobs.map((job) => {

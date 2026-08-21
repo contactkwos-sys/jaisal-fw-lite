@@ -3,6 +3,8 @@ import { SubTabs } from '../components/SubTabs'
 import { useAuth } from '../lib/auth'
 import type { AdjustmentNote, OrderBookItem } from '../lib/database.types'
 import { applyOrQueue, todayISO } from '../lib/mutate'
+import { nextOrderNo } from '../lib/programDispatch'
+import { suggestMarka } from '../lib/marka'
 import { supabase } from '../lib/supabase'
 
 type Sub = 'entry' | 'report'
@@ -12,6 +14,8 @@ type LineDraft = {
   key: string
   design_no: string
   colour: string
+  quality: string
+  total_pcs: string
   qty_meter: string
   rate: string
 }
@@ -31,7 +35,15 @@ type ReportRow = {
 }
 
 function emptyLine(): LineDraft {
-  return { key: crypto.randomUUID(), design_no: '', colour: '', qty_meter: '', rate: '' }
+  return {
+    key: crypto.randomUUID(),
+    design_no: '',
+    colour: '',
+    quality: '',
+    total_pcs: '',
+    qty_meter: '',
+    rate: '',
+  }
 }
 
 export function OrderBookScreen({ initialSub }: Props) {
@@ -40,6 +52,8 @@ export function OrderBookScreen({ initialSub }: Props) {
   const [party, setParty] = useState('')
   const [parties, setParties] = useState<string[]>([])
   const [orderDate, setOrderDate] = useState(todayISO())
+  const [deliveryDate, setDeliveryDate] = useState('')
+  const [remarks, setRemarks] = useState('')
   const [paymentDays, setPaymentDays] = useState('')
   const [discountPct, setDiscountPct] = useState('')
   const [lines, setLines] = useState<LineDraft[]>([emptyLine()])
@@ -147,19 +161,29 @@ export function OrderBookScreen({ initialSub }: Props) {
     setError(null)
     setMessage(null)
     try {
+      const orderNo = await nextOrderNo()
+      const marka = suggestMarka(party.trim())
       const header = {
         party_name: party.trim(),
         order_date: orderDate,
         payment_days: paymentDays ? Number(paymentDays) : null,
         discount_pct: discountPct ? Number(discountPct) : null,
+        order_no: orderNo,
+        delivery_date: deliveryDate || null,
+        remarks: remarks.trim() || null,
+        status: 'Pending',
       }
       const itemRows = lines
         .filter((l) => l.design_no.trim() && Number(l.qty_meter) > 0)
         .map((l) => ({
           design_no: l.design_no.trim(),
           colour: l.colour.trim() || null,
+          quality: l.quality.trim() || null,
+          total_pcs: Number(l.total_pcs) || 0,
           qty_meter: Number(l.qty_meter) || 0,
           rate: Number(l.rate) || 0,
+          delivery_date: deliveryDate || null,
+          status: 'Pending',
         }))
       const result = await applyOrQueue({
         isCeo,
@@ -179,12 +203,25 @@ export function OrderBookScreen({ initialSub }: Props) {
             itemRows.map((r) => ({ ...r, order_id: data.id })),
           )
           if (iErr) throw iErr
+          // Ensure party marka exists for Program & Dispatch
+          const { data: existing } = await supabase
+            .from('party_master')
+            .select('id, marka')
+            .ilike('party_name', party.trim())
+            .maybeSingle()
+          if (existing?.id && !existing.marka) {
+            await supabase.from('party_master').update({ marka }).eq('id', existing.id)
+          } else if (!existing) {
+            await supabase.from('party_master').insert({ party_name: party.trim(), marka })
+          }
         },
       })
-      setMessage(result === 'applied' ? 'Order saved' : 'Sent to approval queue')
+      setMessage(result === 'applied' ? `Order ${orderNo} saved` : 'Sent to approval queue')
       setLines([emptyLine()])
       setPaymentDays('')
       setDiscountPct('')
+      setDeliveryDate('')
+      setRemarks('')
       await loadParties()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed')
@@ -319,6 +356,14 @@ export function OrderBookScreen({ initialSub }: Props) {
             <span className="text-muted">Date</span>
             <input type="date" value={orderDate} onChange={(e) => setOrderDate(e.target.value)} />
           </label>
+          <label className="field">
+            <span className="text-muted">Delivery Date</span>
+            <input type="date" value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} />
+          </label>
+          <label className="field">
+            <span className="text-muted">Remarks</span>
+            <input value={remarks} onChange={(e) => setRemarks(e.target.value)} />
+          </label>
           {lines.map((line, idx) => (
             <fieldset key={line.key} className="colour-block surface">
               <legend>Design / Colour {idx + 1}</legend>
@@ -335,12 +380,36 @@ export function OrderBookScreen({ initialSub }: Props) {
                 />
               </label>
               <label className="field">
+                <span className="text-muted">Quality</span>
+                <input
+                  value={line.quality}
+                  onChange={(e) => {
+                    const next = [...lines]
+                    next[idx] = { ...line, quality: e.target.value }
+                    setLines(next)
+                  }}
+                />
+              </label>
+              <label className="field">
                 <span className="text-muted">Colour</span>
                 <input
                   value={line.colour}
                   onChange={(e) => {
                     const next = [...lines]
                     next[idx] = { ...line, colour: e.target.value }
+                    setLines(next)
+                  }}
+                />
+              </label>
+              <label className="field">
+                <span className="text-muted">Total Pcs</span>
+                <input
+                  className="num"
+                  type="number"
+                  value={line.total_pcs}
+                  onChange={(e) => {
+                    const next = [...lines]
+                    next[idx] = { ...line, total_pcs: e.target.value }
                     setLines(next)
                   }}
                 />

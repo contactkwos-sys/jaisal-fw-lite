@@ -16,6 +16,8 @@ type OrderItemOpt = {
   design_no: string
   colour: string
   qty_meter: number
+  rate: number
+  matching_no: number | null
 }
 
 type PettyDraft = {
@@ -72,7 +74,7 @@ export function ProgramScreen({ initialSub }: Props) {
   const loadItems = useCallback(async () => {
     const { data, error: err } = await supabase
       .from('order_book_items')
-      .select('id, design_no, colour, qty_meter, settled, order_book(party_name, order_date)')
+      .select('id, design_no, colour, qty_meter, rate, matching_no, settled, order_book(party_name, order_date)')
       .eq('settled', false)
       .limit(200)
     if (err) throw err
@@ -82,7 +84,9 @@ export function ProgramScreen({ initialSub }: Props) {
       design_no: row.design_no || '—',
       colour: row.colour || '—',
       qty_meter: Number(row.qty_meter || 0),
-      label: `${row.order_book?.party_name || '—'} · ${row.design_no || '—'} · ${row.colour || '—'} (${Number(row.qty_meter || 0)} m)`,
+      rate: Number(row.rate || 0),
+      matching_no: row.matching_no != null ? Number(row.matching_no) : null,
+      label: `${row.order_book?.party_name || '—'} · ${row.design_no || '—'} · ${row.colour || '—'} (${Number(row.qty_meter || 0)} m · ₹${Number(row.rate || 0)}/m)`,
     }))
     setItems(opts)
     if (!orderItemId && opts[0]) setOrderItemId(opts[0].id)
@@ -291,16 +295,23 @@ export function ProgramScreen({ initialSub }: Props) {
                 <strong>{selected.party}</strong>
               </div>
               <div className="program-summary-card surface">
-                <span className="text-muted2">Design</span>
+                <span className="text-muted2">DIN / Design</span>
                 <strong>{selected.design_no}</strong>
               </div>
               <div className="program-summary-card surface">
                 <span className="text-muted2">Colour / Matching</span>
-                <strong>{selected.colour}</strong>
+                <strong>
+                  {selected.colour}
+                  {selected.matching_no != null ? ` · #${selected.matching_no}` : ''}
+                </strong>
               </div>
               <div className="program-summary-card surface">
                 <span className="text-muted2">Ordered meter</span>
                 <strong className="num">{selected.qty_meter.toFixed(1)}</strong>
+              </div>
+              <div className="program-summary-card surface">
+                <span className="text-muted2">Order Rate</span>
+                <strong className="num">₹{selected.rate.toFixed(2)} / Mtr</strong>
               </div>
             </div>
           ) : null}

@@ -160,8 +160,12 @@ export function WarpBeamPipeScreen() {
   return (
     <div className="screen">
       <header className="screen-header">
-        <h1>Warp Beam Pipe</h1>
-        <p className="text-muted">Track pipe OUT / IN with pending returns highlighted</p>
+        <h1>Warp Beam Pipe (Legacy)</h1>
+        <p className="text-muted">
+          Legacy jobber OUT / IN tracker. Prefer{' '}
+          <strong>Inventory → Warp Yarn Management</strong> for full pipe lifecycle (warper send/receive,
+          machines, godown).
+        </p>
         <SubTabs
           value={tab}
           onChange={(id) => setTab(id as TabId)}

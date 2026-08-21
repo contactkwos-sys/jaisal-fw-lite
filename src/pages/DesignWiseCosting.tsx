@@ -17,6 +17,7 @@ import {
   type WarpDraft,
   type WeftDraft,
 } from '../lib/designWiseCosting'
+import { syncDinCostingFromLatest } from '../lib/designToOrder'
 
 type Props = { initialDin?: string }
 
@@ -125,8 +126,16 @@ function isDinFilter(value: string | undefined): value is string {
 }
 
 export function DesignWiseCosting({ initialDin = '' }: Props) {
-  const { session, profile, isCeo, isManager } = useAuth()
+  const { session, profile, isCeo, isManager, roleName } = useAuth()
   const canDeleteFinal = isCeo || isManager
+  const role = (roleName || '').trim().toLowerCase()
+  const canViewCosting =
+    isCeo ||
+    isManager ||
+    role === 'md' ||
+    role === 'managing director' ||
+    role === 'owner' ||
+    role.includes('ceo')
 
   const [dinNumber, setDinNumber] = useState(initialDin)
   const [costingDate, setCostingDate] = useState(todayISO())
@@ -626,12 +635,24 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
           .eq('dno', dinNumber.trim())
         if (designErr) {
           // Costing itself is saved — surface design-register sync as a soft warning
+          try {
+            await syncDinCostingFromLatest(dinNumber.trim())
+          } catch {
+            /* optional */
+          }
           setMessage(
             `Costing saved to DIN ${dinNumber.trim()} · Final ${fmtInr(totals.finalCostPerMtr)}/mtr (design register sync: ${designErr.message})`,
           )
           await refreshHistory()
           return
         }
+      }
+
+      // Sync snapshot onto Design to Order DIN master when present (same DIN number)
+      try {
+        await syncDinCostingFromLatest(dinNumber.trim())
+      } catch {
+        /* DIN table may not be migrated yet — costing still saved */
       }
 
       await refreshHistory()
@@ -673,6 +694,18 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
     setDinNumber(value)
     const match = designOpts.find((d) => d.dno === value)
     if (match?.colour && !qualityName) setQualityName(match.colour)
+  }
+
+  if (!canViewCosting) {
+    return (
+      <div className="screen">
+        <header className="screen-header">
+          <h1>DIN Costing</h1>
+          <p className="text-muted">Restricted to CEO / authorized roles.</p>
+        </header>
+        <p className="form-error text-danger">You do not have permission to view DIN Costing rates.</p>
+      </div>
+    )
   }
 
   return (
@@ -1173,11 +1206,31 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
             <input className="num dwc-auto" value={fmtMoney(buildup.gstAmount)} readOnly />
           </label>
         </div>
+
+        <div className="dwc-gst-split" aria-label="GST separated from base costing">
+          <div className="dwc-gst-card">
+            <span className="text-muted">Base Cost / Meter</span>
+            <strong className="num">{fmtInr(buildup.afterMuPerMtr)}</strong>
+            <span className="dwc-hint">After MU · GST not included</span>
+          </div>
+          <div className="dwc-gst-card">
+            <span className="text-muted">GST {fmtQty(buildup.gstPercent, 0)}%</span>
+            <strong className="num">{fmtInr(buildup.gstAmount)}</strong>
+            <span className="dwc-hint">Shown separately from base</span>
+          </div>
+          <div className="dwc-gst-card dwc-gst-final">
+            <span className="text-muted">Final Cost Including GST</span>
+            <strong className="num">{fmtInr(buildup.finalCostPerMtr)}</strong>
+            <span className="dwc-hint">Base + GST</span>
+          </div>
+        </div>
+
         <div className="dwc-final">
           <div>
-            <span>Final Design Cost / Meter</span>
+            <span>Final Design Cost / Meter (Inc. GST)</span>
             <p className="dwc-final-sub text-muted">
-              Auditable chain · length {fmtQty(buildup.designLengthMtr, 0)} mtr · PIC {fmtQty(buildup.totalPic, 0)}
+              Auditable chain · length {fmtQty(buildup.designLengthMtr, 0)} mtr · PIC {fmtQty(buildup.totalPic, 0)} ·
+              base {fmtInr(buildup.afterMuPerMtr)} + GST {fmtInr(buildup.gstAmount)}
             </p>
           </div>
           <strong className="num">{fmtInr(buildup.finalCostPerMtr)}</strong>

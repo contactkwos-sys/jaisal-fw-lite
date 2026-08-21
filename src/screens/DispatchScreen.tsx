@@ -299,6 +299,30 @@ export function DispatchScreen({ initialSub = 'folding' }: Props) {
                 if (job?.program_id) setLinkProgramId(job.program_id)
                 if (job?.dno && !party) setParty(job.dno)
                 if (job?.total_meter != null && !meter) setMeter(String(job.total_meter))
+                // Auto-bring Order Rate from linked order_book_items via program
+                if (job?.program_id) {
+                  void (async () => {
+                    const { data: prog } = await supabase
+                      .from('programs')
+                      .select('order_item_id')
+                      .eq('id', job.program_id)
+                      .maybeSingle()
+                    if (!prog?.order_item_id) return
+                    const { data: item } = await supabase
+                      .from('order_book_items')
+                      .select('rate, qty_meter, colour, design_no, order_book(party_name)')
+                      .eq('id', prog.order_item_id)
+                      .maybeSingle()
+                    if (!item) return
+                    if (item.rate != null) setRate(String(item.rate))
+                    const ob = (item as { order_book?: { party_name?: string } | null }).order_book
+                    if (ob?.party_name) setParty(ob.party_name)
+                    if (item.design_no && !meter) {
+                      /* keep meter from job if set */
+                    }
+                    if (item.qty_meter != null && !meter) setMeter(String(item.qty_meter))
+                  })()
+                }
               }}
             >
               <option value="">—</option>
@@ -322,8 +346,11 @@ export function DispatchScreen({ initialSub = 'folding' }: Props) {
             <input className="num" type="number" value={challanRolls} onChange={(e) => setChallanRolls(e.target.value)} />
           </label>
           <label className="field">
-            <span className="text-muted">Rate</span>
+            <span className="text-muted">Rate / Meter</span>
             <input className="num" type="number" step="0.01" value={rate} onChange={(e) => setRate(e.target.value)} />
+            <span className="text-muted" style={{ fontSize: '0.75rem' }}>
+              Auto-filled from Order Booking rate when a linked program/job is selected
+            </span>
           </label>
           <label className="field">
             <span className="text-muted">GST %</span>
