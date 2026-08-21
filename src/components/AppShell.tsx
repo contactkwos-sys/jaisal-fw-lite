@@ -64,6 +64,14 @@ const ICONS: Record<string, ReactNode> = {
       />
     </svg>
   ),
+  'design-to-order': (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="nav-ico">
+      <path
+        fill="currentColor"
+        d="M4 4h7v7H4V4zm9 0h7v4h-7V4zM4 13h7v7H4v-7zm9 2h3v2h-3v-2zm4 0h3v5h-7v-2h4v-3zm-4 3h3v2h-3v-2z"
+      />
+    </svg>
+  ),
   reports: (
     <svg viewBox="0 0 24 24" aria-hidden="true" className="nav-ico">
       <path
@@ -77,6 +85,30 @@ const ICONS: Record<string, ReactNode> = {
       <path
         fill="currentColor"
         d="M21 10.5a6.5 6.5 0 0 1-9.7 5.7L5 22l-3-3 5.8-6.3A6.5 6.5 0 1 1 21 10.5zm-3.5.5a3 3 0 1 0-6 0 3 3 0 0 0 6 0z"
+      />
+    </svg>
+  ),
+  'hr-payroll': (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="nav-ico">
+      <path
+        fill="currentColor"
+        d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm0 2c-3.33 0-10 1.67-10 5v1h20v-1c0-3.33-6.67-5-10-5zm8-9h-2v2h-2v2h2v2h2v-2h2V7h-2z"
+      />
+    </svg>
+  ),
+  'program-dispatch': (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="nav-ico">
+      <path
+        fill="currentColor"
+        d="M3 5h18v2H3V5zm0 4h12v2H3V9zm0 4h18v2H3v-2zm0 4h12v2H3v-2zm16-5l4 3-4 3v-6z"
+      />
+    </svg>
+  ),
+  'warp-yarn': (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="nav-ico">
+      <path
+        fill="currentColor"
+        d="M4 6h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zm2 3v6h12V9H6zm2 2h2v2H8v-2zm4 0h2v2h-2v-2z"
       />
     </svg>
   ),

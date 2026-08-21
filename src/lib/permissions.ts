@@ -13,59 +13,90 @@ const CEO_MODULES: MainModuleId[] = [
   'dashboard',
   'production',
   'inventory',
-  'cash-book',
-  'orders',
-  'reports',
+  'design-to-order',
+  'program-dispatch',
+  'warp-yarn',
+  'hr-payroll',
   'maintenance',
-  'masters',
   'security',
+  'orders',
+  'cash-book',
+  'reports',
+  'masters',
   'settings',
 ]
 
-const MANAGER_MODULES: MainModuleId[] = [
-  'production',
-  'inventory',
-  'cash-book',
-  'orders',
-  'reports',
-  'maintenance',
-  'masters',
-  'security',
-  'settings',
-]
+const MANAGER_MODULES: MainModuleId[] = CEO_MODULES.filter((m) => m !== 'dashboard')
 
 /** Default module access by role name (case-insensitive match / includes). */
 const ROLE_DEFAULTS: Record<string, MainModuleId[]> = {
   ceo: CEO_MODULES,
-  // Managing Director / MD — same floor access as CEO (Orders + Design Broadcast included)
   md: CEO_MODULES,
   'managing director': CEO_MODULES,
   owner: CEO_MODULES,
-  // Manager: all modules EXCEPT CEO Dashboard
   manager: MANAGER_MODULES,
-  'machine supervisor': ['production', 'inventory', 'maintenance', 'reports'],
-  salesman: ['orders', 'masters', 'reports', 'cash-book'],
-  'checker & dispatch': ['production', 'inventory', 'security'],
-  'program supervisor': ['production', 'orders', 'reports'],
-  'mill incharge': ['production', 'inventory', 'cash-book', 'orders', 'reports', 'maintenance'],
-  mill: ['production', 'inventory', 'cash-book', 'orders', 'reports', 'maintenance'],
-  'store incharge': ['inventory', 'cash-book', 'reports'],
-  store: ['inventory', 'cash-book', 'reports'],
-  'production incharge': ['production', 'orders', 'reports'],
-  programmer: ['production', 'orders', 'reports'],
-  operator: ['production'],
-  security: ['security', 'inventory'],
-  account: ['cash-book', 'reports', 'masters', 'security'],
-  admin: ['cash-book', 'reports', 'masters', 'security', 'settings'],
-  accounts: ['cash-book', 'reports', 'masters'],
+  'machine supervisor': ['production', 'program-dispatch', 'inventory', 'warp-yarn', 'maintenance', 'reports'],
+  salesman: ['design-to-order', 'orders', 'masters', 'reports', 'cash-book'],
+  'checker & dispatch': ['production', 'program-dispatch', 'inventory', 'security'],
+  'program supervisor': ['production', 'program-dispatch', 'orders', 'reports', 'design-to-order'],
+  'mill incharge': [
+    'production',
+    'program-dispatch',
+    'inventory',
+    'warp-yarn',
+    'cash-book',
+    'hr-payroll',
+    'orders',
+    'reports',
+    'maintenance',
+    'design-to-order',
+  ],
+  mill: [
+    'production',
+    'program-dispatch',
+    'inventory',
+    'warp-yarn',
+    'cash-book',
+    'hr-payroll',
+    'orders',
+    'reports',
+    'maintenance',
+    'design-to-order',
+  ],
+  'store incharge': ['inventory', 'warp-yarn', 'cash-book', 'reports', 'security'],
+  store: ['inventory', 'warp-yarn', 'cash-book', 'reports'],
+  'production incharge': ['production', 'program-dispatch', 'orders', 'reports', 'design-to-order'],
+  programmer: ['production', 'program-dispatch', 'orders', 'reports', 'design-to-order'],
+  operator: ['production', 'program-dispatch'],
+  security: ['security', 'inventory', 'warp-yarn', 'hr-payroll'],
+  account: ['cash-book', 'hr-payroll', 'reports', 'masters', 'security'],
+  admin: ['cash-book', 'hr-payroll', 'reports', 'masters', 'security', 'settings'],
+  accounts: ['cash-book', 'hr-payroll', 'reports', 'masters'],
+  hr: ['hr-payroll', 'masters', 'reports'],
+  payroll: ['hr-payroll', 'reports'],
+}
+
+/** Salesman — Design to Order without costing rates */
+const SALESMAN_SUBS: Partial<Record<MainModuleId, string[]>> = {
+  'design-to-order': [
+    'din-intake',
+    'sample-job',
+    'sample-tracking',
+    'order-booking',
+    'order-status',
+    'sample-promotion',
+    'followup',
+    'dto-reports',
+  ],
 }
 
 /** Operator may only open production entry / related entry screens */
 const OPERATOR_SUBS: Partial<Record<MainModuleId, string[]>> = {
-  production: ['prod-entry', 'weft-issue', 'warp-issue', 'folding'],
+  production: ['machine-wise', 'prod-entry', 'weft-issue', 'mwp-report', 'warp-issue', 'folding'],
+  'program-dispatch': ['prod-entry', 'folding', 'tracking'],
 }
 
-/** Security role — Security Inventory entry + gate + yarn OCR + GEB */
+/** Security role — Security Inventory entry + gate + yarn OCR + GEB + attendance */
 const SECURITY_SUBS: Partial<Record<MainModuleId, string[]>> = {
   security: [
     'security-inventory',
@@ -83,7 +114,9 @@ const SECURITY_SUBS: Partial<Record<MainModuleId, string[]>> = {
     'geb-sec',
     'login-activity',
   ],
-  inventory: ['yarn-inward', 'security-inventory'],
+  inventory: ['yarn-inward', 'warp-yarn-link'],
+  'warp-yarn': ['wy-overview', 'wy-machines', 'wy-godown', 'wy-empty', 'wy-warper'],
+  'hr-payroll': ['hr-attendance', 'hr-dash'],
 }
 
 function normalizeRole(name: string): string {
@@ -94,8 +127,6 @@ function matchDefaultModules(roleName: string): MainModuleId[] {
   const n = normalizeRole(roleName)
   if (!n) return ['production']
   if (ROLE_DEFAULTS[n]) return ROLE_DEFAULTS[n]
-  // Fuzzy match only for longer names — short tokens like "md" must not match
-  // inside "admin" via String.includes (that hid Orders / Design Broadcast).
   for (const [key, mods] of Object.entries(ROLE_DEFAULTS)) {
     if (n.length < 4 || key.length < 4) continue
     if (n.includes(key) || key.includes(n)) return mods
@@ -152,7 +183,7 @@ export function getDefaultPermissions(roleName: string): ModulePermission[] {
     let subIds: string[] | undefined
     if (isOperator && OPERATOR_SUBS[moduleId]) subIds = OPERATOR_SUBS[moduleId]
     if (isSecurity && SECURITY_SUBS[moduleId]) subIds = SECURITY_SUBS[moduleId]
-    // Manager: full access to every allowed module (no sub restriction)
+    if (n === 'salesman' && SALESMAN_SUBS[moduleId]) subIds = SALESMAN_SUBS[moduleId]
     if (isManager) subIds = undefined
     return { moduleId, subIds }
   })
@@ -168,7 +199,6 @@ export function getPermissionsForRole(roleName: string): ModulePermission[] {
 export function canAccessModule(roleName: string, moduleId: MainModuleId): boolean {
   const n = normalizeRole(roleName)
   if (n === 'ceo' || n === 'md' || n === 'managing director' || n === 'owner') return true
-  // Hard rule: Manager never gets CEO Dashboard
   if (n === 'manager' && moduleId === 'dashboard') return false
   return getPermissionsForRole(roleName).some((p) => p.moduleId === moduleId)
 }
@@ -177,6 +207,13 @@ export function canAccessSub(roleName: string, moduleId: MainModuleId, subId: st
   const n = normalizeRole(roleName)
   if (n === 'ceo' || n === 'md' || n === 'managing director' || n === 'owner') return true
   if (n === 'manager' && moduleId === 'dashboard') return false
+  // DIN Costing is CEO / MD / Owner / Manager only
+  if (
+    (subId === 'din-costing' || subId === 'design-costing') &&
+    !(n === 'manager' || n.includes('ceo') || n === 'md' || n.includes('director') || n === 'owner')
+  ) {
+    return false
+  }
   const perm = getPermissionsForRole(roleName).find((p) => p.moduleId === moduleId)
   if (!perm) return false
   if (!perm.subIds || perm.subIds.length === 0) return true
@@ -193,7 +230,11 @@ export function allowedModules(roleName: string): MainModuleId[] {
     .filter((id) => !(n === 'manager' && id === 'dashboard'))
 }
 
-export function firstAllowedLanding(roleName: string): { module: MainModuleId; screen: import('./nav').AppScreen; sub?: string } {
+export function firstAllowedLanding(roleName: string): {
+  module: MainModuleId
+  screen: import('./nav').AppScreen
+  sub?: string
+} {
   const n = normalizeRole(roleName)
   const isSecurity = n === 'security' || (n.includes('security') && !n.includes('supervisor'))
   if (isSecurity) {
@@ -205,6 +246,11 @@ export function firstAllowedLanding(roleName: string): { module: MainModuleId; s
   const mod = MAIN_MODULES.find((m) => m.id === first)
   if (!mod) return { module: 'production', screen: 'module-hub', sub: 'production' }
   if (mod.hasHub) return { module: mod.id, screen: 'module-hub', sub: mod.id }
+  const perm = getPermissionsForRole(roleName).find((p) => p.moduleId === mod.id)
+  if (perm?.subIds?.length) {
+    const item = mod.items.find((i) => perm.subIds!.includes(i.id))
+    if (item) return { module: mod.id, screen: item.screen, sub: item.sub }
+  }
   return { module: mod.id, screen: mod.screen, sub: mod.sub }
 }
 
