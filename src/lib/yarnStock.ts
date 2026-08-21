@@ -31,7 +31,7 @@ export const EMPTY_YARN_FORM: YarnFormValues = {
   quality: '',
   yarn_specification: '',
   unit: 'KG',
-  opening_stock: '0',
+  opening_stock: '',
   rate_per_kg: '0',
   lot_number: '',
   location: '',
@@ -147,8 +147,12 @@ export function validateYarnForm(form: YarnFormValues, isNew: boolean): string |
   if (!form.quality.trim()) return 'Quality is required'
   if (!form.yarn_specification.trim()) return 'Yarn Specification is required'
   if (!form.unit.trim()) return 'Unit is required'
-  if (isNew && Number.isNaN(Number(form.opening_stock))) return 'Opening Stock must be a number'
-  if (isNew && Number(form.opening_stock) < 0) return 'Opening Stock cannot be negative'
+  if (isNew) {
+    const openingRaw = form.opening_stock.trim()
+    if (openingRaw === '') return 'Opening Stock Quantity (KG) is required'
+    if (Number.isNaN(Number(openingRaw))) return 'Opening Stock Quantity must be a number'
+    if (Number(openingRaw) < 0) return 'Opening Stock Quantity cannot be negative'
+  }
   if (Number.isNaN(Number(form.rate_per_kg))) return 'Rate / KG must be a number'
   if (Number(form.rate_per_kg) < 0) return 'Rate / KG cannot be negative'
   return null
