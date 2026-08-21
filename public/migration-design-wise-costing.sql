@@ -131,6 +131,7 @@ alter table public.design_costing
   add column if not exists total_weft_weight_kg numeric,
   add column if not exists total_warp_amount numeric,
   add column if not exists total_weft_amount numeric,
+  add column if not exists gst_amount numeric,
   add column if not exists status text not null default 'draft',
   add column if not exists updated_by uuid references auth.users(id),
   add column if not exists updated_at timestamptz default now();
@@ -141,6 +142,43 @@ where conversion_charge is not null
   and conversion_charge > 0
   and conversion_charge <= 10
   and (pic_conversion_rate is null or pic_conversion_rate = 0.45);
+
+update public.design_costing dc
+set
+  design_length_mtr = coalesce(dc.design_length_mtr, (
+    select coalesce(
+      (select max(length_mtr) from public.design_costing_weft w where w.costing_id = dc.id),
+      (select max(length_mtr) from public.design_costing_warp w where w.costing_id = dc.id)
+    )
+  )),
+  total_pic = coalesce(dc.total_pic, (
+    select coalesce(sum(pic), 0) from public.design_costing_weft w where w.costing_id = dc.id
+  )),
+  total_warp_weight_kg = coalesce(dc.total_warp_weight_kg, (
+    select coalesce(sum(weight_kg), 0) from public.design_costing_warp w where w.costing_id = dc.id
+  )),
+  total_weft_weight_kg = coalesce(dc.total_weft_weight_kg, (
+    select coalesce(sum(weight_kg), 0) from public.design_costing_weft w where w.costing_id = dc.id
+  )),
+  total_warp_amount = coalesce(dc.total_warp_amount, (
+    select coalesce(sum(amount), 0) from public.design_costing_warp w where w.costing_id = dc.id
+  )),
+  total_weft_amount = coalesce(dc.total_weft_amount, (
+    select coalesce(sum(amount), 0) from public.design_costing_weft w where w.costing_id = dc.id
+  )),
+  gst_amount = coalesce(
+    dc.gst_amount,
+    case
+      when dc.after_mu_per_mtr is not null and dc.gst_percent is not null
+        then round((dc.after_mu_per_mtr * dc.gst_percent / 100.0)::numeric, 2)
+      else null
+    end
+  ),
+  updated_at = coalesce(dc.updated_at, dc.created_at)
+where dc.design_length_mtr is null
+   or dc.total_pic is null
+   or dc.gst_amount is null
+   or dc.updated_at is null;
 
 alter table public.design_costing
   drop constraint if exists design_costing_status_check;

@@ -9,6 +9,7 @@ alter table public.design_costing
   add column if not exists total_weft_weight_kg numeric,
   add column if not exists total_warp_amount numeric,
   add column if not exists total_weft_amount numeric,
+  add column if not exists gst_amount numeric,
   add column if not exists status text not null default 'draft',
   add column if not exists updated_by uuid references auth.users(id),
   add column if not exists updated_at timestamptz default now();
@@ -19,8 +20,48 @@ comment on column public.design_costing.conversion_charge is
   'Calculated weaving charge amount (total_pic × pic_conversion_rate)';
 comment on column public.design_costing.design_length_mtr is
   'Design / base length in meters used for yarn cost per meter';
+comment on column public.design_costing.gst_amount is
+  'GST amount (after MU × GST %) shown separately from final cost';
 comment on column public.design_costing.status is
   'draft | final';
+
+-- Backfill length / PIC / GST from child rows when missing (idempotent)
+update public.design_costing dc
+set
+  design_length_mtr = coalesce(dc.design_length_mtr, (
+    select coalesce(
+      (select max(length_mtr) from public.design_costing_weft w where w.costing_id = dc.id),
+      (select max(length_mtr) from public.design_costing_warp w where w.costing_id = dc.id)
+    )
+  )),
+  total_pic = coalesce(dc.total_pic, (
+    select coalesce(sum(pic), 0) from public.design_costing_weft w where w.costing_id = dc.id
+  )),
+  total_warp_weight_kg = coalesce(dc.total_warp_weight_kg, (
+    select coalesce(sum(weight_kg), 0) from public.design_costing_warp w where w.costing_id = dc.id
+  )),
+  total_weft_weight_kg = coalesce(dc.total_weft_weight_kg, (
+    select coalesce(sum(weight_kg), 0) from public.design_costing_weft w where w.costing_id = dc.id
+  )),
+  total_warp_amount = coalesce(dc.total_warp_amount, (
+    select coalesce(sum(amount), 0) from public.design_costing_warp w where w.costing_id = dc.id
+  )),
+  total_weft_amount = coalesce(dc.total_weft_amount, (
+    select coalesce(sum(amount), 0) from public.design_costing_weft w where w.costing_id = dc.id
+  )),
+  gst_amount = coalesce(
+    dc.gst_amount,
+    case
+      when dc.after_mu_per_mtr is not null and dc.gst_percent is not null
+        then round((dc.after_mu_per_mtr * dc.gst_percent / 100.0)::numeric, 2)
+      else null
+    end
+  ),
+  updated_at = coalesce(dc.updated_at, dc.created_at)
+where dc.design_length_mtr is null
+   or dc.total_pic is null
+   or dc.gst_amount is null
+   or dc.updated_at is null;
 
 -- Previous UI stored the PIC rate in conversion_charge. Copy into pic_conversion_rate
 -- when the stored value looks like a rate (small positive), without wiping other data.

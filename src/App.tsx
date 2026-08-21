@@ -175,7 +175,27 @@ function AuthenticatedApp() {
       {tab === 'sample-job-card' ? <SampleJobCard /> : null}
       {tab === 'sample-register' ? <SampleRegister /> : null}
       {tab === 'beam-remaining' ? <BeamRemainingReport /> : null}
-      {tab === 'design-wise-costing' ? <DesignWiseCosting initialDin={filter || ''} /> : null}
+      {tab === 'design-wise-costing' ? (
+        <DesignWiseCosting
+          initialDin={
+            filter &&
+            ![
+              'reports',
+              'orders',
+              'production',
+              'inventory',
+              'dashboard',
+              'maintenance',
+              'masters',
+              'security',
+              'settings',
+              'cash-book',
+            ].includes(filter)
+              ? filter
+              : ''
+          }
+        />
+      ) : null}
     </AppShell>
   )
 }
