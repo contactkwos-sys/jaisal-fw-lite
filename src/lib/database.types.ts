@@ -603,6 +603,64 @@ export type PendingApprovalRow = {
   resolved_at: string | null
 }
 
+/** Design Wise Costing header (design_costing) */
+export type DesignCosting = {
+  id: string
+  din_number: string
+  quality_name: string | null
+  costing_date: string
+  diary_image_url: string | null
+  design_length_mtr: number | null
+  pic_conversion_rate: number
+  /** Calculated: total_pic × pic_conversion_rate */
+  conversion_charge: number
+  mu_percent: number
+  gst_percent: number
+  total_pic: number | null
+  total_warp_weight_kg: number | null
+  total_weft_weight_kg: number | null
+  total_warp_amount: number | null
+  total_weft_amount: number | null
+  total_weight_kg: number | null
+  total_yarn_amount: number | null
+  yarn_cost_per_mtr: number | null
+  subtotal_per_mtr: number | null
+  after_mu_per_mtr: number | null
+  final_cost_per_mtr: number | null
+  status: 'draft' | 'final'
+  created_by: string | null
+  updated_by: string | null
+  created_at: string
+  updated_at: string | null
+}
+
+export type DesignCostingWarp = {
+  id: string
+  costing_id: string
+  sr_no: number
+  yarn_name: string | null
+  denier: number | null
+  tar_ends: number | null
+  length_mtr: number | null
+  weight_kg: number | null
+  rate_per_kg: number | null
+  amount: number | null
+}
+
+export type DesignCostingWeft = {
+  id: string
+  costing_id: string
+  sr_no: number
+  weft_name: string | null
+  denier: number | null
+  pic: number | null
+  width: number | null
+  length_mtr: number | null
+  weight_kg: number | null
+  rate_per_kg: number | null
+  amount: number | null
+}
+
 /** assumed: 6 looms labelled M1–M6 */
 export const MACHINES = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6'] as const
 

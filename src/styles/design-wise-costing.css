@@ -1,23 +1,40 @@
-/* Design Wise Costing */
+/* Design Wise Costing — KMOS light ERP theme */
 
 .dwc-screen {
   display: grid;
   gap: 1rem;
+  width: 100%;
+  max-width: 100%;
+}
+
+.dwc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
 }
 
 .dwc-panel {
-  background: #1b1f26;
+  background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 1rem;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 1rem 1.1rem;
   display: grid;
   gap: 0.75rem;
 }
 
+.dwc-panel .section-title {
+  margin: 0;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 650;
+}
+
 .dwc-details-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.65rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
 }
 
 .dwc-upload-row {
@@ -30,8 +47,8 @@
   min-height: 140px;
   display: grid;
   place-items: center;
-  border: 1px dashed var(--warp-soft);
-  border-radius: 10px;
+  border: 1px dashed color-mix(in srgb, var(--teal) 45%, var(--line));
+  border-radius: var(--radius);
   background: var(--surface2);
   cursor: pointer;
   text-align: center;
@@ -39,14 +56,14 @@
 }
 
 .dwc-dropzone.drag-over {
-  border-color: var(--weft);
-  background: var(--weft-soft);
+  border-color: var(--teal);
+  background: var(--teal-soft);
 }
 
 .dwc-diary-preview {
   width: 160px;
   height: 140px;
-  border-radius: 10px;
+  border-radius: var(--radius);
   border: 1px solid var(--line);
   background-size: cover;
   background-position: center;
@@ -63,17 +80,23 @@
 .dwc-panel-head {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
   gap: 0.75rem;
 }
 
 .dwc-pic-total {
-  font-weight: 650;
+  font-weight: 700;
+  color: var(--teal-deep);
+  background: var(--teal-soft);
+  border: 1px solid color-mix(in srgb, var(--teal) 30%, var(--line));
+  border-radius: var(--radius-sm);
+  padding: 0.35rem 0.7rem;
+  font-size: 0.9rem;
 }
 
 .dwc-table-wrap {
   overflow: auto;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--line);
 }
 
@@ -81,12 +104,13 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 0.82rem;
-  min-width: 820px;
+  min-width: 960px;
+  background: var(--surface);
 }
 
 .dwc-table th,
 .dwc-table td {
-  padding: 0.4rem 0.45rem;
+  padding: 0.45rem 0.5rem;
   border-bottom: 1px solid var(--line);
   vertical-align: middle;
 }
@@ -94,31 +118,48 @@
 .dwc-table th {
   background: var(--surface2);
   color: var(--muted);
-  font-weight: 550;
+  font-weight: 600;
   text-align: left;
   white-space: nowrap;
 }
 
 .dwc-table input {
   width: 100%;
-  min-width: 4rem;
+  min-width: 3.5rem;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 0.35rem 0.45rem;
+}
+
+.dwc-table input:focus {
+  outline: 2px solid color-mix(in srgb, var(--teal) 35%, transparent);
+  border-color: var(--teal);
 }
 
 .dwc-auto {
-  background: rgba(217, 164, 65, 0.12) !important;
-  border-color: rgba(217, 164, 65, 0.35) !important;
-  color: var(--weft) !important;
+  background: var(--surface2) !important;
+  border-color: var(--line) !important;
+  color: #0f2744 !important;
   font-weight: 600;
+  cursor: default;
 }
 
 .dwc-icon-btn {
-  background: transparent;
+  background: var(--surface);
   border: 1px solid var(--line);
   color: var(--muted);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   width: 1.9rem;
   height: 1.9rem;
   cursor: pointer;
+}
+
+.dwc-icon-delete:hover:not(:disabled) {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--line));
+  background: var(--danger-soft);
 }
 
 .dwc-icon-btn:disabled {
@@ -126,46 +167,82 @@
   cursor: not-allowed;
 }
 
-.dwc-totals-strip {
+.dwc-totals-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.75rem;
-  padding: 0.9rem 1rem;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  background: #1b1f26;
 }
 
-.dwc-totals-strip > div {
+.dwc-totals-grid > div {
   display: grid;
   gap: 0.25rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface2);
 }
 
-.dwc-totals-strip strong {
-  font-size: 1.15rem;
+.dwc-totals-grid strong {
+  font-size: 1.1rem;
+  color: #0f2744;
+}
+
+.dwc-emphasis {
+  color: var(--teal-deep) !important;
 }
 
 .dwc-buildup-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.65rem;
+  gap: 0.75rem;
+}
+
+.dwc-buildup .field {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.dwc-hint {
+  font-size: 0.72rem;
+  color: var(--muted2);
+}
+
+.dwc-field-error input {
+  border-color: var(--danger) !important;
+}
+
+.dwc-inline-error {
+  font-size: 0.75rem;
+  color: var(--danger);
 }
 
 .dwc-final {
   margin-top: 0.35rem;
-  padding: 1rem;
-  border-radius: 10px;
-  border: 1px solid rgba(217, 164, 65, 0.45);
-  background: rgba(217, 164, 65, 0.12);
+  padding: 1rem 1.15rem;
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, var(--teal) 40%, var(--line));
+  background: linear-gradient(135deg, var(--teal-soft), #ffffff 60%);
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 1rem;
 }
 
+.dwc-final span {
+  font-weight: 650;
+  color: var(--text);
+}
+
+.dwc-final-sub {
+  margin: 0.2rem 0 0;
+  font-size: 0.78rem;
+  font-weight: 400;
+}
+
 .dwc-final strong {
-  color: var(--weft);
-  font-size: 1.55rem;
+  color: var(--teal-deep);
+  font-size: 1.65rem;
+  letter-spacing: -0.02em;
 }
 
 .dwc-actions {
@@ -174,27 +251,148 @@
   gap: 0.55rem;
 }
 
+.dwc-secondary-btn {
+  background: var(--surface);
+  color: var(--teal-deep);
+  border: 1px solid color-mix(in srgb, var(--teal) 35%, var(--line));
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.9rem;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dwc-secondary-btn:hover:not(:disabled) {
+  background: var(--teal-soft);
+}
+
+.dwc-danger-btn {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--line));
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.9rem;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dwc-danger-btn:disabled,
+.dwc-secondary-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .dwc-user-hint {
   font-size: 0.8rem;
 }
 
-.dwc-cost-badge {
+.dwc-status-chip {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.25rem 0.6rem;
-  border-radius: 999px;
-  border: 1px solid rgba(217, 164, 65, 0.45);
-  color: var(--weft);
-  background: rgba(217, 164, 65, 0.12);
-  font-size: 0.82rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 650;
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.dwc-status-draft {
+  color: var(--warning);
+  background: var(--warning-soft);
+  border-color: color-mix(in srgb, var(--warning) 30%, var(--line));
+}
+
+.dwc-status-final {
+  color: var(--success);
+  background: var(--success-soft);
+  border-color: color-mix(in srgb, var(--success) 30%, var(--line));
+}
+
+.dwc-history-table {
+  min-width: 1100px;
+}
+
+.dwc-history-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.dwc-link-btn {
+  background: transparent;
+  border: none;
+  color: var(--teal);
+  font: inherit;
+  font-size: 0.8rem;
   font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.dwc-link-danger {
+  color: var(--danger);
+}
+
+.dwc-link-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.dwc-row-active {
+  background: var(--teal-soft);
+}
+
+.dwc-screen .btn-warp {
+  background: var(--teal);
+  color: #fff;
+  border: 1px solid var(--teal-deep);
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.9rem;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  justify-self: start;
+}
+
+.dwc-screen .btn-warp:hover:not(:disabled) {
+  background: var(--teal-deep);
+}
+
+.dwc-screen .primary-save {
+  background: var(--teal-deep);
+  color: #fff;
+  border: 1px solid var(--teal-deep);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 1.1rem;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.dwc-screen .primary-save:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.dwc-screen .btn-warp:disabled,
+.dwc-screen .primary-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 1100px) {
+  .dwc-details-row,
+  .dwc-buildup-grid,
+  .dwc-totals-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 900px) {
   .dwc-details-row,
   .dwc-buildup-grid,
-  .dwc-totals-strip,
+  .dwc-totals-grid,
   .dwc-upload-row {
     grid-template-columns: 1fr;
   }
@@ -202,5 +400,9 @@
   .dwc-diary-preview {
     width: 100%;
     max-width: 220px;
+  }
+
+  .dwc-header {
+    flex-direction: column;
   }
 }
