@@ -102,7 +102,7 @@
   z-index: 50;
   display: flex;
   flex-direction: column;
-  background: var(--surface);
+  background: var(--sidebar-bg);
   border-right: 1px solid var(--line);
   box-shadow: var(--shadow-md);
   transform: translateX(-105%);
@@ -129,7 +129,7 @@ body.drawer-open {
   flex-shrink: 0;
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--teal) 8%, transparent), transparent 60%),
-    var(--surface);
+    var(--sidebar-bg);
 }
 
 .sidebar-brand-name {
@@ -386,6 +386,262 @@ body.drawer-open {
   font-size: 1.5rem;
   font-weight: 650;
   letter-spacing: -0.02em;
+}
+
+/* ——— Module hub (Inventory color plan + shared function cards) ——— */
+
+.module-hub {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.module-hub-header {
+  margin-bottom: 0;
+}
+
+.hub-section-title {
+  margin: 0 0 0.25rem;
+  font-family: "Outfit", sans-serif;
+  font-size: 1.15rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.module-hub .hub-section-title {
+  font-size: 1.15rem;
+  font-weight: 650;
+}
+
+.hub-section-sub {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.hub-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+
+.hub-grid-item {
+  min-width: 0;
+}
+
+.hub-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.85rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.95rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+  text-align: left;
+  filter: none;
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+.hub-card:hover {
+  filter: none;
+  border-color: color-mix(in srgb, var(--hub-accent, var(--teal)) 40%, var(--line));
+  background: color-mix(in srgb, var(--hub-soft, var(--teal-soft)) 45%, var(--surface));
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.hub-card:active {
+  transform: translateY(0);
+}
+
+.hub-card-icon-well {
+  display: grid;
+  place-items: center;
+  width: 2.65rem;
+  height: 2.65rem;
+  border-radius: 999px;
+  background: var(--hub-soft, var(--teal-soft));
+  color: var(--hub-accent, var(--teal));
+  flex-shrink: 0;
+}
+
+.hub-card-ico {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.hub-card-body {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.hub-card-label {
+  font-family: "Outfit", sans-serif;
+  font-weight: 650;
+  font-size: 0.98rem;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.hub-card-hint {
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.hub-card-chevron {
+  width: 1.05rem;
+  height: 1.05rem;
+  color: var(--muted2);
+  flex-shrink: 0;
+}
+
+.hub-card:hover .hub-card-chevron {
+  color: var(--hub-accent, var(--teal));
+}
+
+.hub-tone-purple {
+  --hub-accent: var(--hub-purple);
+  --hub-soft: var(--hub-purple-soft);
+}
+.hub-tone-green {
+  --hub-accent: var(--hub-green);
+  --hub-soft: var(--hub-green-soft);
+}
+.hub-tone-orange {
+  --hub-accent: var(--hub-orange);
+  --hub-soft: var(--hub-orange-soft);
+}
+.hub-tone-blue {
+  --hub-accent: var(--hub-blue);
+  --hub-soft: var(--hub-blue-soft);
+}
+.hub-tone-pink {
+  --hub-accent: var(--hub-pink);
+  --hub-soft: var(--hub-pink-soft);
+}
+.hub-tone-teal {
+  --hub-accent: var(--hub-teal);
+  --hub-soft: var(--hub-teal-soft);
+}
+.hub-tone-amber {
+  --hub-accent: var(--hub-amber);
+  --hub-soft: var(--hub-amber-soft);
+}
+.hub-tone-slate {
+  --hub-accent: var(--hub-slate);
+  --hub-soft: var(--hub-slate-soft);
+}
+.hub-tone-violet {
+  --hub-accent: var(--hub-violet);
+  --hub-soft: var(--hub-violet-soft);
+}
+
+.hub-overview {
+  display: grid;
+  gap: 0.75rem;
+  padding-top: 0.25rem;
+}
+
+.hub-overview-header {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.hub-overview-grid {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(9.5rem, 1fr);
+  gap: 0.65rem;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
+}
+
+.hub-overview-card {
+  scroll-snap-align: start;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 9.5rem;
+  padding: 0.85rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.hub-overview-icon-well {
+  display: grid;
+  place-items: center;
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 999px;
+  background: var(--hub-soft);
+  color: var(--hub-accent);
+}
+
+.hub-overview-ico {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.hub-overview-copy {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.hub-overview-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.hub-overview-value {
+  font-size: 1.15rem;
+  font-weight: 650;
+  color: var(--hub-accent);
+  line-height: 1.2;
+}
+
+/* Tablet (iPad portrait / large phones): 2-column function grid */
+@media (min-width: 640px) {
+  .hub-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.85rem;
+  }
+
+  .hub-overview-grid {
+    grid-auto-flow: unset;
+    grid-auto-columns: unset;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    overflow: visible;
+  }
+}
+
+@media (min-width: 900px) {
+  .hub-section-title {
+    font-size: 1.25rem;
+  }
+
+  .hub-overview-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
 }
 
 .app-main .screen-header > h1:first-child {
@@ -1081,6 +1337,11 @@ body.drawer-open {
 
   .hub-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.9rem;
+  }
+
+  .module-hub .hub-section-title {
+    font-size: 1.25rem;
   }
 
   .program-meta-grid,

@@ -23,6 +23,27 @@
   --orange-soft: #f8eee6;
   --blue-soft: #e8f0fb;
 
+  /* Inventory / module hub pastel tones (icon wells + overview) */
+  --hub-purple: #7b6bb5;
+  --hub-purple-soft: #efeaf8;
+  --hub-green: #3fa88a;
+  --hub-green-soft: #e6f5f0;
+  --hub-orange: #d4894a;
+  --hub-orange-soft: #f8eee6;
+  --hub-blue: #1d5fa8;
+  --hub-blue-soft: #e8f0fb;
+  --hub-pink: #c45a7a;
+  --hub-pink-soft: #f8e8ef;
+  --hub-teal: #2a9a9a;
+  --hub-teal-soft: #e5f5f5;
+  --hub-amber: #c49a3c;
+  --hub-amber-soft: #f7f0de;
+  --hub-slate: #5a6b7d;
+  --hub-slate-soft: #eef1f4;
+  --hub-violet: #8b6bb8;
+  --hub-violet-soft: #f1eaf8;
+  --sidebar-bg: #f4f7fa;
+
   /* Legacy aliases (existing screens use these names) */
   --warp: var(--teal);
   --warp-soft: var(--teal-soft);
