@@ -21,6 +21,19 @@ export type Worker = {
   department: string | null
   is_active: boolean
   role_id?: string | null
+  employee_code?: string | null
+  designation?: string | null
+  shift?: string | null
+  pay_type?: string | null
+  bank_name?: string | null
+  bank_account_no?: string | null
+  bank_ifsc?: string | null
+  bank_branch?: string | null
+  phone?: string | null
+  joining_date?: string | null
+  esi_applicable?: boolean | null
+  pf_applicable?: boolean | null
+  pt_applicable?: boolean | null
 }
 
 export type Attendance = {
@@ -33,6 +46,134 @@ export type Attendance = {
   out_time: string | null
   status: string | null
   created_at: string
+  shift?: string | null
+  remarks?: string | null
+  total_hours?: number | null
+  payable_day?: number | null
+  updated_at?: string | null
+}
+
+export type SalaryRate = {
+  id: string
+  worker_id: string
+  pay_type: string
+  monthly_rate: number
+  daily_rate: number
+  hourly_rate: number
+  ot_rate: number
+  effective_from: string
+  status: string
+  approved: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type PayrollRun = {
+  id: string
+  payroll_month: string
+  from_date: string
+  to_date: string
+  status: string
+  esi_on: boolean
+  pf_on: boolean
+  pt_on: boolean
+  other_deduction_on: boolean
+  working_days: number
+  notes: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type PayrollEntry = {
+  id: string
+  payroll_run_id: string
+  worker_id: string
+  employee_code: string | null
+  employee_name: string | null
+  designation: string | null
+  department: string | null
+  pay_type: string | null
+  working_days: number
+  present_days: number
+  leave_days: number
+  payable_days: number
+  basic_salary: number
+  allowances: number
+  ot_amount: number
+  gross_salary: number
+  esi_amount: number
+  pf_amount: number
+  pt_amount: number
+  other_deduction: number
+  advance: number
+  total_deduction: number
+  net_payable: number
+  status: string
+  esi_on: boolean | null
+  pf_on: boolean | null
+  pt_on: boolean | null
+  other_deduction_on: boolean | null
+  bank_name: string | null
+  bank_account_no: string | null
+  bank_ifsc: string | null
+  bank_branch: string | null
+  payment_date: string | null
+  selected_for_letter: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type Holiday = {
+  id: string
+  holiday_date: string
+  title: string
+  is_paid: boolean
+  created_at: string
+}
+
+export type LeaveEntry = {
+  id: string
+  worker_id: string
+  leave_date: string
+  leave_type: string
+  remarks: string | null
+  created_at: string
+}
+
+export type BankSalaryLetter = {
+  id: string
+  payroll_run_id: string
+  letter_no: string | null
+  letter_date: string
+  salary_month: string
+  total_employees: number
+  total_amount: number
+  amount_in_words: string | null
+  status: string
+  created_by: string | null
+  created_at: string
+}
+
+export type BankSalaryLetterItem = {
+  id: string
+  letter_id: string
+  payroll_entry_id: string | null
+  sno: number
+  employee_code: string | null
+  employee_name: string
+  designation: string | null
+  bank_name: string | null
+  bank_account_no: string | null
+  bank_ifsc: string | null
+  net_salary: number
+}
+
+export type PayrollJob = {
+  id: string
+  job_name: string
+  job_code: string | null
+  is_active: boolean
 }
 
 export type BeamPipeStock = {
@@ -359,6 +500,8 @@ export type Program = {
   planned_date?: string | null
   priority?: string | null
   job_card_no?: string | null
+  din_number?: string | null
+  matching_no?: number | null
 }
 
 export type ProgramPetty = {
@@ -462,6 +605,26 @@ export type MaintenanceRequest = {
   status: string
   cost: number
   created_at: string
+  // Machine-wise Maintenance (planned entry fields from #58)
+  entry_date?: string | null
+  maintenance_type?: string | null
+  work_details?: string | null
+  parts_used?: string | null
+  next_maintenance_date?: string | null
+  remarks?: string | null
+  technician?: string | null
+  // Breakdown flow timestamps (additive; dedicated machine_breakdowns is preferred)
+  fault_type?: string | null
+  contact_name?: string | null
+  contact_phone?: string | null
+  opened_at?: string | null
+  call_done_at?: string | null
+  arrived_at?: string | null
+  work_started_at?: string | null
+  resolved_at?: string | null
+  parts_changed?: string | null
+  payment_amount?: number | null
+  payment_notes?: string | null
 }
 
 export type RepairingTracker = {
@@ -511,6 +674,7 @@ export type Challan = {
   quality?: string | null
   colour?: string | null
   status?: string | null
+  lot_ids?: string[] | null
 }
 
 export type Gatepass = {
@@ -774,6 +938,55 @@ export type DesignCostingWeft = {
   weight_kg: number | null
   rate_per_kg: number | null
   amount: number | null
+}
+
+/** Machine-wise weft yarn issue header */
+export type MachineWeftIssue = {
+  id: string
+  issue_no: string
+  issue_date: string
+  shift: string | null
+  machine_no: string
+  program_id: string | null
+  program_no: string | null
+  job_card_no: string | null
+  din_number: string
+  din_id: string | null
+  design_name: string | null
+  party_name: string | null
+  marka: string | null
+  matching_no: number | null
+  program_meter: number
+  total_required_kg: number
+  total_issued_kg: number
+  issued_by: string | null
+  received_by: string | null
+  remarks: string | null
+  status: string
+  allow_over_issue: boolean
+  created_by: string | null
+  created_at: string
+}
+
+export type MachineWeftIssueItem = {
+  id: string
+  issue_id: string
+  matching_no: number
+  matching_id: string | null
+  colour_name: string
+  role_label: string
+  is_main_ground: boolean
+  colour_hex: string | null
+  required_kg: number
+  issued_kg: number
+  balance_kg: number
+  yarn_stock_id: string | null
+  costing_weft_id: string | null
+  denier: number | null
+  pic: number | null
+  width: number | null
+  sr_no: number
+  created_at: string
 }
 
 /** assumed: 6 looms labelled M1–M6 */

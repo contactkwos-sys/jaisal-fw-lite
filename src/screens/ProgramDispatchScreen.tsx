@@ -31,7 +31,7 @@ export function ProgramDispatchScreen({ initialSub = 'pto', onNavigate }: Props)
     : 'pto') as PdSub
 
   function go(next: PdSub) {
-    onNavigate({ screen: 'program-dispatch', sub: next, module: 'production' })
+    onNavigate({ screen: 'program-dispatch', sub: next, module: 'program-dispatch' })
   }
 
   return (

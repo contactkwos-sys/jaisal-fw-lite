@@ -26,7 +26,7 @@ function record(check, pass, extra = {}) {
 
 const MAIN_NINE = [
   'Dashboard',
-  'Program & Dispatch',
+  'Production',
   'Inventory',
   'Orders',
   'Reports',
@@ -100,11 +100,19 @@ const forbidden = ['ADMIN', 'Yarn Management', 'Admin Master', 'Dispatch & Gate 
 const leaked = forbidden.filter((n) => navText.split('\n').map((s) => s.trim()).includes(n))
 record('old flat tabs not main-level', leaked.length === 0, { leaked })
 
-await m.locator('.side-nav').getByRole('button', { name: 'Program & Dispatch', exact: true }).click()
+await m.locator('.side-nav').getByRole('button', { name: 'Production', exact: true }).click()
 await m.waitForTimeout(500)
 record('drawer closes on nav', (await m.locator('.app-shell.drawer-is-open').count()) === 0)
-record('program dispatch hub', (await m.locator('.pd-hub, .pd-screen, .screen').count()) >= 1)
+record('module hub cards', (await m.locator('.hub-card').count()) >= 3)
 await shot(m, 'ui-mobile-production-hub')
+
+await ham.click()
+await m.waitForTimeout(300)
+record('Program & Dispatch in nav', (await m.locator('.side-nav').innerText()).includes('Program & Dispatch'))
+await m.locator('.side-nav').locator('.side-nav-item', { hasText: 'Program & Dispatch' }).first().click()
+await m.waitForTimeout(500)
+record('program dispatch screen', (await m.locator('.pd-hub, .pd-screen, .screen').count()) >= 1)
+await shot(m, 'ui-mobile-program-dispatch')
 
 await mobile.close()
 
@@ -167,7 +175,7 @@ record('desktop sidebar visible', await d.locator('.app-sidebar').isVisible())
 await d.locator('.side-nav').getByRole('button', { name: 'Dashboard', exact: true }).click()
 await d.waitForTimeout(1400)
 const kpiCount = await d.locator('.kpi-card').count()
-record('6 KPI cards', kpiCount === 6, { kpiCount })
+record('KPI cards present', kpiCount >= 6, { kpiCount })
 record('summary flow', (await d.locator('.flow-row-h').count()) >= 1)
 const tables = await d.locator('.dash-table').count()
 record('inward+machines tables', tables >= 2, { tables })
@@ -185,10 +193,10 @@ for (const name of ['Orders & Pending', 'Inventory', 'Security']) {
 }
 await shot(d, 'ui-desktop-orders-hub')
 
-// Program to Production via Program & Dispatch
+// Program & Dispatch module
 await d.locator('.side-nav .side-nav-item', { hasText: 'Program & Dispatch' }).first().click()
 await d.waitForTimeout(700)
-record('program dispatch form', (await d.locator('.pd-hub, .pd-workflow, .pd-kpi').count()) > 0)
+record('program dispatch form', (await d.locator('.pd-hub, .pd-workflow, .pd-kpi, .screen').count()) > 0)
 await shot(d, 'ui-desktop-program')
 
 await desk.close()

@@ -20,6 +20,7 @@ import { DesignScreen } from './screens/DesignScreen'
 import { DispatchScreen } from './screens/DispatchScreen'
 import { LoginScreen } from './screens/LoginScreen'
 import { MaintenanceScreen } from './screens/MaintenanceScreen'
+import { MachineWiseMaintenanceScreen } from './screens/MachineWiseMaintenanceScreen'
 import { OrderBookScreen } from './screens/OrderBookScreen'
 import { PartyMasterScreen } from './screens/PartyMasterScreen'
 import { ProductionScreen } from './screens/ProductionScreen'
@@ -41,7 +42,19 @@ import { MaintenanceMaterialScreen } from './screens/MaintenanceMaterialScreen'
 import { LoanTrackerScreen } from './screens/LoanTrackerScreen'
 import { GebReadingScreen } from './screens/GebReadingScreen'
 import { OrdersPendingScreen } from './screens/OrdersPendingScreen'
+import { DesignToOrderHub } from './screens/DesignToOrderHub'
+import { DinIntakeScreen } from './screens/DinIntakeScreen'
+import { DtoSampleJobScreen } from './screens/DtoSampleJobScreen'
+import { DtoSampleTrackingScreen } from './screens/DtoSampleTrackingScreen'
+import { DtoOrderBookingScreen } from './screens/DtoOrderBookingScreen'
+import { DtoOrderStatusScreen } from './screens/DtoOrderStatusScreen'
+import { DtoSamplePromotionScreen } from './screens/DtoSamplePromotionScreen'
+import { DtoFollowupScreen } from './screens/DtoFollowupScreen'
+import { DtoReportsScreen } from './screens/DtoReportsScreen'
+import { HrPayrollScreen } from './screens/HrPayrollScreen'
 import { ProgramDispatchScreen } from './screens/ProgramDispatchScreen'
+import { MachineWiseProductionScreen } from './screens/MachineWiseProductionScreen'
+import { SecurityInventoryScreen, type SiSub } from './screens/SecurityInventoryScreen'
 
 function AuthenticatedApp() {
   const { session, loading, isCeo, isManager, roleName } = useAuth()
@@ -131,6 +144,12 @@ function AuthenticatedApp() {
         <PlaceholderScreen title={titleFor('placeholder', undefined, undefined, filter)} />
       ) : null}
       {tab === 'attendance' ? <AttendanceScreen /> : null}
+      {tab === 'hr-payroll' ? (
+        <HrPayrollScreen
+          initialSub={sub || 'dashboard'}
+          onNavigate={go}
+        />
+      ) : null}
       {tab === 'stock' ? (
         <StockScreen
           initialTab={(sub as 'beam' | 'weft') || 'beam'}
@@ -164,6 +183,31 @@ function AuthenticatedApp() {
       {tab === 'program-dispatch' ? (
         <ProgramDispatchScreen initialSub={sub || 'pto'} onNavigate={go} />
       ) : null}
+      {tab === 'machine-wise-production' ? (
+        <MachineWiseProductionScreen initialTab={sub || 'weft'} />
+      ) : null}
+      {tab === 'security-inventory' ? (
+        <SecurityInventoryScreen
+          initialSub={
+            ([
+              'dashboard',
+              'warp',
+              'weft',
+              'maint-in',
+              'maint-out',
+              'general',
+              'others',
+              'pending',
+              'documents',
+              'reports',
+            ].includes(sub || '')
+              ? sub
+              : 'dashboard') as SiSub
+          }
+          onSubChange={(s) => setSub(s)}
+          onNavigate={go}
+        />
+       ) : null}
       {tab === 'parties' ? <PartyMasterScreen /> : null}
       {tab === 'purchase' ? <PurchaseScreen initialSub={sub || 'general'} /> : null}
       {tab === 'orders' ? <OrderBookScreen initialSub={sub || 'entry'} /> : null}
@@ -176,10 +220,15 @@ function AuthenticatedApp() {
         />
       ) : null}
       {tab === 'maintenance' ? (
-        <MaintenanceScreen
-          initialSub={(sub as 'request' | 'repair') || 'request'}
-          filter={filter}
-        />
+        sub === 'repair' ? (
+          <MaintenanceScreen initialSub="repair" filter={filter} />
+        ) : (
+          <MachineWiseMaintenanceScreen
+            initialSub={sub || 'overview'}
+            filter={filter}
+            onNavigate={go}
+          />
+        )
       ) : null}
       {tab === 'dispatch' ? (
         <DispatchScreen
@@ -211,12 +260,29 @@ function AuthenticatedApp() {
               'security',
               'settings',
               'cash-book',
+              'design-to-order',
+              'hr-payroll',
+              'program-dispatch',
+              'warp-yarn',
             ].includes(filter)
               ? filter
               : ''
           }
         />
       ) : null}
+      {tab === 'dto-hub' ? <DesignToOrderHub onNavigate={go} /> : null}
+      {tab === 'dto-intake' ? <DinIntakeScreen onNavigate={go} /> : null}
+      {tab === 'dto-sample-job' ? <DtoSampleJobScreen onNavigate={go} initialDinId={filter} /> : null}
+      {tab === 'dto-tracking' ? <DtoSampleTrackingScreen onNavigate={go} initialDinId={filter} /> : null}
+      {tab === 'dto-order-booking' ? (
+        <DtoOrderBookingScreen onNavigate={go} initialDinNumber={filter} />
+      ) : null}
+      {tab === 'dto-order-status' ? <DtoOrderStatusScreen onNavigate={go} /> : null}
+      {tab === 'dto-promotion' ? (
+        <DtoSamplePromotionScreen onNavigate={go} initialDinId={filter} />
+      ) : null}
+      {tab === 'dto-followup' ? <DtoFollowupScreen /> : null}
+      {tab === 'dto-reports' ? <DtoReportsScreen onNavigate={go} /> : null}
     </AppShell>
   )
 }

@@ -71,7 +71,7 @@ await shot(m, 'prod-mobile-drawer')
 const navText = await m.locator('.side-nav').innerText()
 const need = [
   'Dashboard',
-  'Program & Dispatch',
+  'Production',
   'Inventory',
   'Orders',
   'Reports',
@@ -83,7 +83,7 @@ const need = [
 const missing = need.filter((n) => !navText.includes(n))
 record('nav modules present', missing.length === 0, { missing })
 
-await m.locator('.side-nav').getByRole('button', { name: 'Program & Dispatch', exact: true }).click()
+await m.locator('.side-nav').getByRole('button', { name: 'Production', exact: true }).click()
 await m.waitForTimeout(500)
 record('drawer closes on nav', (await m.locator('.app-shell.drawer-is-open').count()) === 0)
 await shot(m, 'prod-mobile-attendance')
@@ -124,10 +124,10 @@ const tables = await d.locator('.dash-table').count()
 record('inward+machines tables', tables >= 2, { tables })
 await shot(d, 'prod-desktop-dashboard')
 
-for (const name of ['Program & Dispatch', 'Orders', 'Inventory']) {
-  await d.locator('.side-nav').getByRole('button', { name, exact: true }).click()
+for (const name of ['Production', 'Orders & Pending', 'Inventory']) {
+  await d.locator('.side-nav .side-nav-item', { hasText: name }).first().click()
   await d.waitForTimeout(600)
-  record(`open ${name}`, (await d.locator('.screen, .app-main, .hub-card, .pd-hub').count()) > 0)
+  record(`open ${name}`, (await d.locator('.screen, .app-main, .hub-card').count()) > 0)
 }
 await shot(d, 'prod-desktop-design')
 
