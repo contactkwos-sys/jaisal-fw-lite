@@ -50,6 +50,52 @@ export type WeftYarnStock = {
   colour_name: string | null
   stock_kg: number
   updated_at: string
+  quality?: string | null
+  yarn_specification?: string | null
+  unit?: string | null
+  opening_stock?: number | null
+  rate_per_kg?: number | null
+  reorder_level?: number | null
+  min_stock?: number | null
+  max_stock?: number | null
+  lot_number?: string | null
+  location?: string | null
+  gst_pct?: number | null
+  hsn_code?: string | null
+  remarks?: string | null
+  is_active?: boolean | null
+}
+
+export type YarnStockLedger = {
+  id: string
+  yarn_id: string
+  txn_date: string
+  txn_no: string | null
+  txn_type: string
+  reference: string | null
+  inward_kg: number
+  outward_kg: number
+  balance_kg: number
+  rate: number
+  value_amount: number
+  lot_number: string | null
+  location: string | null
+  gst_pct: number
+  invoice_no: string | null
+  remarks: string | null
+  created_by: string | null
+  created_by_name: string | null
+  created_at: string
+}
+
+export type PinChangeAudit = {
+  id: string
+  role_id: string | null
+  role_name: string
+  action: string
+  changed_by: string | null
+  changed_by_name: string | null
+  created_at: string
 }
 
 export type Design = {

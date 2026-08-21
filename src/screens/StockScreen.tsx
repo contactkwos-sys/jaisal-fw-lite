@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
+import { YarnStockPanel } from '../components/YarnStockPanel'
 import { enqueueApproval } from '../lib/approval'
 import { useAuth } from '../lib/auth'
-import type { BeamPipeStock, WeftYarnStock } from '../lib/database.types'
+import type { BeamPipeStock } from '../lib/database.types'
 import { supabase } from '../lib/supabase'
 
 type Tab = 'beam' | 'weft'
@@ -22,29 +23,28 @@ export function StockScreen({ initialTab = 'beam', onTabChange }: Props) {
     setTab(next)
     onTabChange?.(next)
   }
+
   const [beams, setBeams] = useState<BeamPipeStock[]>([])
-  const [yarns, setYarns] = useState<WeftYarnStock[]>([])
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const load = useCallback(async () => {
-    const [{ data: b, error: bErr }, { data: y, error: yErr }] = await Promise.all([
-      supabase.from('beam_pipe_stock').select('*').order('variety_name'),
-      supabase.from('weft_yarn_stock').select('*').order('updated_at'),
-    ])
+  const loadBeams = useCallback(async () => {
+    const { data: b, error: bErr } = await supabase
+      .from('beam_pipe_stock')
+      .select('*')
+      .order('variety_name')
     if (bErr) throw bErr
-    if (yErr) throw yErr
     setBeams((b as BeamPipeStock[]) ?? [])
-    setYarns((y as WeftYarnStock[]) ?? [])
   }, [])
 
   useEffect(() => {
-    void load().catch((e: Error) => setError(e.message))
-  }, [load])
+    if (tab !== 'beam') return
+    void loadBeams().catch((e: Error) => setError(e.message))
+  }, [tab, loadBeams])
 
   async function applyOrQueue(
-    tableName: 'beam_pipe_stock' | 'weft_yarn_stock',
+    tableName: 'beam_pipe_stock',
     action: 'insert' | 'update' | 'delete',
     recordId: string | null,
     payload: Record<string, unknown>,
@@ -64,7 +64,7 @@ export function StockScreen({ initialTab = 'beam', onTabChange }: Props) {
       })
       setMessage('Sent to approval queue')
     }
-    await load()
+    await loadBeams()
   }
 
   async function addBeamVariety() {
@@ -130,89 +130,18 @@ export function StockScreen({ initialTab = 'beam', onTabChange }: Props) {
     }
   }
 
-  async function addYarn() {
-    const supplier = window.prompt('Supplier') ?? ''
-    const colour_no = window.prompt('Colour No') ?? ''
-    const colour_name = window.prompt('Colour Name') ?? ''
-    const stockRaw = window.prompt('Stock kg', '0') ?? '0'
-    const stock_kg = Number(stockRaw)
-    if (Number.isNaN(stock_kg)) {
-      setError('Invalid stock')
-      return
-    }
-    setBusy(true)
-    setError(null)
-    setMessage(null)
-    try {
-      const payload = { supplier, colour_no, colour_name, stock_kg }
-      await applyOrQueue('weft_yarn_stock', 'insert', null, payload, async () => {
-        const { error: err } = await supabase.from('weft_yarn_stock').insert(payload)
-        if (err) throw err
-      })
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Add failed')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function editYarn(row: WeftYarnStock) {
-    const supplier = window.prompt('Supplier', row.supplier ?? '') ?? row.supplier
-    const colour_no = window.prompt('Colour No', row.colour_no ?? '') ?? row.colour_no
-    const colour_name = window.prompt('Colour Name', row.colour_name ?? '') ?? row.colour_name
-    const stockRaw = window.prompt('Stock kg', String(row.stock_kg))
-    if (stockRaw == null) return
-    const stock_kg = Number(stockRaw)
-    if (Number.isNaN(stock_kg)) {
-      setError('Invalid stock')
-      return
-    }
-    setBusy(true)
-    setError(null)
-    setMessage(null)
-    try {
-      const payload = {
-        supplier,
-        colour_no,
-        colour_name,
-        stock_kg,
-        updated_at: new Date().toISOString(),
-      }
-      await applyOrQueue('weft_yarn_stock', 'update', row.id, payload, async () => {
-        const { error: err } = await supabase
-          .from('weft_yarn_stock')
-          .update(payload)
-          .eq('id', row.id)
-        if (err) throw err
-      })
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Edit failed')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function deleteYarn(row: WeftYarnStock) {
-    if (!window.confirm(`Delete colour ${row.colour_name ?? row.colour_no ?? row.id}?`)) return
-    setBusy(true)
-    setError(null)
-    setMessage(null)
-    try {
-      await applyOrQueue('weft_yarn_stock', 'delete', row.id, { id: row.id }, async () => {
-        const { error: err } = await supabase.from('weft_yarn_stock').delete().eq('id', row.id)
-        if (err) throw err
-      })
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Delete failed')
-    } finally {
-      setBusy(false)
-    }
+  if (tab === 'weft') {
+    return (
+      <div className="screen yarn-stock-screen">
+        <YarnStockPanel />
+      </div>
+    )
   }
 
   return (
     <div className="screen">
       <header className="screen-header">
-        <h1>Stock Master</h1>
+        <h1>Warp Beam Stock</h1>
         <div className="segment">
           <button
             type="button"
@@ -223,89 +152,47 @@ export function StockScreen({ initialTab = 'beam', onTabChange }: Props) {
           </button>
           <button
             type="button"
-            className={tab === 'weft' ? 'seg active' : 'seg'}
+            className="seg"
             onClick={() => selectTab('weft')}
           >
-            Weft Yarn
+            Yarn Stock
           </button>
         </div>
       </header>
 
-      {tab === 'beam' ? (
-        <>
-          <div className="list">
-            {beams.map((row) => (
-              <article key={row.id} className="card-row surface row-top">
-                <div>
-                  <strong>{row.variety_name}</strong>
-                  <div className="text-muted">{row.quantity_pcs} pcs</div>
-                </div>
-                <div className="icon-actions">
-                  <button
-                    type="button"
-                    className="btn-ghost icon-btn"
-                    disabled={busy}
-                    aria-label="Edit"
-                    onClick={() => void editBeam(row)}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-ghost icon-btn"
-                    disabled={busy}
-                    aria-label="Delete"
-                    onClick={() => void deleteBeam(row)}
-                  >
-                    Del
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
-          <button type="button" className="btn-warp" disabled={busy} onClick={() => void addBeamVariety()}>
-            + Add Variety
-          </button>
-        </>
-      ) : (
-        <>
-          <div className="list">
-            {yarns.map((row) => (
-              <article key={row.id} className="card-row surface row-top">
-                <div>
-                  <strong>{row.colour_name || row.colour_no || 'Colour'}</strong>
-                  <div className="text-muted">
-                    {row.supplier ?? '—'} · {row.colour_no ?? '—'} · {row.stock_kg} kg
-                  </div>
-                </div>
-                <div className="icon-actions">
-                  <button
-                    type="button"
-                    className="btn-ghost icon-btn"
-                    disabled={busy}
-                    aria-label="Edit"
-                    onClick={() => void editYarn(row)}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-ghost icon-btn"
-                    disabled={busy}
-                    aria-label="Delete"
-                    onClick={() => void deleteYarn(row)}
-                  >
-                    Del
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
-          <button type="button" className="btn-warp" disabled={busy} onClick={() => void addYarn()}>
-            + Add Colour
-          </button>
-        </>
-      )}
+      <div className="list">
+        {beams.map((row) => (
+          <article key={row.id} className="card-row surface row-top">
+            <div>
+              <strong>{row.variety_name}</strong>
+              <div className="text-muted">{row.quantity_pcs} pcs</div>
+            </div>
+            <div className="icon-actions">
+              <button
+                type="button"
+                className="btn-ghost icon-btn"
+                disabled={busy}
+                aria-label="Edit"
+                onClick={() => void editBeam(row)}
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                className="btn-ghost icon-btn"
+                disabled={busy}
+                aria-label="Delete"
+                onClick={() => void deleteBeam(row)}
+              >
+                Del
+              </button>
+            </div>
+          </article>
+        ))}
+      </div>
+      <button type="button" className="btn-warp" disabled={busy} onClick={() => void addBeamVariety()}>
+        + Add Variety
+      </button>
 
       {error ? <p className="form-error text-danger">{error}</p> : null}
       {message ? <p className="form-ok text-sage">{message}</p> : null}
