@@ -58,6 +58,7 @@ import { SecurityInventoryScreen, type SiSub } from './screens/SecurityInventory
 import { ItemMasterScreen } from './screens/ItemMasterScreen'
 import { CeoPinManagementScreen } from './screens/CeoPinManagementScreen'
 import { OrderEntryScreen } from './screens/OrderEntryScreen'
+import { DailyPendingWorkScreen } from './screens/DailyPendingWorkScreen'
 import { ModulePinGate } from './components/ModulePinGate'
 import { isModuleUnlocked } from './lib/ceoPinManagement'
 
@@ -233,6 +234,9 @@ function AuthenticatedApp() {
       {tab === 'geb-readings' ? <GebReadingScreen /> : null}
       {tab === 'order-entry' ? (
         <OrderEntryScreen initialTab={(sub as 'warp' | 'weft' | 'material' | 'repair' | 'list' | 'history' | 'delivery' | 'reports') || 'warp'} />
+      ) : null}
+      {tab === 'daily-pending-work' ? (
+        <DailyPendingWorkScreen initialTab={(sub as 'today' | 'all' | 'carry' | 'reports') || 'today'} />
       ) : null}
       {tab === 'orders-pending' ? <OrdersPendingScreen /> : null}
       {tab === 'program-dispatch' ? (

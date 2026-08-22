@@ -112,6 +112,14 @@ const ICONS: Record<string, ReactNode> = {
       />
     </svg>
   ),
+  'daily-pending-work': (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="nav-ico">
+      <path
+        fill="currentColor"
+        d="M7 2h10a2 2 0 0 1 2 2v16l-7-3-7 3V4a2 2 0 0 1 2-2zm1 4v2h8V6H8zm0 4v2h5v-2H8zm0 4v2h8v-2H8z"
+      />
+    </svg>
+  ),
   masters: (
     <svg viewBox="0 0 24 24" aria-hidden="true" className="nav-ico">
       <path
