@@ -50,6 +50,7 @@ export type AppScreen =
   | 'settings-hub'
   | 'ceo-pin-management'
   | 'order-entry'
+  | 'daily-pending-work'
   | 'placeholder'
 
 export type MainModuleId =
@@ -63,6 +64,7 @@ export type MainModuleId =
   | 'maintenance'
   | 'security'
   | 'orders'
+  | 'daily-pending-work'
   | 'cash-book'
   | 'reports'
   | 'masters'
@@ -389,6 +391,20 @@ export const MAIN_MODULES: MainModule[] = [
     ],
   },
   {
+    id: 'daily-pending-work',
+    label: 'Daily Pending Work',
+    icon: 'daily-pending-work',
+    screen: 'daily-pending-work',
+    sub: 'today',
+    mobileNav: true,
+    items: [
+      { id: 'dpw-today', label: "Today's Work", screen: 'daily-pending-work', sub: 'today', hint: 'Machine checklist & factory work' },
+      { id: 'dpw-all', label: 'All Daily Works', screen: 'daily-pending-work', sub: 'all', hint: 'Full work list with filters' },
+      { id: 'dpw-carry', label: 'Carry Forward', screen: 'daily-pending-work', sub: 'carry', hint: 'Unfinished work carried to next day' },
+      { id: 'dpw-reports', label: 'Work Reports', screen: 'daily-pending-work', sub: 'reports', hint: 'Print & summary reports' },
+    ],
+  },
+  {
     id: 'orders',
     label: 'Orders',
     icon: 'orders',
@@ -665,6 +681,7 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   'dto-hub': 'Design to Order',
   'ceo-pin-management': 'CEO PIN Management',
   'order-entry': 'Order Entry',
+  'daily-pending-work': 'Daily Pending Work',
   'dto-intake': 'DESIGN Intake',
   'dto-sample-job': 'Sample Job Card',
   'dto-tracking': 'Sample Tracking',
@@ -745,6 +762,7 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
   ) {
     return 'orders'
   }
+  if (screen === 'daily-pending-work') return 'daily-pending-work'
   if (screen === 'costing' || screen === 'loan-tracker' || screen === 'geb-readings') return 'reports'
   if (screen === 'maintenance' || screen === 'maint-material') return 'maintenance'
   if (screen === 'parties' || screen === 'crm' || screen === 'item-master') return 'masters'
@@ -839,6 +857,15 @@ export function titleFor(screen: AppScreen, sub?: string, moduleId?: MainModuleI
       reports: 'Order Reports',
     }
     return labels[sub || 'warp'] || 'Order Entry'
+  }
+  if (screen === 'daily-pending-work') {
+    const labels: Record<string, string> = {
+      today: "Today's Work",
+      all: 'All Daily Works',
+      carry: 'Carry Forward',
+      reports: 'Work Reports',
+    }
+    return labels[sub || 'today'] || 'Daily Pending Work'
   }
   if (screen === 'maintenance') {
     const labels: Record<string, string> = {
