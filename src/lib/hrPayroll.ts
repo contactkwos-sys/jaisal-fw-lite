@@ -574,7 +574,7 @@ export function mergeAttendanceByDate(rows: Attendance[]): Attendance[] {
     byDate.set(key, {
       ...dominant,
       payable_day: Math.round(payable * 100) / 100,
-      total_hours: Math.round((Number(existing.total_hours) || 0) + (Number(row.total_hours) || 0) * 100) / 100,
+      total_hours: Math.round(((Number(existing.total_hours) || 0) + (Number(row.total_hours) || 0)) * 100) / 100,
     })
   }
   return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date))
