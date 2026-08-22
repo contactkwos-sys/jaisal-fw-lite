@@ -429,6 +429,84 @@ body.drawer-open {
   min-width: 0;
 }
 
+/* Production module hub — bordered cards + process-flow arrows */
+.module-hub-production .hub-grid-production {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.module-hub-production .hub-flow-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.5rem;
+}
+
+.module-hub-production .hub-flow-step {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1 1 9rem;
+  min-width: 0;
+}
+
+.module-hub-production .hub-flow-step .hub-card {
+  flex: 1;
+  min-width: 0;
+}
+
+.module-hub-production .hub-flow-arrow {
+  color: var(--weft);
+  font-size: 1.15rem;
+  font-weight: 600;
+  line-height: 1;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.module-hub-production .hub-rest-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+
+.module-hub-production .hub-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+  width: 100%;
+  margin: 0;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+  text-align: left;
+  filter: none;
+}
+
+.module-hub-production .hub-card:hover {
+  border-color: color-mix(in srgb, var(--teal) 45%, var(--line));
+  background: color-mix(in srgb, var(--teal-soft) 55%, var(--surface));
+  filter: none;
+}
+
+.module-hub-production .hub-card-label {
+  font-family: "Outfit", sans-serif;
+  font-weight: 650;
+  font-size: 0.98rem;
+  letter-spacing: -0.01em;
+  color: var(--teal-deep);
+}
+
+.module-hub-production .hub-card-hint {
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
 .hub-card {
   display: grid;
   grid-template-columns: auto 1fr auto;
@@ -1208,6 +1286,10 @@ body.drawer-open {
   .flow-arrow {
     display: none;
   }
+
+  .module-hub-production .hub-flow-arrow {
+    display: none;
+  }
 }
 
 /* Desktop / iPad: fixed sidebar, no hamburger / bottom nav */
@@ -1344,6 +1426,22 @@ body.drawer-open {
   .hub-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.9rem;
+  }
+
+  .hub-grid:not(.hub-grid-production) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .module-hub-production .hub-rest-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .module-hub-production .hub-flow-row {
+    flex-wrap: nowrap;
+  }
+
+  .module-hub-production .hub-flow-step {
+    flex: 1 1 0;
   }
 
   .module-hub .hub-section-title {
@@ -1747,6 +1845,98 @@ body.drawer-open {
   flex-wrap: wrap;
   gap: 0.45rem;
   justify-content: flex-end;
+}
+
+/* —— PIN Overview (Security → Roles & PIN) —— */
+.pin-overview {
+  margin-bottom: 0.75rem;
+}
+
+.pin-overview-wrap {
+  margin-bottom: 0;
+}
+
+.pin-overview-table th:last-child,
+.pin-overview-table td:last-child {
+  white-space: nowrap;
+}
+
+.pin-overview-pin-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.pin-overview-code {
+  font-family: var(--font-mono, 'IBM Plex Mono', ui-monospace, monospace);
+  letter-spacing: 0.12em;
+  font-size: 0.95rem;
+}
+
+.pin-show-btn {
+  padding: 0.15rem 0.45rem;
+  font-size: 0.75rem;
+}
+
+.pin-overview-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.pin-badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.pin-badge-danger {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+
+.pin-badge-ok {
+  color: var(--sage);
+  border-color: color-mix(in srgb, var(--sage) 40%, var(--line));
+  background: color-mix(in srgb, var(--sage) 10%, transparent);
+}
+
+.pin-badge-warn {
+  color: var(--weft);
+  border-color: color-mix(in srgb, var(--weft) 45%, var(--line));
+  background: color-mix(in srgb, var(--weft) 12%, transparent);
+}
+
+.pin-row-unset td {
+  background: color-mix(in srgb, var(--danger) 4%, transparent);
+}
+
+.pin-row-dup td {
+  background: color-mix(in srgb, var(--weft) 6%, transparent);
+}
+
+.pin-overview-inline-reset {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.pin-overview-inline-reset input {
+  width: 4.5rem;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
 }
 
 /* Cash Book */

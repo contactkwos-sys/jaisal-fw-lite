@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ApprovalsWidget } from '../components/ApprovalsWidget'
 import { GmailAdminSection } from '../components/GmailAdminSection'
+import { PinOverviewTable } from '../components/PinOverviewTable'
 import { ShareActions } from '../components/ShareActions'
 import { SubTabs } from '../components/SubTabs'
 import { useAuth } from '../lib/auth'
@@ -56,6 +57,7 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
   const [confirmPin, setConfirmPin] = useState<Record<string, string>>({})
   const [editName, setEditName] = useState<Record<string, string>>({})
   const [bulkPins, setBulkPins] = useState<Array<{ role: string; pin: string }> | null>(null)
+  const [pinOverviewKey, setPinOverviewKey] = useState(0)
   const [permRoleId, setPermRoleId] = useState<string | null>(null)
   const [permDraft, setPermDraft] = useState<ModulePermission[]>([])
   const [permMsg, setPermMsg] = useState<string | null>(null)
@@ -243,6 +245,7 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
       setNewPin((p) => ({ ...p, [role.id]: '' }))
       setConfirmPin((p) => ({ ...p, [role.id]: '' }))
       setRoleHasPin((m) => ({ ...m, [role.id]: true }))
+      setPinOverviewKey((k) => k + 1)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'PIN reset failed')
     } finally {
@@ -306,6 +309,7 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
       setNewPin({})
       setConfirmPin({})
       setMessage(`Auto-generated PINs for ${assigned.length} roles — note them securely (shown once)`)
+      setPinOverviewKey((k) => k + 1)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Bulk PIN generation failed')
     } finally {
@@ -559,6 +563,21 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
 
       {sub === 'roles' ? (
         <div className="pin-mgmt">
+          {isCeo ? (
+            <PinOverviewTable
+              roles={pinRoles}
+              isCeo={isCeo}
+              refreshKey={pinOverviewKey}
+              onMessage={(msg) => {
+                setMessage(msg)
+                if (msg) setError(null)
+              }}
+              onError={(msg) => {
+                setError(msg)
+                if (msg) setMessage(null)
+              }}
+            />
+          ) : null}
           {isCeo ? (
             <div className="pin-mgmt-toolbar">
               <p className="text-muted" style={{ margin: 0 }}>
