@@ -1453,7 +1453,7 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
           </div>
           <div className="hr-quick-actions share-actions">
             <button type="button" className="btn-ghost" onClick={() => quickNav('attendance')}>
-              Attendance Matrix
+              Attendance
             </button>
             <button type="button" className="btn-ghost" onClick={() => goNav('salary-status')}>
               Salary Up To Date

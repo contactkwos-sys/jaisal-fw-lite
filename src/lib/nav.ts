@@ -340,7 +340,7 @@ export const MAIN_MODULES: MainModule[] = [
         sub: 'payroll',
         hint: 'ASO / Security Guard / Sweeper designations',
       },
-      { id: 'hr-attendance', label: 'Attendance', screen: 'attendance', hint: 'Daily attendance by date & shift' },
+      { id: 'hr-attendance', label: 'Attendance', screen: 'attendance', hint: 'Bulk table & date-range matrix' },
       { id: 'hr-leave', label: 'Leave / Holiday', screen: 'hr-payroll', sub: 'leave', hint: 'Leave entries & holidays' },
       { id: 'hr-rates', label: 'Salary Rate Master', screen: 'hr-payroll', sub: 'rates', hint: 'Monthly / daily / hourly rates' },
       { id: 'hr-advance', label: 'Advance Salary', screen: 'hr-payroll', sub: 'advance', hint: 'Cash / cheque / bank advance entries' },
