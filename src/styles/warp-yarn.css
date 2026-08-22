@@ -10,13 +10,24 @@
   }
 }
 
-.app-shell[data-screen='warp-yarn'] .content-page-title,
-.app-shell[data-screen='warp-yarn'] .mobile-topbar-title {
-  font-size: clamp(1.5rem, 2.2vw, 2rem); /* ~24–32px */
+.app-shell[data-screen='warp-yarn'] .content-page-title {
+  font-size: clamp(1.75rem, 2.2vw, 2rem); /* 28–32px desktop/tablet */
   font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1.25;
   color: var(--text);
+}
+
+.app-shell[data-screen='warp-yarn'] .mobile-topbar-title {
+  font-size: clamp(1.05rem, 3.8vw, 1.25rem); /* readable, avoids clipping */
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  color: var(--text);
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  max-width: min(14rem, 52vw);
 }
 
 .app-shell[data-screen='warp-yarn'] .content-meta {
@@ -76,7 +87,7 @@
 .wym-header h1 {
   margin: 0.2rem 0 0.25rem;
   color: var(--teal-deep);
-  font-size: clamp(1.35rem, 2vw, 1.6rem); /* ~22–26px */
+  font-size: clamp(1.375rem, 2vw, 1.625rem); /* 22–26px */
   font-weight: 700;
   letter-spacing: -0.02em;
   line-height: 1.25;
@@ -539,25 +550,34 @@
   gap: 0.75rem;
 }
 
-/* Responsive: keep hierarchy readable; avoid shrinking text */
+/* Responsive: keep hierarchy readable; never drop below factory minimums */
 @media (max-width: 640px) {
   .wym-header h1 {
-    font-size: 1.35rem;
+    font-size: 1.375rem; /* 22px floor */
   }
 
   .wym-quick-row .btn-warp,
   .wym-quick-row .btn-ghost {
     flex: 1 1 calc(50% - 0.55rem);
-    font-size: 0.97rem;
+    font-size: 1rem; /* 16px */
     padding: 0.65rem 0.7rem;
   }
 
   .wym-table {
-    font-size: 0.9rem;
+    font-size: 0.9rem; /* 14.4px */
   }
 
   .wym-table th {
-    font-size: 0.85rem;
+    font-size: 0.875rem; /* 14px minimum */
+  }
+
+  .wym-filters .field > span {
+    font-size: 0.875rem;
+  }
+
+  .wym-filters input,
+  .wym-filters select {
+    font-size: 0.9rem;
   }
 }
 
