@@ -1,14 +1,20 @@
 /**
  * Salary Up To Date — live liability as of any date.
+ * Batch-fetches attendance/advances/payments; never silently drops employees.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Attendance, SalaryRate, Role, Worker } from '../../lib/database.types'
 import { monthStartISO } from '../../lib/attendanceMatrix'
 import {
   buildSalaryLedgerRow,
+  emptySalaryLedgerRow,
+  fetchAllPaginated,
   formatINRExact,
+  formatUserError,
   pickLatestSalaryRate,
+  sumSalaryLedgerTotals,
   todayISO,
+  withTimeout,
   type SalaryLedgerRow,
 } from '../../lib/hrPayroll'
 import { printReport } from '../../lib/printDocs'
@@ -20,43 +26,130 @@ type Props = {
   salaryRates: SalaryRate[]
   roles: Role[]
   payrollRates: Array<{ role_id: string; rate_per_day: number }>
+  mastersReady?: boolean
   onOpenWorker?: (workerId: string) => void
 }
 
 const PAID_STATUSES = ['Payment Processed', 'Included in Bank Salary Letter'] as const
+const QUERY_TIMEOUT_MS = 90_000
+const PAGE_SIZE = 1000
+const CACHE_PREFIX = 'salary_up_to_date_'
 
-export function SalaryUpToDatePanel({ workers, salaryRates, roles, payrollRates, onOpenWorker }: Props) {
+type LoadPhase = 'idle' | 'fetching' | 'calculating' | 'done' | 'error'
+
+export function SalaryUpToDatePanel({
+  workers,
+  salaryRates,
+  roles,
+  payrollRates,
+  mastersReady = true,
+  onOpenWorker,
+}: Props) {
   const [asOfDate, setAsOfDate] = useState(() => todayISO())
   const [search, setSearch] = useState('')
   const [rows, setRows] = useState<SalaryLedgerRow[]>([])
-  const [busy, setBusy] = useState(false)
+  const [phase, setPhase] = useState<LoadPhase>('idle')
   const [error, setError] = useState<string | null>(null)
   const [loadedOnce, setLoadedOnce] = useState(false)
+  const [progress, setProgress] = useState('')
+  const loadSeq = useRef(0)
+  const autoLoadedKey = useRef('')
 
   const fromDate = useMemo(() => monthStartISO(asOfDate.slice(0, 7)), [asOfDate])
   const activeWorkers = useMemo(() => workers.filter((w) => w.is_active), [workers])
+  const busy = phase === 'fetching' || phase === 'calculating'
 
   const load = useCallback(async () => {
-    setBusy(true)
-    setError(null)
-    try {
-      const { data: att, error: aErr } = await supabase
-        .from('attendance')
-        .select('*')
-        .gte('date', fromDate)
-        .lte('date', asOfDate)
-      if (aErr) throw aErr
+    if (!mastersReady || !activeWorkers.length) {
+      setError(
+        activeWorkers.length
+          ? 'Loading employee and salary rate master data…'
+          : 'No active employees — add employees in Employee Master first.',
+      )
+      return
+    }
 
-      let paidEntries: Array<{ worker_id: string; net_payable: number; status?: string }> = []
-      const { data: paid, error: pErr } = await supabase
-        .from('payroll_entries')
-        .select('worker_id, net_payable, status')
-        .in('status', [...PAID_STATUSES])
-      if (!pErr) {
-        paidEntries = (paid ?? []) as typeof paidEntries
-      } else if (!/does not exist|schema cache|PGRST/i.test(pErr.message)) {
-        throw pErr
+    const seq = ++loadSeq.current
+    setPhase('fetching')
+    setError(null)
+    setProgress('Fetching attendance…')
+
+    try {
+      const attendance = await withTimeout(
+        fetchAllPaginated<Attendance>(async (from, pageSize) => {
+          const { data, error: aErr } = await supabase
+            .from('attendance')
+            .select('*')
+            .gte('date', fromDate)
+            .lte('date', asOfDate)
+            .order('date')
+            .range(from, from + pageSize - 1)
+          return { data: (data as Attendance[]) ?? null, error: aErr }
+        }, PAGE_SIZE),
+        QUERY_TIMEOUT_MS,
+        'Attendance fetch',
+      )
+      if (seq !== loadSeq.current) return
+
+      setProgress('Fetching advances and payments…')
+
+      const advances = await withTimeout(
+        fetchAllPaginated<{ worker_id: string; amount: number; advance_date: string }>(
+          async (from, pageSize) => {
+            const { data, error: advErr } = await supabase
+              .from('salary_advance_transactions')
+              .select('worker_id, amount, advance_date')
+              .eq('is_voided', false)
+              .gte('advance_date', fromDate)
+              .lte('advance_date', asOfDate)
+              .range(from, from + pageSize - 1)
+            if (advErr && /does not exist|schema cache|PGRST/i.test(advErr.message)) {
+              return { data: [], error: null }
+            }
+            return {
+              data: (data as Array<{ worker_id: string; amount: number; advance_date: string }>) ?? null,
+              error: advErr,
+            }
+          },
+          PAGE_SIZE,
+        ),
+        QUERY_TIMEOUT_MS,
+        'Advance fetch',
+      )
+      if (seq !== loadSeq.current) return
+
+      let paidEntries: Array<{ worker_id: string; net_payable: number }> = []
+      try {
+        paidEntries = await withTimeout(
+          fetchAllPaginated<{ worker_id: string; net_payable: number }>(async (from, pageSize) => {
+            const { data, error: pErr } = await supabase
+              .from('payroll_entries')
+              .select('worker_id, net_payable, status, payroll_runs!inner(from_date, to_date)')
+              .in('status', [...PAID_STATUSES])
+              .gte('payroll_runs.from_date', fromDate)
+              .lte('payroll_runs.to_date', asOfDate)
+              .range(from, from + pageSize - 1)
+            if (!pErr) return { data: (data as typeof paidEntries) ?? null, error: null }
+            if (/does not exist|schema cache|PGRST/i.test(pErr.message)) {
+              const fallback = await supabase
+                .from('payroll_entries')
+                .select('worker_id, net_payable, status, payment_date')
+                .in('status', [...PAID_STATUSES])
+                .gte('payment_date', fromDate)
+                .lte('payment_date', asOfDate)
+                .range(from, from + pageSize - 1)
+              return { data: (fallback.data as typeof paidEntries) ?? null, error: fallback.error }
+            }
+            return { data: null, error: pErr }
+          }, PAGE_SIZE),
+          QUERY_TIMEOUT_MS,
+          'Payment fetch',
+        )
+      } catch (paidErr) {
+        console.warn('Salary Up To Date paid entries fallback:', paidErr)
+        paidEntries = []
       }
+      if (seq !== loadSeq.current) return
 
       const paidByWorker = new Map<string, number>()
       for (const e of paidEntries) {
@@ -64,32 +157,23 @@ export function SalaryUpToDatePanel({ workers, salaryRates, roles, payrollRates,
         paidByWorker.set(wid, (paidByWorker.get(wid) || 0) + Number(e.net_payable || 0))
       }
 
-      let advRows: Array<{ worker_id: string; amount: number; advance_date: string }> = []
-      const { data: adv, error: advErr } = await supabase
-        .from('salary_advance_transactions')
-        .select('worker_id, amount, advance_date')
-        .eq('is_voided', false)
-        .gte('advance_date', fromDate)
-        .lte('advance_date', asOfDate)
-      if (!advErr) {
-        advRows = (adv ?? []) as typeof advRows
-      } else if (!/does not exist|schema cache|PGRST/i.test(advErr.message)) {
-        throw advErr
-      }
-
       const advanceByWorker = new Map<string, number>()
-      for (const a of advRows) {
+      for (const a of advances) {
         advanceByWorker.set(a.worker_id, (advanceByWorker.get(a.worker_id) || 0) + Number(a.amount))
       }
 
       const attByWorker = new Map<string, Attendance[]>()
-      for (const a of (att as Attendance[]) ?? []) {
+      for (const a of attendance) {
         const list = attByWorker.get(a.worker_id) || []
         list.push(a)
         attByWorker.set(a.worker_id, list)
       }
 
+      setPhase('calculating')
+      setProgress(`Calculating ${activeWorkers.length} employees…`)
+
       const ledger: SalaryLedgerRow[] = []
+      let calculated = 0
       for (const worker of activeWorkers) {
         try {
           const rate = pickLatestSalaryRate(salaryRates, worker.id, asOfDate)
@@ -106,24 +190,46 @@ export function SalaryUpToDatePanel({ workers, salaryRates, roles, payrollRates,
               payrollRates as never,
             ),
           )
+          calculated++
         } catch (rowErr) {
-          console.warn('Salary Up To Date row skipped:', worker.full_name, rowErr)
+          console.error('Salary Up To Date row error:', worker.full_name, rowErr)
+          ledger.push(
+            emptySalaryLedgerRow(
+              worker,
+              rowErr instanceof Error ? rowErr.message : 'Calculation failed',
+            ),
+          )
         }
       }
+
+      if (seq !== loadSeq.current) return
+
       setRows(ledger)
       setLoadedOnce(true)
+      setPhase('done')
+      setProgress('')
+      try {
+        sessionStorage.setItem(`${CACHE_PREFIX}${asOfDate}`, String(Date.now()))
+      } catch {
+        /* ignore */
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Load failed')
+      if (seq !== loadSeq.current) return
+      console.error('Salary Up To Date calculation failed:', e)
+      setError(formatUserError(e, 'Unable to complete salary calculation. Please retry.'))
       setRows([])
-    } finally {
-      setBusy(false)
+      setPhase('error')
+      setProgress('')
     }
-  }, [asOfDate, fromDate, activeWorkers, salaryRates, roles, payrollRates])
+  }, [asOfDate, fromDate, activeWorkers, salaryRates, roles, payrollRates, mastersReady])
 
   useEffect(() => {
-    if (!workers.length) return
+    if (!mastersReady || !activeWorkers.length) return
+    const key = `${asOfDate}:${activeWorkers.length}:${salaryRates.length}`
+    if (autoLoadedKey.current === key) return
+    autoLoadedKey.current = key
     void load()
-  }, [load, workers.length])
+  }, [mastersReady, activeWorkers.length, salaryRates.length, asOfDate, load])
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -137,26 +243,55 @@ export function SalaryUpToDatePanel({ workers, salaryRates, roles, payrollRates,
     })
   }, [rows, search])
 
-  const totals = useMemo(() => {
-    const t = { earned: 0, advance: 0, paid: 0, balance: 0 }
-    for (const r of visible) {
-      t.earned += r.earnedSalary
-      t.advance += r.advancePaid
-      t.paid += r.paidAmount
-      t.balance += r.balanceSalary
-    }
-    return t
-  }, [visible])
+  const totals = useMemo(() => sumSalaryLedgerTotals(rows), [rows])
+
+  const completion = useMemo(() => {
+    const eligible = activeWorkers.length
+    const calculated = rows.length
+    const rateMissing = rows.filter((r) => r.rateMissing).length
+    const issues = rows.filter((r) => r.calcIssue && !r.rateMissing).length
+    const complete = eligible > 0 && calculated === eligible && issues === 0
+    return { eligible, calculated, rateMissing, issues, complete }
+  }, [activeWorkers.length, rows])
+
+  const issueRows = useMemo(() => rows.filter((r) => r.calcIssue), [rows])
 
   function exportCsv() {
-    const headers = ['Code', 'Name', 'Earned', 'Advance', 'Paid', 'Balance']
-    const lines = visible.map((r) => [
+    const headers = [
+      'Code',
+      'Name',
+      'Designation',
+      'Department',
+      'Present',
+      'Absent',
+      'Leave',
+      'Weekly Off',
+      'Holiday',
+      'Paid Days',
+      'Rate',
+      'Earned',
+      'Advance',
+      'Paid',
+      'Outstanding',
+      'Issue',
+    ]
+    const lines = rows.map((r) => [
       r.worker.employee_code || '',
       r.worker.full_name,
+      r.worker.designation || '',
+      r.worker.department || '',
+      r.summary.present,
+      r.summary.absent,
+      r.summary.leave,
+      r.summary.weeklyOff,
+      r.summary.holiday,
+      r.summary.paidDays,
+      r.salaryRateLabel,
       r.earnedSalary,
       r.advancePaid,
       r.paidAmount,
       r.balanceSalary,
+      r.calcIssue || '',
     ])
     const esc = (v: string | number) => {
       const s = String(v ?? '')
@@ -167,48 +302,108 @@ export function SalaryUpToDatePanel({ workers, salaryRates, roles, payrollRates,
   }
 
   function printTable() {
+    const tableRows = rows.map((r) => [
+      r.worker.employee_code || '',
+      r.worker.full_name,
+      r.worker.department || '',
+      String(r.summary.present),
+      String(r.summary.absent),
+      String(r.summary.leave),
+      String(r.summary.paidDays),
+      formatINRExact(r.earnedSalary),
+      formatINRExact(r.advancePaid),
+      formatINRExact(r.paidAmount),
+      formatINRExact(r.balanceSalary),
+    ])
+    tableRows.push([
+      '',
+      'TOTALS',
+      '',
+      '',
+      '',
+      '',
+      '',
+      formatINRExact(totals.earned),
+      formatINRExact(totals.advance),
+      formatINRExact(totals.paid),
+      formatINRExact(totals.balance),
+    ])
     printReport(
-      `Salary Up To Date · ${asOfDate}`,
-      ['Code', 'Name', 'Earned', 'Advance', 'Paid', 'Balance'],
-      visible.map((r) => [
-        r.worker.employee_code || '',
-        r.worker.full_name,
-        formatINRExact(r.earnedSalary),
-        formatINRExact(r.advancePaid),
-        formatINRExact(r.paidAmount),
-        formatINRExact(r.balanceSalary),
-      ]),
+      `Salary Up To Date · As of ${asOfDate}`,
+      [
+        'Code',
+        'Name',
+        'Dept',
+        'Present',
+        'Absent',
+        'Leave',
+        'Paid Days',
+        'Earned',
+        'Advance',
+        'Paid',
+        'Outstanding',
+      ],
+      tableRows,
     )
   }
 
   return (
-    <div className="form-stack">
+    <div className="form-stack hr-salary-status">
       <h2 className="section-title">Salary Up To Date</h2>
       <p className="text-muted">
-        Current salary status for every employee based on attendance entered up to the selected date (month-to-date).
+        Month-to-date salary for every active employee from {fromDate} through the selected date, using
+        attendance, rate master, advances, and payments.
       </p>
 
-      {error ? <p className="form-error text-danger">{error}</p> : null}
+      {error ? (
+        <div className="surface hr-salary-error" role="alert">
+          <strong>Salary calculation failed</strong>
+          <p>{error}</p>
+          <p className="text-muted">Unable to complete the calculation for the selected period. Please retry.</p>
+          <button type="button" className="primary-save" disabled={busy} onClick={() => void load()}>
+            Retry Calculation
+          </button>
+        </div>
+      ) : null}
 
       <div className="hr-toolbar">
         <label className="field">
           <span className="text-muted">As of Date</span>
-          <input type="date" value={asOfDate} max={todayISO()} onChange={(e) => setAsOfDate(e.target.value)} />
+          <input
+            type="date"
+            value={asOfDate}
+            max={todayISO()}
+            disabled={busy}
+            onChange={(e) => {
+              setAsOfDate(e.target.value)
+              setLoadedOnce(false)
+              autoLoadedKey.current = ''
+            }}
+          />
         </label>
         <label className="field">
           <span className="text-muted">Search</span>
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Employee…" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Employee, code, designation, department…"
+          />
         </label>
-        <button type="button" className="primary-save" disabled={busy} onClick={() => void load()}>
+        <button type="button" className="primary-save" disabled={busy || !mastersReady} onClick={() => void load()}>
           {busy ? 'Calculating…' : 'Calculate'}
         </button>
-        <button type="button" className="btn-ghost" disabled={!visible.length} onClick={printTable}>
+        <button type="button" className="btn-ghost" disabled={busy || !rows.length} onClick={() => void load()}>
+          Refresh
+        </button>
+        <button type="button" className="btn-ghost" disabled={!rows.length} onClick={printTable}>
           Print
         </button>
-        <button type="button" className="btn-ghost" disabled={!visible.length} onClick={exportCsv}>
+        <button type="button" className="btn-ghost" disabled={!rows.length} onClick={exportCsv}>
           CSV
         </button>
       </div>
+
+      {progress ? <p className="text-muted hr-salary-progress">{progress}</p> : null}
 
       <div className="hr-kpi-grid">
         <div className="hr-kpi surface">
@@ -227,52 +422,104 @@ export function SalaryUpToDatePanel({ workers, salaryRates, roles, payrollRates,
           <div className="hr-kpi-value num">{formatINRExact(totals.balance)}</div>
           <div className="hr-kpi-label">Outstanding</div>
         </div>
+        <div className="hr-kpi surface">
+          <div className="hr-kpi-value num">{completion.eligible}</div>
+          <div className="hr-kpi-label">Total Employees</div>
+        </div>
+        <div className="hr-kpi surface">
+          <div className="hr-kpi-value num">{completion.calculated}</div>
+          <div className="hr-kpi-label">Calculated</div>
+        </div>
+        <div className="hr-kpi surface">
+          <div className="hr-kpi-value num">{completion.rateMissing}</div>
+          <div className="hr-kpi-label">Rate Missing</div>
+        </div>
+        <div className="hr-kpi surface">
+          <div className={`hr-kpi-value ${completion.complete ? 'text-success' : 'text-danger'}`}>
+            {completion.complete ? 'COMPLETE' : 'INCOMPLETE'}
+          </div>
+          <div className="hr-kpi-label">Calculation Status</div>
+        </div>
       </div>
 
-      <div className="hr-table-wrap">
-        <table className="hr-table">
+      {!completion.complete && loadedOnce && issueRows.length ? (
+        <div className="surface hr-salary-issues">
+          <strong>
+            {completion.eligible - completion.calculated + completion.issues} employee
+            {completion.eligible - completion.calculated + completion.issues === 1 ? '' : 's'} need attention
+          </strong>
+          <ul>
+            {issueRows.slice(0, 12).map((r) => (
+              <li key={r.worker.id}>
+                {r.worker.employee_code || '—'} · {r.worker.full_name}: {r.calcIssue}
+              </li>
+            ))}
+            {issueRows.length > 12 ? <li>…and {issueRows.length - 12} more</li> : null}
+          </ul>
+        </div>
+      ) : null}
+
+      <div className="hr-table-wrap hr-force-table">
+        <table className="hr-table hr-salary-status-table">
           <thead>
             <tr>
               <th>Code</th>
               <th>Employee</th>
               <th>Designation</th>
               <th>Dept</th>
+              <th>Present</th>
+              <th>Absent</th>
+              <th>Leave</th>
+              <th>WO</th>
+              <th>Holiday</th>
+              <th>Paid Days</th>
               <th>Rate</th>
-              <th>Attendance Days</th>
               <th>Earned</th>
               <th>Advance</th>
               <th>Other Ded.</th>
               <th>Net Payable</th>
               <th>Paid</th>
-              <th>Balance</th>
+              <th>Outstanding</th>
               <th />
             </tr>
           </thead>
           <tbody>
-            {busy && !visible.length ? (
+            {busy && !rows.length ? (
               <tr>
-                <td colSpan={13} className="text-muted">
-                  Calculating salary up to {asOfDate}…
+                <td colSpan={18} className="text-muted">
+                  {progress || `Calculating salary up to ${asOfDate}…`}
                 </td>
               </tr>
             ) : null}
-            {!busy && loadedOnce && visible.length === 0 ? (
+            {!busy && loadedOnce && !rows.length ? (
               <tr>
-                <td colSpan={13} className="text-muted">
+                <td colSpan={18} className="text-muted">
                   {activeWorkers.length === 0
                     ? 'No active employees — add employees in Employee Master first.'
-                    : 'No rows match the current search.'}
+                    : 'Click Calculate to load the salary sheet.'}
+                </td>
+              </tr>
+            ) : null}
+            {!busy && loadedOnce && rows.length > 0 && visible.length === 0 ? (
+              <tr>
+                <td colSpan={18} className="text-muted">
+                  No rows match the current search.
                 </td>
               </tr>
             ) : null}
             {visible.map((r) => (
-              <tr key={r.worker.id}>
+              <tr key={r.worker.id} className={r.calcIssue ? 'hr-row-issue' : undefined}>
                 <td className="num">{r.worker.employee_code || '—'}</td>
                 <td>{r.worker.full_name}</td>
                 <td>{r.worker.designation || '—'}</td>
                 <td>{r.worker.department || '—'}</td>
-                <td>{r.salaryRateLabel}</td>
+                <td className="num">{r.summary.present}</td>
+                <td className="num">{r.summary.absent}</td>
+                <td className="num">{r.summary.leave}</td>
+                <td className="num">{r.summary.weeklyOff}</td>
+                <td className="num">{r.summary.holiday}</td>
                 <td className="num">{r.summary.paidDays}</td>
+                <td className={r.rateMissing ? 'text-danger' : undefined}>{r.salaryRateLabel}</td>
                 <td className="num">{formatINRExact(r.earnedSalary)}</td>
                 <td className="num">{formatINRExact(r.advancePaid)}</td>
                 <td className="num">{formatINRExact(r.otherDeduction)}</td>

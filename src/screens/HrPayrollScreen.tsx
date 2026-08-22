@@ -30,6 +30,7 @@ import {
   EMPLOYEE_SHIFTS,
   formatINR,
   formatINRExact,
+  formatUserError,
   isPresentStatus,
   maskAccountNumber,
   mergeSelectOptions,
@@ -159,7 +160,7 @@ function isMigrationError(msg: string): boolean {
 }
 
 function errMsg(e: unknown): string {
-  return e instanceof Error ? e.message : String(e)
+  return formatUserError(e)
 }
 
 function canViewFullAccounts(isCeo: boolean, roleName: string): boolean {
@@ -295,11 +296,14 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [dashboardBusy, setDashboardBusy] = useState(false)
+  const [workersReady, setWorkersReady] = useState(false)
 
   const [workers, setWorkers] = useState<Worker[]>([])
   const [roles, setRoles] = useState<Role[]>([])
   const [payrollRates, setPayrollRates] = useState<PayrollRate[]>([])
   const [salaryRates, setSalaryRates] = useState<SalaryRate[]>([])
+  const [salaryRatesReady, setSalaryRatesReady] = useState(false)
   const [company, setCompany] = useState<CompanyProfile>(DEFAULT_COMPANY)
 
   const [payrollMonth, setPayrollMonth] = useState(() => new Date().toISOString().slice(0, 7))
@@ -475,6 +479,7 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
     const { data, error: wErr } = await supabase.from('workers').select('*').order('full_name')
     if (wErr) throw wErr
     setWorkers((data as Worker[]) ?? [])
+    setWorkersReady(true)
   }, [])
 
   const loadRolesAndRates = useCallback(async () => {
@@ -493,6 +498,7 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
       .order('effective_from', { ascending: false })
     if (sErr) throw sErr
     setSalaryRates((data as SalaryRate[]) ?? [])
+    setSalaryRatesReady(true)
   }, [])
 
   const loadPayrollRun = useCallback(async (month: string) => {
@@ -562,8 +568,13 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
       .eq('is_voided', false)
       .gte('advance_date', monthFrom)
       .lte('advance_date', today)
-    if (advErr) throw advErr
-    const advanceMtd = (advMtd ?? []).reduce((s, r) => s + Number((r as { amount: number }).amount || 0), 0)
+    let advanceMtd = 0
+    if (advErr) {
+      if (isMigrationError(advErr.message)) throw advErr
+      console.error('Dashboard advance MTD query failed:', advErr)
+    } else {
+      advanceMtd = (advMtd ?? []).reduce((s, r) => s + Number((r as { amount: number }).amount || 0), 0)
+    }
 
     let salaryEarnedMtd = 0
     let salaryPaidMtd = 0
@@ -703,7 +714,6 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
         setError(null)
         if (sub === 'dashboard' || sub === 'salary-status' || sub === 'reports') {
           await loadSalaryRates()
-          if (sub === 'dashboard') await loadDashboard()
         }
         if (sub === 'employees' || sub === 'rates') await loadSalaryRates()
         if (sub === 'employees') {
@@ -727,7 +737,6 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
     sub,
     payrollMonth,
     migrationMissing,
-    loadDashboard,
     loadSalaryRates,
     loadHolidaysLeave,
     loadAdvances,
@@ -737,6 +746,25 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
     viewLetterId,
     handleDbError,
   ])
+
+  const refreshDashboard = useCallback(async () => {
+    if (migrationMissing || sub !== 'dashboard') return
+    setDashboardBusy(true)
+    setError(null)
+    try {
+      await loadSalaryRates()
+      await loadDashboard()
+    } catch (e) {
+      handleDbError(e)
+    } finally {
+      setDashboardBusy(false)
+    }
+  }, [migrationMissing, sub, loadSalaryRates, loadDashboard, handleDbError])
+
+  useEffect(() => {
+    if (!workersReady || migrationMissing || sub !== 'dashboard') return
+    void refreshDashboard()
+  }, [workersReady, migrationMissing, sub, refreshDashboard])
 
   useEffect(() => {
     if (sub !== 'rates') return
@@ -1394,7 +1422,7 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
   }
 
   return (
-    <div className="screen">
+    <div className="screen hr-screen">
       <header className="screen-header">
         <h1>{titleForSub(sub)}</h1>
         <p className="text-muted2">JAISAL FW · Fashionweave Industries</p>
@@ -1417,6 +1445,10 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
 
       {sub === 'dashboard' ? (
         <div className="form-stack">
+          {dashboardBusy ? <p className="text-muted">Loading dashboard…</p> : null}
+          {!dashboardBusy && workersReady && !activeWorkers.length ? (
+            <p className="text-muted">No active employees found. Add employees in Employee Master.</p>
+          ) : null}
           <div className="hr-kpi-grid">
             <div className="hr-kpi surface">
               <div className="hr-kpi-value num">{kpis.totalEmployees}</div>
@@ -1452,6 +1484,9 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
             </div>
           </div>
           <div className="hr-quick-actions share-actions">
+            <button type="button" className="btn-ghost" disabled={dashboardBusy} onClick={() => void refreshDashboard()}>
+              Refresh
+            </button>
             <button type="button" className="btn-ghost" onClick={() => quickNav('attendance')}>
               Attendance
             </button>
@@ -2009,7 +2044,7 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
                 Save Leave
               </button>
             </form>
-            <div className="hr-table-wrap">
+            <div className="hr-table-wrap hr-force-table">
               <table className="hr-table">
                 <thead>
                   <tr>
@@ -2039,15 +2074,16 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
       ) : null}
 
       {sub === 'rates' ? (
-        <div className="form-stack">
+        <div className="hr-rates-master form-stack">
           <p className="text-muted2">Monthly ÷ 26 auto-fills daily rate. Active rate changes create history rows.</p>
-          <div className="hr-table-wrap">
-            <table className="hr-table">
+          <p className="hr-emp-count">{activeWorkers.length} active employees · scroll horizontally for all columns</p>
+          <div className="hr-rates-table-wrap hr-force-table">
+            <table className="hr-rates-table">
               <thead>
                 <tr>
-                  <th>S.No</th>
-                  <th>Code</th>
-                  <th>Name</th>
+                  <th className="hr-rates-sticky hr-rates-sticky-code">S.No</th>
+                  <th className="hr-rates-sticky hr-rates-sticky-code">Code</th>
+                  <th className="hr-rates-sticky hr-rates-sticky-name">Name</th>
                   <th>Designation</th>
                   <th>Dept</th>
                   <th>Pay Type</th>
@@ -2066,9 +2102,9 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
                   if (!d) return null
                   return (
                     <tr key={w.id}>
-                      <td className="num">{idx + 1}</td>
-                      <td className="num">{w.employee_code || '—'}</td>
-                      <td>{w.full_name}</td>
+                      <td className="num hr-rates-sticky hr-rates-sticky-code">{idx + 1}</td>
+                      <td className="num hr-rates-sticky hr-rates-sticky-code">{w.employee_code || '—'}</td>
+                      <td className="hr-rates-sticky hr-rates-sticky-name">{w.full_name}</td>
                       <td>{w.designation || '—'}</td>
                       <td>{w.department || '—'}</td>
                       <td>
@@ -2132,7 +2168,7 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
                         </select>
                       </td>
                       <td>
-                        <button type="button" className="btn-ghost" disabled={busy} onClick={() => void saveRate(w)}>
+                        <button type="button" className="btn-ghost hr-rates-save" disabled={busy} onClick={() => void saveRate(w)}>
                           Save
                         </button>
                       </td>
@@ -2403,7 +2439,7 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
             </>
           ) : null}
 
-          <div className="hr-table-wrap">
+          <div className="hr-table-wrap hr-force-table">
             <table className="hr-table">
               <thead>
                 <tr>
@@ -2538,7 +2574,7 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
               </select>
             </label>
           </div>
-          <div className="hr-table-wrap">
+          <div className="hr-table-wrap hr-force-table">
             <table className="hr-table">
               <thead>
                 <tr>
@@ -2599,7 +2635,7 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
               GENERATE BANK SALARY LETTER
             </button>
           </div>
-          <div className="hr-table-wrap">
+          <div className="hr-table-wrap hr-force-table">
             <table className="hr-table">
               <thead>
                 <tr>
@@ -2697,7 +2733,7 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
                 Subject: Salary payment for {bounds.label || activeLetter.salary_month} —{' '}
                 {activeLetter.total_employees} employees
               </p>
-              <div className="hr-table-wrap">
+              <div className="hr-table-wrap hr-force-table">
                 <table className="hr-table">
                   <thead>
                     <tr>
@@ -2751,6 +2787,7 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
           salaryRates={salaryRates}
           roles={roles}
           payrollRates={payrollRates}
+          mastersReady={!migrationMissing && workers.length > 0 && salaryRatesReady}
           onOpenWorker={(id) => {
             setHistoryWorkerId(id)
             goNav('reports')
@@ -2848,7 +2885,19 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
         </div>
       ) : null}
 
-      {error ? <p className="form-error text-danger">{error}</p> : null}
+      {error ? (
+        <p className="form-error text-danger">
+          {error}
+          {sub === 'dashboard' ? (
+            <>
+              {' '}
+              <button type="button" className="btn-ghost" onClick={() => void refreshDashboard()}>
+                Retry
+              </button>
+            </>
+          ) : null}
+        </p>
+      ) : null}
       {message ? <p className="form-ok text-sage">{message}</p> : null}
     </div>
   )

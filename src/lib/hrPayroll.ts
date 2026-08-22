@@ -299,14 +299,50 @@ export function amountInWords(amount: number): string {
 export function monthBounds(ym: string): { from: string; to: string; label: string } {
   const [y, m] = ym.split('-').map(Number)
   const from = `${ym}-01`
-  const last = new Date(y, m, 0).getDate()
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate()
   const to = `${ym}-${String(last).padStart(2, '0')}`
-  const label = new Date(y, m - 1, 1).toLocaleString('en-IN', { month: 'long', year: 'numeric' })
+  const label = new Date(Date.UTC(y, m - 1, 1)).toLocaleString('en-IN', {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'Asia/Kolkata',
+  })
   return { from, to, label }
 }
 
+/** Business calendar date in India (IST) — avoids UTC midnight shifting the day. */
 export function todayISO(): string {
-  return new Date().toISOString().slice(0, 10)
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+}
+
+/** Convert unknown errors (incl. Supabase PostgrestError objects) to user-safe text. */
+export function formatUserError(e: unknown, fallback = 'Unable to load data. Please retry.'): string {
+  if (e == null) return fallback
+  if (typeof e === 'string') {
+    const s = e.trim()
+    return s || fallback
+  }
+  if (e instanceof Error) {
+    const msg = e.message?.trim()
+    if (msg && msg !== '[object Object]') return msg
+    console.error(e)
+    return fallback
+  }
+  if (typeof e === 'object') {
+    const o = e as Record<string, unknown>
+    for (const key of ['message', 'error', 'details', 'hint'] as const) {
+      const val = o[key]
+      if (typeof val === 'string' && val.trim()) return val.trim()
+    }
+    const nested = o.message
+    if (nested && typeof nested === 'object') {
+      const inner = (nested as Record<string, unknown>).message
+      if (typeof inner === 'string' && inner.trim()) return inner.trim()
+    }
+    console.error('Unhandled error object:', e)
+    return fallback
+  }
+  const s = String(e)
+  return s === '[object Object]' ? fallback : s
 }
 
 export function statusBadgeClass(status: string): string {
@@ -533,6 +569,140 @@ export type SalaryLedgerRow = {
   paidAmount: number
   balanceSalary: number
   salaryRateLabel: string
+  rateMissing: boolean
+  calcIssue: string | null
+}
+
+export type SalaryLedgerTotals = {
+  earned: number
+  advance: number
+  paid: number
+  balance: number
+}
+
+const STATUS_PRIORITY: Record<string, number> = {
+  Present: 6,
+  Completed: 6,
+  'On Break': 5,
+  'Half Day': 4,
+  Leave: 3,
+  Holiday: 2,
+  'Weekly Off': 1,
+  Absent: 0,
+}
+
+/** Merge day/night shift rows per calendar date — sums payable days, one status per date. */
+export function mergeAttendanceByDate(rows: Attendance[]): Attendance[] {
+  const byDate = new Map<string, Attendance>()
+  for (const row of rows) {
+    const key = row.date
+    const existing = byDate.get(key)
+    if (!existing) {
+      byDate.set(key, { ...row })
+      continue
+    }
+    const payable =
+      Number(existing.payable_day ?? payableDayFromAttendance(existing.status || 'Absent', Number(existing.total_hours) || 0)) +
+      Number(row.payable_day ?? payableDayFromAttendance(row.status || 'Absent', Number(row.total_hours) || 0))
+    const existingPri = STATUS_PRIORITY[(existing.status || 'Absent').trim()] ?? 0
+    const rowPri = STATUS_PRIORITY[(row.status || 'Absent').trim()] ?? 0
+    const dominant = rowPri > existingPri ? row : existing
+    byDate.set(key, {
+      ...dominant,
+      payable_day: Math.round(payable * 100) / 100,
+      total_hours: Math.round(((Number(existing.total_hours) || 0) + (Number(row.total_hours) || 0)) * 100) / 100,
+    })
+  }
+  return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date))
+}
+
+export function isRateMissing(
+  worker: Worker,
+  rate: SalaryRate | null,
+  roles: Role[] = [],
+  payrollRates: PayrollRate[] = [],
+): boolean {
+  const payType = rate?.pay_type || worker.pay_type || 'Daily'
+  if (rate) {
+    if (payType === 'Monthly') return !(Number(rate.monthly_rate) > 0)
+    if (payType === 'Hourly') return !(Number(rate.hourly_rate) > 0)
+    const daily = Number(rate.daily_rate) || 0
+    const monthly = Number(rate.monthly_rate) || 0
+    return !(daily > 0 || monthly > 0)
+  }
+  return fallbackDailyRate(worker, roles, payrollRates) <= 0
+}
+
+export function sumSalaryLedgerTotals(rows: SalaryLedgerRow[]): SalaryLedgerTotals {
+  const t = { earned: 0, advance: 0, paid: 0, balance: 0 }
+  for (const r of rows) {
+    t.earned += r.earnedSalary
+    t.advance += r.advancePaid
+    t.paid += r.paidAmount
+    t.balance += r.balanceSalary
+  }
+  return {
+    earned: Math.round(t.earned * 100) / 100,
+    advance: Math.round(t.advance * 100) / 100,
+    paid: Math.round(t.paid * 100) / 100,
+    balance: Math.round(t.balance * 100) / 100,
+  }
+}
+
+export async function fetchAllPaginated<T>(
+  fetchPage: (from: number, pageSize: number) => Promise<{ data: T[] | null; error: { message: string } | null }>,
+  pageSize = 1000,
+): Promise<T[]> {
+  const all: T[] = []
+  let from = 0
+  while (true) {
+    const { data, error } = await fetchPage(from, pageSize)
+    if (error) throw new Error(error.message)
+    const batch = data ?? []
+    all.push(...batch)
+    if (batch.length < pageSize) break
+    from += pageSize
+  }
+  return all
+}
+
+export async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`)), ms)
+  })
+  try {
+    return await Promise.race([promise, timeout])
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId)
+  }
+}
+
+export function emptySalaryLedgerRow(worker: Worker, issue: string): SalaryLedgerRow {
+  return {
+    worker,
+    rate: null,
+    summary: {
+      present: 0,
+      absent: 0,
+      halfDay: 0,
+      leave: 0,
+      weeklyOff: 0,
+      holiday: 0,
+      paidDays: 0,
+      workingDays: 0,
+    },
+    earnedSalary: 0,
+    advancePaid: 0,
+    otherDeduction: 0,
+    statutoryDeduction: 0,
+    netPayable: 0,
+    paidAmount: 0,
+    balanceSalary: 0,
+    salaryRateLabel: '—',
+    rateMissing: true,
+    calcIssue: issue,
+  }
 }
 
 export function buildSalaryLedgerRow(
@@ -547,6 +717,7 @@ export function buildSalaryLedgerRow(
   payrollRates: PayrollRate[] = [],
   workingDays = DEFAULT_MONTHLY_DIVISOR,
 ): SalaryLedgerRow {
+  const mergedAttendance = mergeAttendanceByDate(attRows)
   const pseudoRun: Pick<PayrollRun, 'id' | 'working_days' | 'esi_on' | 'pf_on' | 'pt_on' | 'other_deduction_on'> = {
     id: 'ledger',
     working_days: workingDays,
@@ -555,8 +726,8 @@ export function buildSalaryLedgerRow(
     pt_on: true,
     other_deduction_on: true,
   }
-  const entry = buildPayrollEntryFromAttendance(worker, attRows, rate, pseudoRun, advanceAmount, roles, payrollRates)
-  const attSummary = summarizeAttendanceRows(attRows)
+  const entry = buildPayrollEntryFromAttendance(worker, mergedAttendance, rate, pseudoRun, advanceAmount, roles, payrollRates)
+  const attSummary = summarizeAttendanceRows(mergedAttendance)
   const summary = {
     present: attSummary.present,
     absent: attSummary.absent,
@@ -570,8 +741,10 @@ export function buildSalaryLedgerRow(
   const statutoryDeduction =
     Number(entry.esi_amount) + Number(entry.pf_amount) + Number(entry.pt_amount) + Number(entry.other_deduction)
   const payType = rate?.pay_type || worker.pay_type || 'Daily'
+  const missingRate = isRateMissing(worker, rate, roles, payrollRates)
   let rateLabel = '—'
-  if (payType === 'Monthly') rateLabel = formatINR(Number(rate?.monthly_rate) || 0) + '/mo'
+  if (missingRate) rateLabel = 'Rate Missing'
+  else if (payType === 'Monthly') rateLabel = formatINR(Number(rate?.monthly_rate) || 0) + '/mo'
   else if (payType === 'Hourly') rateLabel = formatINRExact(Number(rate?.hourly_rate) || 0) + '/hr'
   else rateLabel = formatINRExact(Number(rate?.daily_rate) || fallbackDailyRate(worker, roles, payrollRates)) + '/day'
 
@@ -587,6 +760,8 @@ export function buildSalaryLedgerRow(
     paidAmount,
     balanceSalary: Math.round((Number(entry.net_payable) - paidAmount) * 100) / 100,
     salaryRateLabel: rateLabel,
+    rateMissing: missingRate,
+    calcIssue: missingRate ? 'Rate Missing' : null,
   }
 }
 
