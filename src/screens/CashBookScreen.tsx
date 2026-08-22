@@ -6,6 +6,7 @@ import {
   buildLedgerBook,
   buildPartyLedgers,
   deleteCashBookEntryOrQueue,
+  ensureCashBookItemsInMaster,
   entryItemsLabel,
   fetchCashBookEntries,
   fetchCashBookItemMaster,
@@ -23,6 +24,9 @@ import {
   type CashBookEntryType,
   type CashBookItemMaster,
 } from '../lib/database.types'
+
+/** Floor machines (M1–M6) plus shared/general expenses. Machine Master is still a placeholder. */
+const CASHBOOK_MACHINE_OPTIONS = [...MACHINES, 'Others'] as const
 import { todayISO } from '../lib/mutate'
 
 type TabId = 'entry' | 'list' | 'ledger' | 'book'
@@ -283,7 +287,9 @@ export function CashBookScreen() {
 
   const ledgers = useMemo(() => buildPartyLedgers(rows), [rows])
   const book = useMemo(() => buildLedgerBook(rows), [rows])
+  /** Machine Repair still requires a machine; all other debit expenses may optionally tag one. */
   const needsMachine = form.category === 'Machine Repair'
+  const showMachineField = form.entry_type === 'debit' || needsMachine
   const needsPurpose = isOwnerDepositCategory(form.category)
   const itemsTotal = useMemo(() => sumItemAmounts(form.items), [form.items])
 
@@ -297,6 +303,17 @@ export function CashBookScreen() {
   function resetForm() {
     setForm(emptyForm())
     setEditEntry(null)
+  }
+
+  function mergeMaster(added: CashBookItemMaster[]) {
+    if (!added.length) return
+    setMaster((prev) => {
+      const next = [...prev]
+      for (const row of added) {
+        if (!next.some((x) => x.id === row.id)) next.push(row)
+      }
+      return next.sort((a, b) => a.item_name.localeCompare(b.item_name))
+    })
   }
 
   function validateForm(): string | null {
@@ -341,15 +358,10 @@ export function CashBookScreen() {
     try {
       const amount = Number(form.amount)
       const items = collectValidItems(form.items)
-      // Ensure free-text / selected names are in master for consistency
-      for (const item of items) {
-        if (item.item_name.toLowerCase() === 'other') continue
-        try {
-          await addCashBookItemMaster(item.item_name)
-        } catch {
-          /* ignore master upsert race; entry still saves */
-        }
-      }
+      const machineNumber =
+        form.entry_type === 'debit' || form.category === 'Machine Repair'
+          ? form.machine_number.trim()
+          : ''
 
       const purposeNotes = form.purpose_notes.trim() || null
 
@@ -364,36 +376,69 @@ export function CashBookScreen() {
             party_name: form.party_name,
             contact_number: form.contact_number,
             category: form.category,
-            machine_number: form.machine_number,
+            machine_number: machineNumber,
             purpose_notes: purposeNotes,
             amount,
             edited_by: enteredBy,
             items,
           },
         })
-        setMessage(
-          result === 'applied'
-            ? 'Entry updated (CEO approved)'
-            : 'Edit sent for CEO approval — not applied yet',
-        )
+        if (result === 'applied') {
+          const updated: CashBookEntry = {
+            ...editEntry,
+            entry_date: form.entry_date,
+            entry_type: form.entry_type,
+            party_name: form.party_name.trim(),
+            contact_number: form.contact_number.trim() || null,
+            category: form.category,
+            machine_number: machineNumber || null,
+            purpose_notes:
+              purposeNotes ||
+              items.map((i) => i.item_name).join(', ') ||
+              editEntry.purpose_notes,
+            amount,
+            edited_by: enteredBy,
+            items: items.map((i, idx) => ({
+              id: editEntry.items?.[idx]?.id ?? `local-${idx}`,
+              entry_id: editEntry.id,
+              item_name: i.item_name,
+              amount: i.amount,
+            })),
+          }
+          setRows((prev) => prev.map((r) => (r.id === editEntry.id ? updated : r)))
+          setMessage('Entry updated (CEO approved)')
+        } else {
+          setMessage('Edit sent for CEO approval — not applied yet')
+        }
       } else {
-        await insertCashBookEntry({
+        const { entry } = await insertCashBookEntry({
           entry_date: form.entry_date,
           entry_type: form.entry_type,
           party_name: form.party_name,
           contact_number: form.contact_number,
           category: form.category,
-          machine_number: form.machine_number,
+          machine_number: machineNumber,
           purpose_notes: purposeNotes,
           amount,
           entered_by: enteredBy,
           items,
         })
+        setRows((prev) => [entry, ...prev])
         setMessage('Entry saved')
       }
+
+      // Item master sync is best-effort and must not block the save UX
+      void ensureCashBookItemsInMaster(
+        items.map((i) => i.item_name),
+        master.map((m) => m.item_name),
+      )
+        .then(mergeMaster)
+        .catch(() => {
+          /* ignore master upsert race; entry already saved */
+        })
+
       resetForm()
       setTab('list')
-      await load()
     } catch (err) {
       setError(formatCashBookError(err, 'Save failed — check fields and try again'))
     } finally {
@@ -499,7 +544,15 @@ export function CashBookScreen() {
                     ? 'cashbook-type-btn credit active'
                     : 'cashbook-type-btn credit'
                 }
-                onClick={() => setForm((f) => ({ ...f, entry_type: 'credit' }))}
+                disabled={busy}
+                onClick={() =>
+                  setForm((f) => ({
+                    ...f,
+                    entry_type: 'credit',
+                    // Machine tagging is debit-only (except Machine Repair constraint handled below)
+                    machine_number: f.category === 'Machine Repair' ? f.machine_number : '',
+                  }))
+                }
               >
                 Credit
               </button>
@@ -510,6 +563,7 @@ export function CashBookScreen() {
                     ? 'cashbook-type-btn debit active'
                     : 'cashbook-type-btn debit'
                 }
+                disabled={busy}
                 onClick={() => setForm((f) => ({ ...f, entry_type: 'debit' }))}
               >
                 Debit
@@ -524,6 +578,7 @@ export function CashBookScreen() {
               value={form.entry_date}
               onChange={(e) => setForm((f) => ({ ...f, entry_date: e.target.value }))}
               required
+              disabled={busy}
             />
           </label>
 
@@ -533,6 +588,7 @@ export function CashBookScreen() {
               value={form.party_name}
               onChange={(e) => setForm((f) => ({ ...f, party_name: e.target.value }))}
               placeholder="Person / party — optional"
+              disabled={busy}
             />
           </label>
 
@@ -543,6 +599,7 @@ export function CashBookScreen() {
               onChange={(e) => setForm((f) => ({ ...f, contact_number: e.target.value }))}
               placeholder="Optional"
               inputMode="tel"
+              disabled={busy}
             />
           </label>
 
@@ -550,12 +607,16 @@ export function CashBookScreen() {
             <span>Category</span>
             <select
               value={form.category}
+              disabled={busy}
               onChange={(e) => {
                 const category = e.target.value as CashBookCategory
                 setForm((f) => ({
                   ...f,
                   category,
-                  machine_number: category === 'Machine Repair' ? f.machine_number : '',
+                  machine_number:
+                    category === 'Machine Repair' || f.entry_type === 'debit'
+                      ? f.machine_number
+                      : '',
                   // Owner deposits are credits given for a stated purpose
                   entry_type: isOwnerDepositCategory(category) ? 'credit' : f.entry_type,
                 }))
@@ -569,20 +630,28 @@ export function CashBookScreen() {
             </select>
           </label>
 
-          {needsMachine ? (
+          {showMachineField ? (
             <label className="field">
-              <span>Machine number</span>
+              <span>
+                Machine number
+                {needsMachine ? '' : ' (optional)'}
+              </span>
               <select
                 value={form.machine_number}
                 onChange={(e) => setForm((f) => ({ ...f, machine_number: e.target.value }))}
-                required
+                required={needsMachine}
+                disabled={busy}
               >
-                <option value="">Select machine</option>
-                {MACHINES.map((m) => (
+                <option value="">{needsMachine ? 'Select machine' : '— None —'}</option>
+                {CASHBOOK_MACHINE_OPTIONS.map((m) => (
                   <option key={m} value={m}>
                     {m}
                   </option>
                 ))}
+                {form.machine_number &&
+                !(CASHBOOK_MACHINE_OPTIONS as readonly string[]).includes(form.machine_number) ? (
+                  <option value={form.machine_number}>{form.machine_number}</option>
+                ) : null}
               </select>
             </label>
           ) : null}
@@ -699,8 +768,17 @@ export function CashBookScreen() {
             />
           </label>
 
-          <button type="submit" disabled={busy}>
-            {busy ? 'Saving…' : editEntry ? 'Update entry' : 'Save entry'}
+          <button type="submit" className="cashbook-save-btn" disabled={busy} aria-busy={busy}>
+            {busy ? (
+              <>
+                <span className="cashbook-save-spinner" aria-hidden="true" />
+                Saving…
+              </>
+            ) : editEntry ? (
+              'Update entry'
+            ) : (
+              'Save entry'
+            )}
           </button>
         </form>
       ) : null}
@@ -823,7 +901,10 @@ export function CashBookScreen() {
                           <strong>{(e.party_name || 'General').trim()}</strong>
                           <span className="num text-danger">₹{formatMoney(Number(e.amount))}</span>
                         </div>
-                        <div className="text-muted2">{entryItemsLabel(e)}</div>
+                        <div className="text-muted2">
+                          {entryItemsLabel(e)}
+                          {e.machine_number ? ` · ${e.machine_number}` : ''}
+                        </div>
                       </article>
                     ))
                   ) : (

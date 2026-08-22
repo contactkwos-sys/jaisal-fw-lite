@@ -50,6 +50,7 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
   const [busy, setBusy] = useState(false)
 
   const [roles, setRoles] = useState<Role[]>([])
+  const [rolesLoading, setRolesLoading] = useState(true)
   const [roleHasPin, setRoleHasPin] = useState<Record<string, boolean>>({})
   const [newPin, setNewPin] = useState<Record<string, string>>({})
   const [confirmPin, setConfirmPin] = useState<Record<string, string>>({})
@@ -74,41 +75,49 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
   const pinRoles = useMemo(() => orderRolesBySystemList(roles), [roles])
 
   const loadRoles = useCallback(async () => {
-    // Prefer direct table read (authenticated RLS). Edge `roles-gate` can fail with
-    // browser "TypeError: Load failed" when the function gateway/network flakes.
-    const { data, error } = await supabase
-      .from('roles')
-      .select('id, role_name, is_custom, created_at')
-      .order('created_at', { ascending: true })
+    setRolesLoading(true)
+    try {
+      // Prefer direct table read (authenticated RLS). Edge `roles-gate` can fail with
+      // browser "TypeError: Load failed" when the function gateway/network flakes.
+      const [{ data, error }, usersRes] = await Promise.all([
+        supabase.from('roles').select('id, role_name, is_custom, created_at').order('created_at', {
+          ascending: true,
+        }),
+        supabase.from('users').select('role_id, is_active').eq('is_active', true),
+      ])
 
-    let list = (!error && data ? (data as Role[]) : []) as Role[]
+      let list = (!error && data ? (data as Role[]) : []) as Role[]
 
-    // Seed any missing system PIN roles (Machine Supervisor, Salesman, …) via roles-gate.
-    if (!list.length || missingSystemRoleNames(list).length) {
-      const { data: fnData, error: fnErr } = await supabase.functions.invoke('roles-gate', {
-        body: { action: 'ensure' },
-      })
-      if (!fnErr && !fnData?.error && fnData?.roles?.length) {
-        list = fnData.roles as Role[]
-      } else if (!list.length) {
-        if (fnErr) throw new Error(fnErr.message || error?.message || 'Load failed')
-        if (fnData?.error) throw new Error(fnData.error)
+      const has: Record<string, boolean> = {}
+      for (const u of usersRes.data ?? []) {
+        if (u.role_id) has[String(u.role_id)] = true
       }
-    }
+      setRoleHasPin(has)
 
-    const ordered = orderRolesBySystemList(list)
-    setRoles(ordered)
+      // Show whatever we already have immediately — do not block UI on roles-gate
+      if (list.length) {
+        setRoles(orderRolesBySystemList(list))
+        setRolesLoading(false)
+      }
 
-    // Presence only — never select pin_hash into the browser
-    const { data: users } = await supabase
-      .from('users')
-      .select('role_id, is_active')
-      .eq('is_active', true)
-    const has: Record<string, boolean> = {}
-    for (const u of users ?? []) {
-      if (u.role_id) has[String(u.role_id)] = true
+      // Seed any missing system PIN roles (Machine Supervisor, Salesman, …) via roles-gate.
+      if (!list.length || missingSystemRoleNames(list).length) {
+        const { data: fnData, error: fnErr } = await supabase.functions.invoke('roles-gate', {
+          body: { action: 'ensure' },
+        })
+        if (!fnErr && !fnData?.error && fnData?.roles?.length) {
+          list = fnData.roles as Role[]
+          setRoles(orderRolesBySystemList(list))
+        } else if (!list.length) {
+          if (fnErr) throw new Error(fnErr.message || error?.message || 'Load failed')
+          if (fnData?.error) throw new Error(fnData.error)
+        }
+      } else {
+        setRoles(orderRolesBySystemList(list))
+      }
+    } finally {
+      setRolesLoading(false)
     }
-    setRoleHasPin(has)
   }, [])
 
   const loadPayroll = useCallback(async () => {
@@ -164,7 +173,10 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
   }, [])
 
   useEffect(() => {
-    void loadRoles().catch((e: Error) => setError(e.message))
+    void loadRoles().catch((e: Error) => {
+      setError(e.message)
+      setRolesLoading(false)
+    })
   }, [loadRoles])
 
   useEffect(() => {
@@ -588,6 +600,11 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
           ) : null}
 
           <div className="pin-table-wrap">
+            {rolesLoading ? (
+              <p className="text-muted" style={{ padding: '1rem' }}>
+                Loading roles…
+              </p>
+            ) : null}
             <table className="pin-table">
               <thead>
                 <tr>
@@ -601,6 +618,13 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
                 </tr>
               </thead>
               <tbody>
+                {!rolesLoading && pinRoles.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="yarn-empty">
+                      No roles found
+                    </td>
+                  </tr>
+                ) : null}
                 {pinRoles.map((role) => {
                   const hasPin = !!roleHasPin[role.id]
                   return (

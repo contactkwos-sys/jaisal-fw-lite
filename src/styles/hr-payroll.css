@@ -1125,6 +1125,40 @@
   }
 }
 
+.hr-salary-status .hr-salary-status-table {
+  min-width: 1200px;
+}
+
+.hr-salary-error {
+  padding: 1rem;
+  border-left: 4px solid var(--danger);
+  background: var(--danger-soft);
+}
+
+.hr-salary-progress {
+  margin: 0;
+  font-weight: 600;
+}
+
+.hr-salary-issues {
+  padding: 0.85rem 1rem;
+  border-left: 4px solid var(--warning);
+  background: var(--warning-soft);
+}
+
+.hr-salary-issues ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.hr-row-issue {
+  background: var(--warning-soft);
+}
+
+.hr-salary-status .text-success {
+  color: var(--success);
+}
+
 @media print {
   .app-sidebar,
   .mobile-topbar,

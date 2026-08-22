@@ -303,6 +303,7 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
   const [roles, setRoles] = useState<Role[]>([])
   const [payrollRates, setPayrollRates] = useState<PayrollRate[]>([])
   const [salaryRates, setSalaryRates] = useState<SalaryRate[]>([])
+  const [salaryRatesReady, setSalaryRatesReady] = useState(false)
   const [company, setCompany] = useState<CompanyProfile>(DEFAULT_COMPANY)
 
   const [payrollMonth, setPayrollMonth] = useState(() => new Date().toISOString().slice(0, 7))
@@ -497,6 +498,7 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
       .order('effective_from', { ascending: false })
     if (sErr) throw sErr
     setSalaryRates((data as SalaryRate[]) ?? [])
+    setSalaryRatesReady(true)
   }, [])
 
   const loadPayrollRun = useCallback(async (month: string) => {
@@ -2785,6 +2787,7 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
           salaryRates={salaryRates}
           roles={roles}
           payrollRates={payrollRates}
+          mastersReady={!migrationMissing && workers.length > 0 && salaryRatesReady}
           onOpenWorker={(id) => {
             setHistoryWorkerId(id)
             goNav('reports')
