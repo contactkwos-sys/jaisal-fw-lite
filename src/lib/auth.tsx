@@ -9,6 +9,7 @@ import {
 import type { Session, User } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 import type { AppUser, Role } from './database.types'
+import { clearModuleUnlocks } from './ceoPinManagement'
 
 type Profile = AppUser & { roles: Role | null }
 
@@ -181,7 +182,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const logout = useCallback(async () => {
-    const { clearModuleUnlocks } = await import('./ceoPinManagement')
     clearModuleUnlocks()
     await supabase.auth.signOut()
     setSession(null)
