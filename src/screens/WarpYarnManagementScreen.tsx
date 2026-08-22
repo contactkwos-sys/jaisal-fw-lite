@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { SubTabs } from '../components/SubTabs'
 import { WarpBeamStockEntry } from '../components/warp/WarpBeamStockEntry'
+import { FilledPipeGodownTab } from '../components/warp/FilledPipeGodownTab'
 import { useAuth } from '../lib/auth'
 import { createWarperGatePass, loadGatePasses, printGatePass, type WarpGatePass } from '../lib/warpBeamStock'
 import { MACHINES } from '../lib/database.types'
@@ -13,6 +14,8 @@ import { supabase } from '../lib/supabase'
 import {
   DEFAULT_MULTIPLIER,
   calcTotalMeter,
+  canIssuePipe,
+  composeGodownLocation,
   computeKpis,
   emptyWarpFilters,
   filterPipes,
@@ -23,6 +26,7 @@ import {
   loadWarpBundle,
   meterFields,
   nextPipeNo,
+  pipeStockLabel,
   statusBadgeClass,
   statusLabel,
   todayISO,
@@ -123,7 +127,7 @@ export function WarpYarnManagementScreen({
       if (/relation .* does not exist|Could not find the table/i.test(msg)) {
         setTablesReady(false)
         setError(
-          'Warp Yarn database tables are missing. Run these in Supabase SQL Editor: public/migration-warp-yarn-management.sql then public/migration-warp-beam-stock-entry.sql',
+          'Warp Yarn database tables are missing. Run these in Supabase SQL Editor: public/migration-warp-yarn-management.sql then public/migration-warp-beam-stock-entry.sql then public/migration-filled-pipe-godown-entry.sql',
         )
       } else {
         setError(msg)
@@ -161,10 +165,6 @@ export function WarpYarnManagementScreen({
 
   const onMachine = useMemo(
     () => filterPipes(pipes.filter((p) => p.status === 'ON_MACHINE'), filters),
-    [pipes, filters],
-  )
-  const godownFilled = useMemo(
-    () => filterPipes(pipes.filter((p) => p.status === 'FILLED_GODOWN'), filters),
     [pipes, filters],
   )
   const emptyPipes = useMemo(
@@ -527,20 +527,26 @@ export function WarpYarnManagementScreen({
       const existing = pipes.find((p) => p.status === 'ON_MACHINE' && p.machine_no === machine)
       if (existing) throw new Error(`${machine} already has pipe ${existing.pipe_no}`)
 
-      const meter = Number(form.starting_meter) || Number(pipe.meter) || 0
-      const multiplier = Number(form.multiplier) || Number(pipe.multiplier) || DEFAULT_MULTIPLIER
-      const fields = meterFields(meter, multiplier, 0)
-      const kg = Number(form.starting_kg) || Number(pipe.weight_kg) || 0
+      const issueMeter = Number(form.issue_meter) || Number(pipe.balance_meter) || 0
+      if (!canIssuePipe(pipe, issueMeter)) {
+        throw new Error(`Cannot issue ${formatNum(issueMeter)} MTR — balance is ${formatNum(pipe.balance_meter)} MTR`)
+      }
 
-      // Reuse beam_loading: beam_count = multiplier, meter_per_beam = meter
+      const isPartial = issueMeter < Number(pipe.balance_meter)
+      const multiplier = Number(form.multiplier) || Number(pipe.multiplier) || DEFAULT_MULTIPLIER
+      const issueKg =
+        Number(form.issue_weight) ||
+        Math.round(((Number(pipe.weight_kg) || 0) * issueMeter) / Math.max(Number(pipe.total_meter) || 1, 1) * 1000) /
+          1000
+
       const loadingPayload = {
         machine_no: machine,
         item_name: form.quality.trim() || pipe.yarn_quality || pipe.pipe_no,
         quality: form.quality.trim() || pipe.yarn_quality,
         pipe_no: pipe.pipe_no,
         beam_count: Math.max(1, Math.round(multiplier)),
-        meter_per_beam: meter,
-        remaining_meter: fields.total_meter,
+        meter_per_beam: pipe.meter,
+        remaining_meter: issueMeter,
         loaded_date: form.issue_date || todayISO(),
         status: 'RUNNING',
       }
@@ -551,17 +557,23 @@ export function WarpYarnManagementScreen({
         .single()
       if (lErr) throw lErr
 
+      const newUsed = Number(pipe.used_meter) + issueMeter
+      const newBalance = Math.max(0, Number(pipe.balance_meter) - issueMeter)
+      const nextStatus = isPartial ? 'FILLED_GODOWN' : 'ON_MACHINE'
+
       const { error: uErr } = await supabase
         .from('warp_pipes')
         .update({
-          status: 'ON_MACHINE',
-          location: `Machine ${machine}`,
-          machine_no: machine,
+          status: nextStatus,
+          location: isPartial ? pipe.location : `Machine ${machine}`,
+          machine_no: isPartial ? null : machine,
           yarn_quality: loadingPayload.quality,
-          ...fields,
-          weight_kg: kg,
-          beam_loading_id: loading.id,
+          used_meter: newUsed,
+          balance_meter: newBalance,
+          balance_weight_kg: Math.max(0, Number(pipe.balance_weight_kg ?? pipe.weight_kg) - issueKg),
+          beam_loading_id: isPartial ? null : loading.id,
           updated_at: new Date().toISOString(),
+          updated_by: userName,
           last_used_at: new Date().toISOString(),
         })
         .eq('id', pipe.id)
@@ -572,22 +584,31 @@ export function WarpYarnManagementScreen({
         pipe_id: pipe.id,
         pipe_no: pipe.pipe_no,
         txn_type: 'Issue to Machine',
-        from_location: 'Godown',
+        from_location: pipe.location || 'Godown',
         to_location: `Machine ${machine}`,
         quality: loadingPayload.quality,
-        kg,
-        meter,
+        kg: issueKg,
+        meter: pipe.meter,
         multiplier,
-        total_meter: fields.total_meter,
-        balance_meter: fields.balance_meter,
+        total_meter: issueMeter,
+        balance_meter: newBalance,
         machine_no: machine,
         warper_name: null,
         user_name: form.operator.trim() || userName,
-        reference: null,
-        status: 'ON_MACHINE',
-        remarks: null,
+        reference: form.purpose.trim() || null,
+        status: isPartial ? 'Partial' : 'Issued',
+        remarks: form.remarks.trim() || null,
+        issue_meter: issueMeter,
+        rate_per_kg: Number(pipe.rate_per_kg) || 0,
+        amount: Math.round(issueKg * Number(pipe.rate_per_kg || 0) * 100) / 100,
+        rate_source: pipe.rate_source ?? null,
+        rate_effective_from: pipe.rate_effective_from ?? null,
       })
-      setMessage(`Issued ${pipe.pipe_no} to ${machine}`)
+      setMessage(
+        isPartial
+          ? `Issued ${formatNum(issueMeter)} MTR from ${pipe.pipe_no} to ${machine} · Balance ${formatNum(newBalance)} MTR`
+          : `Issued ${pipe.pipe_no} to ${machine}`,
+      )
       setAction(null)
     })
   }
@@ -595,39 +616,98 @@ export function WarpYarnManagementScreen({
   async function saveReturnMachine(form: ReturnForm) {
     await withBusy(async () => {
       const pipe = pipes.find((p) => p.id === form.pipe_id)
-      if (!pipe || pipe.status !== 'ON_MACHINE') throw new Error('Select an on-machine pipe')
-      const remainMeter = Number(form.remaining_meter)
-      const remainKg = Number(form.remaining_kg)
-      const toEmpty = !(remainMeter > 0)
-      const nextStatus = toEmpty ? 'EMPTY' : 'FILLED_GODOWN'
-      const mult = Number(pipe.multiplier) || DEFAULT_MULTIPLIER
-      const baseMeter = toEmpty ? 0 : remainMeter / mult
-      const fields = meterFields(baseMeter, mult, toEmpty ? 0 : Number(pipe.used_meter) || 0)
-      if (!toEmpty) {
-        fields.total_meter = calcTotalMeter(baseMeter, mult)
-        fields.used_meter = 0
-        fields.balance_meter = fields.total_meter
+      if (!pipe) throw new Error('Select a pipe')
+      const returnedMeter = Number(form.returned_meter) || 0
+      const returnedKg = Number(form.returned_weight) || 0
+      if (returnedMeter < 0) throw new Error('Returned meter cannot be negative')
+
+      const isOnMachine = pipe.status === 'ON_MACHINE'
+      const issuedMeter = Number(pipe.used_meter) || 0
+      if (!isOnMachine && issuedMeter <= 0) throw new Error('Select a pipe with issued meter to return')
+
+      if (isOnMachine) {
+        const remainMeter = Number(form.remaining_meter)
+        const remainKg = Number(form.remaining_kg)
+        const toEmpty = !(remainMeter > 0)
+        const nextStatus = toEmpty ? 'EMPTY' : 'FILLED_GODOWN'
+        const mult = Number(pipe.multiplier) || DEFAULT_MULTIPLIER
+        const baseMeter = toEmpty ? 0 : remainMeter / mult
+        const fields = meterFields(baseMeter, mult, toEmpty ? 0 : Number(pipe.used_meter) || 0)
+        if (!toEmpty) {
+          fields.total_meter = calcTotalMeter(baseMeter, mult)
+          fields.used_meter = Math.max(0, Number(pipe.used_meter) - returnedMeter)
+          fields.balance_meter = fields.total_meter - fields.used_meter
+        }
+
+        if (pipe.beam_loading_id) {
+          await supabase
+            .from('beam_loading')
+            .update({ status: 'STOP', remaining_meter: Math.max(0, remainMeter || 0) })
+            .eq('id', pipe.beam_loading_id)
+        }
+
+        const { error: uErr } = await supabase
+          .from('warp_pipes')
+          .update({
+            status: nextStatus,
+            location: composeGodownLocation(pipe.godown_name || 'Godown A', pipe.rack || '', pipe.bay || ''),
+            machine_no: null,
+            beam_loading_id: null,
+            ...fields,
+            weight_kg: Math.max(0, remainKg || 0),
+            balance_weight_kg: Math.max(0, remainKg || 0),
+            updated_at: new Date().toISOString(),
+            updated_by: userName,
+            last_used_at: new Date().toISOString(),
+            remarks: form.condition.trim() || form.remarks.trim() || pipe.remarks,
+          })
+          .eq('id', pipe.id)
+        if (uErr) throw uErr
+
+        await insertTxn(supabase, {
+          txn_date: form.return_date || todayISO(),
+          pipe_id: pipe.id,
+          pipe_no: pipe.pipe_no,
+          txn_type: 'Return from Machine',
+          from_location: `Machine ${pipe.machine_no}`,
+          to_location: toEmpty ? 'Empty Pipes' : 'Godown',
+          quality: pipe.yarn_quality,
+          kg: Math.max(0, returnedKg || remainKg || 0),
+          meter: baseMeter,
+          multiplier: mult,
+          total_meter: fields.total_meter,
+          balance_meter: fields.balance_meter,
+          machine_no: pipe.machine_no,
+          warper_name: null,
+          user_name: userName,
+          reference: null,
+          status: toEmpty ? 'EMPTY' : 'Returned',
+          remarks: form.condition.trim() || form.remarks.trim() || null,
+          issue_meter: returnedMeter || null,
+        })
+        setMessage(`Returned ${pipe.pipe_no} → ${statusLabel(nextStatus)}`)
+        setAction(null)
+        return
       }
 
-      if (pipe.beam_loading_id) {
-        await supabase
-          .from('beam_loading')
-          .update({ status: 'STOP', remaining_meter: Math.max(0, remainMeter || 0) })
-          .eq('id', pipe.beam_loading_id)
+      const newUsed = Math.max(0, issuedMeter - returnedMeter)
+      const newBalance = Math.min(Number(pipe.total_meter), Number(pipe.balance_meter) + returnedMeter)
+      if (returnedMeter > issuedMeter) {
+        throw new Error(`Cannot return ${formatNum(returnedMeter)} MTR — only ${formatNum(issuedMeter)} MTR issued`)
       }
 
       const { error: uErr } = await supabase
         .from('warp_pipes')
         .update({
-          status: nextStatus,
-          location: 'Godown',
-          machine_no: null,
-          beam_loading_id: null,
-          ...fields,
-          weight_kg: Math.max(0, remainKg || 0),
+          status: newBalance > 0 ? 'FILLED_GODOWN' : 'CONSUMED',
+          used_meter: newUsed,
+          balance_meter: newBalance,
+          balance_weight_kg: Math.max(0, Number(pipe.balance_weight_kg ?? pipe.weight_kg) + returnedKg),
+          location: composeGodownLocation(pipe.godown_name || 'Godown A', pipe.rack || '', pipe.bay || ''),
           updated_at: new Date().toISOString(),
+          updated_by: userName,
           last_used_at: new Date().toISOString(),
-          remarks: form.reason.trim() || pipe.remarks,
+          remarks: form.condition.trim() || form.remarks.trim() || pipe.remarks,
         })
         .eq('id', pipe.id)
       if (uErr) throw uErr
@@ -637,22 +717,23 @@ export function WarpYarnManagementScreen({
         pipe_id: pipe.id,
         pipe_no: pipe.pipe_no,
         txn_type: 'Return from Machine',
-        from_location: `Machine ${pipe.machine_no}`,
-        to_location: toEmpty ? 'Empty Pipes' : 'Godown',
+        from_location: pipe.machine_no ? `Machine ${pipe.machine_no}` : 'Machine',
+        to_location: pipe.location || 'Godown',
         quality: pipe.yarn_quality,
-        kg: Math.max(0, remainKg || 0),
-        meter: baseMeter,
-        multiplier: mult,
-        total_meter: fields.total_meter,
-        balance_meter: fields.balance_meter,
+        kg: returnedKg,
+        meter: pipe.meter,
+        multiplier: pipe.multiplier,
+        total_meter: pipe.total_meter,
+        balance_meter: newBalance,
         machine_no: pipe.machine_no,
         warper_name: null,
         user_name: userName,
         reference: null,
-        status: nextStatus,
-        remarks: form.reason.trim() || null,
+        status: 'Returned',
+        remarks: form.condition.trim() || form.remarks.trim() || null,
+        issue_meter: returnedMeter,
       })
-      setMessage(`Returned ${pipe.pipe_no} → ${statusLabel(nextStatus)}`)
+      setMessage(`Returned ${formatNum(returnedMeter)} MTR to ${pipe.pipe_no} · Balance ${formatNum(newBalance)} MTR`)
       setAction(null)
     })
   }
@@ -963,52 +1044,17 @@ export function WarpYarnManagementScreen({
       ) : null}
 
       {tab === 'godown' ? (
-        <section className="wym-section">
-          <FilterBar showMachine={false} />
-          <div className="wym-table-wrap surface">
-            <table className="wym-table">
-              <thead>
-                <tr>
-                  <th>Pipe No.</th>
-                  <th>Yarn Quality</th>
-                  <th>Meter</th>
-                  <th>Multiplier</th>
-                  <th>Total Meter</th>
-                  <th>Used Meter</th>
-                  <th>Balance Meter</th>
-                  <th>Weight KG</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {godownFilled.map((p) => (
-                  <tr key={p.id}>
-                    <td>
-                      <PipeLink pipe={p} />
-                    </td>
-                    <td>{p.yarn_quality || '—'}</td>
-                    <td className="num">{formatNum(p.meter)}</td>
-                    <td className="num">{formatNum(p.multiplier)}</td>
-                    <td className="num">{formatNum(p.total_meter)}</td>
-                    <td className="num">{formatNum(p.used_meter)}</td>
-                    <td className="num">{formatNum(p.balance_meter)}</td>
-                    <td className="num">{formatNum(p.weight_kg, 2)}</td>
-                    <td>
-                      <span className={statusBadgeClass(p.status)}>{statusLabel(p.status)}</span>
-                    </td>
-                  </tr>
-                ))}
-                {!godownFilled.length ? (
-                  <tr>
-                    <td colSpan={9} className="text-muted">
-                      No filled pipes in godown
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        </section>
+        <FilledPipeGodownTab
+          pipes={pipes}
+          txns={txns}
+          busy={busy}
+          userName={userName}
+          onPipeClick={openHistory}
+          onSaved={reload}
+          onReceiveWarper={() => setAction('receive')}
+          onIssueMachine={() => setAction('issue')}
+          onReturnMachine={() => setAction('return')}
+        />
       ) : null}
 
       {tab === 'empty' ? (
@@ -1217,7 +1263,9 @@ export function WarpYarnManagementScreen({
       {action === 'return' ? (
         <ReturnModal
           busy={busy}
-          pipes={pipes.filter((p) => p.status === 'ON_MACHINE')}
+          pipes={pipes.filter(
+            (p) => p.status === 'ON_MACHINE' || (p.status === 'FILLED_GODOWN' && Number(p.used_meter) > 0),
+          )}
           onClose={() => setAction(null)}
           onSave={(f) => void saveReturnMachine(f)}
         />
@@ -2069,7 +2117,7 @@ function ReceiveModal({
   const mDiff = job ? Math.round((Number(job.expected_meter) - recvMeter) * 1000) / 1000 : 0
 
   return (
-    <Modal title="Receive from Warper" onClose={onClose}>
+    <Modal title="Receive Filled Pipe from Warper" onClose={onClose}>
       <form
         className="form-stack"
         onSubmit={(e) => {
@@ -2179,11 +2227,13 @@ type IssueForm = {
   pipe_id: string
   machine_no: string
   quality: string
-  starting_meter: string
+  issue_meter: string
   multiplier: string
-  starting_kg: string
+  issue_weight: string
   issue_date: string
   operator: string
+  purpose: string
+  remarks: string
 }
 
 function IssueModal({
@@ -2201,13 +2251,17 @@ function IssueModal({
     pipe_id: pipes[0]?.id || '',
     machine_no: MACHINES[0],
     quality: pipes[0]?.yarn_quality || '',
-    starting_meter: pipes[0] ? String(pipes[0].meter) : '',
+    issue_meter: pipes[0] ? String(pipes[0].balance_meter) : '',
     multiplier: pipes[0] ? String(pipes[0].multiplier || DEFAULT_MULTIPLIER) : String(DEFAULT_MULTIPLIER),
-    starting_kg: pipes[0] ? String(pipes[0].weight_kg) : '',
+    issue_weight: pipes[0] ? String(pipes[0].weight_kg) : '',
     issue_date: todayISO(),
     operator: '',
+    purpose: '',
+    remarks: '',
   })
-  const total = calcTotalMeter(Number(form.starting_meter) || 0, Number(form.multiplier) || 0)
+  const selected = pipes.find((p) => p.id === form.pipe_id)
+  const issueMeter = Number(form.issue_meter) || 0
+  const balanceAfter = selected ? Math.max(0, Number(selected.balance_meter) - issueMeter) : 0
 
   return (
     <Modal title="Issue to Machine" onClose={onClose}>
@@ -2219,8 +2273,8 @@ function IssueModal({
         }}
       >
         <div className="wym-form-grid">
-          <label className="field">
-            <span>Filled Pipe</span>
+          <label className="field wym-span-2">
+            <span>Select Available Pipe</span>
             <select
               required
               value={form.pipe_id}
@@ -2230,22 +2284,22 @@ function IssueModal({
                   ...form,
                   pipe_id: e.target.value,
                   quality: p?.yarn_quality || '',
-                  starting_meter: p ? String(p.meter) : '',
+                  issue_meter: p ? String(p.balance_meter) : '',
                   multiplier: p ? String(p.multiplier || DEFAULT_MULTIPLIER) : String(DEFAULT_MULTIPLIER),
-                  starting_kg: p ? String(p.weight_kg) : '',
+                  issue_weight: p ? String(p.weight_kg) : '',
                 })
               }}
             >
               <option value="">Select</option>
               {pipes.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.pipe_no} · {p.yarn_quality || '—'} · {formatNum(p.total_meter)} m
+                  {p.pipe_no} · {p.yarn_quality || '—'} · Bal {formatNum(p.balance_meter)} m
                 </option>
               ))}
             </select>
           </label>
           <label className="field">
-            <span>Machine No.</span>
+            <span>Machine</span>
             <select
               required
               value={form.machine_no}
@@ -2259,40 +2313,8 @@ function IssueModal({
             </select>
           </label>
           <label className="field">
-            <span>Quality</span>
-            <input value={form.quality} onChange={(e) => setForm({ ...form, quality: e.target.value })} />
-          </label>
-          <label className="field">
-            <span>Starting Meter</span>
-            <input
-              type="number"
-              required
-              value={form.starting_meter}
-              onChange={(e) => setForm({ ...form, starting_meter: e.target.value })}
-            />
-          </label>
-          <label className="field">
-            <span>Multiplier</span>
-            <input
-              type="number"
-              min={1}
-              required
-              value={form.multiplier}
-              onChange={(e) => setForm({ ...form, multiplier: e.target.value })}
-            />
-          </label>
-          <label className="field">
-            <span>Total Meter</span>
-            <input readOnly value={formatNum(total)} />
-          </label>
-          <label className="field">
-            <span>Starting KG</span>
-            <input
-              type="number"
-              step="0.01"
-              value={form.starting_kg}
-              onChange={(e) => setForm({ ...form, starting_kg: e.target.value })}
-            />
+            <span>Operator</span>
+            <input value={form.operator} onChange={(e) => setForm({ ...form, operator: e.target.value })} />
           </label>
           <label className="field">
             <span>Issue Date</span>
@@ -2304,8 +2326,36 @@ function IssueModal({
             />
           </label>
           <label className="field">
-            <span>Operator / User</span>
-            <input value={form.operator} onChange={(e) => setForm({ ...form, operator: e.target.value })} />
+            <span>Issue Meter</span>
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              required
+              value={form.issue_meter}
+              onChange={(e) => setForm({ ...form, issue_meter: e.target.value })}
+            />
+          </label>
+          <label className="field">
+            <span>Balance After Issue</span>
+            <input readOnly value={formatNum(balanceAfter)} />
+          </label>
+          <label className="field">
+            <span>Issue Weight (kg)</span>
+            <input
+              type="number"
+              step="0.01"
+              value={form.issue_weight}
+              onChange={(e) => setForm({ ...form, issue_weight: e.target.value })}
+            />
+          </label>
+          <label className="field">
+            <span>Purpose</span>
+            <input value={form.purpose} onChange={(e) => setForm({ ...form, purpose: e.target.value })} />
+          </label>
+          <label className="field wym-span-2">
+            <span>Remarks</span>
+            <input value={form.remarks} onChange={(e) => setForm({ ...form, remarks: e.target.value })} />
           </label>
         </div>
         <div className="wym-modal-actions">
@@ -2325,8 +2375,11 @@ type ReturnForm = {
   pipe_id: string
   remaining_meter: string
   remaining_kg: string
+  returned_meter: string
+  returned_weight: string
   return_date: string
-  reason: string
+  condition: string
+  remarks: string
 }
 
 function ReturnModal({
@@ -2344,9 +2397,14 @@ function ReturnModal({
     pipe_id: pipes[0]?.id || '',
     remaining_meter: pipes[0] ? String(pipes[0].balance_meter) : '',
     remaining_kg: pipes[0] ? String(pipes[0].weight_kg) : '',
+    returned_meter: '',
+    returned_weight: '',
     return_date: todayISO(),
-    reason: '',
+    condition: '',
+    remarks: '',
   })
+  const selected = pipes.find((p) => p.id === form.pipe_id)
+  const isPartialGodown = selected?.status === 'FILLED_GODOWN' && Number(selected.used_meter) > 0
 
   return (
     <Modal title="Return from Machine" onClose={onClose}>
@@ -2359,7 +2417,7 @@ function ReturnModal({
       >
         <div className="wym-form-grid">
           <label className="field wym-span-2">
-            <span>On-Machine Pipe</span>
+            <span>Select Issued Pipe</span>
             <select
               required
               value={form.pipe_id}
@@ -2376,29 +2434,57 @@ function ReturnModal({
               <option value="">Select</option>
               {pipes.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.machine_no} · {p.pipe_no} · bal {formatNum(p.balance_meter)} m
+                  {p.machine_no ? `${p.machine_no} · ` : ''}
+                  {p.pipe_no} · issued {formatNum(p.used_meter)} m · bal {formatNum(p.balance_meter)} m
                 </option>
               ))}
             </select>
           </label>
-          <label className="field">
-            <span>Remaining Meter (Total)</span>
-            <input
-              type="number"
-              required
-              value={form.remaining_meter}
-              onChange={(e) => setForm({ ...form, remaining_meter: e.target.value })}
-            />
-          </label>
-          <label className="field">
-            <span>Remaining KG</span>
-            <input
-              type="number"
-              step="0.01"
-              value={form.remaining_kg}
-              onChange={(e) => setForm({ ...form, remaining_kg: e.target.value })}
-            />
-          </label>
+          {isPartialGodown ? (
+            <>
+              <label className="field">
+                <span>Returned Meter</span>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  required
+                  value={form.returned_meter}
+                  onChange={(e) => setForm({ ...form, returned_meter: e.target.value })}
+                />
+              </label>
+              <label className="field">
+                <span>Returned Weight (kg)</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={form.returned_weight}
+                  onChange={(e) => setForm({ ...form, returned_weight: e.target.value })}
+                />
+              </label>
+            </>
+          ) : (
+            <>
+              <label className="field">
+                <span>Remaining Meter (Total)</span>
+                <input
+                  type="number"
+                  required
+                  value={form.remaining_meter}
+                  onChange={(e) => setForm({ ...form, remaining_meter: e.target.value })}
+                />
+              </label>
+              <label className="field">
+                <span>Remaining KG</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={form.remaining_kg}
+                  onChange={(e) => setForm({ ...form, remaining_kg: e.target.value })}
+                />
+              </label>
+            </>
+          )}
           <label className="field">
             <span>Return Date</span>
             <input
@@ -2409,12 +2495,17 @@ function ReturnModal({
             />
           </label>
           <label className="field">
-            <span>Reason</span>
-            <input value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
+            <span>Condition</span>
+            <input value={form.condition} onChange={(e) => setForm({ ...form, condition: e.target.value })} />
+          </label>
+          <label className="field wym-span-2">
+            <span>Remarks</span>
+            <input value={form.remarks} onChange={(e) => setForm({ ...form, remarks: e.target.value })} />
           </label>
         </div>
         <p className="text-muted">
-          Remaining meter &gt; 0 → Godown – Filled. Remaining 0 → Empty Pipes.
+          Partial godown return reduces issued meter and increases balance. Full machine return: remaining &gt; 0 →
+          Godown – Filled; 0 → Empty Pipes.
         </p>
         <div className="wym-modal-actions">
           <button type="button" className="btn-ghost" onClick={onClose}>
@@ -2438,16 +2529,69 @@ function HistoryModal({
   rows: WarpYarnTransaction[]
   onClose: () => void
 }) {
+  const sorted = [...rows].sort((a, b) => `${b.txn_date}${b.created_at}`.localeCompare(`${a.txn_date}${a.created_at}`))
   return (
-    <Modal title={`Pipe History · ${pipe.pipe_no}`} onClose={onClose} wide>
-      <div className="wym-history-meta">
-        <span className={statusBadgeClass(pipe.status)}>{statusLabel(pipe.status)}</span>
-        <span>{pipe.yarn_quality || '—'}</span>
-        <span>{pipe.location}</span>
-        <span>
-          Balance {formatNum(pipe.balance_meter)} m · {formatNum(pipe.weight_kg, 2)} kg
-        </span>
+    <Modal title={`Pipe Detail · ${pipe.pipe_no}`} onClose={onClose} wide>
+      <div className="fpg-detail-grid">
+        <div>
+          <span className="text-muted">Pipe No.</span>
+          <strong>{pipe.pipe_no}</strong>
+        </div>
+        <div>
+          <span className="text-muted">Quality</span>
+          <strong>{pipe.yarn_quality || '—'}</strong>
+        </div>
+        <div>
+          <span className="text-muted">Denier</span>
+          <strong>{pipe.yarn_specification || '—'}</strong>
+        </div>
+        <div>
+          <span className="text-muted">Original Meter</span>
+          <strong>{formatNum(pipe.meter)}</strong>
+        </div>
+        <div>
+          <span className="text-muted">Multiplier</span>
+          <strong>{formatNum(pipe.multiplier)}</strong>
+        </div>
+        <div>
+          <span className="text-muted">Total Meter</span>
+          <strong>{formatNum(pipe.total_meter)} MTR</strong>
+        </div>
+        <div>
+          <span className="text-muted">Used Meter</span>
+          <strong>{formatNum(pipe.used_meter)} MTR</strong>
+        </div>
+        <div>
+          <span className="text-muted">Balance Meter</span>
+          <strong>{formatNum(pipe.balance_meter)} MTR</strong>
+        </div>
+        <div>
+          <span className="text-muted">Original Weight</span>
+          <strong>{formatNum(pipe.original_weight_kg ?? pipe.weight_kg, 2)} KG</strong>
+        </div>
+        <div>
+          <span className="text-muted">Balance Weight</span>
+          <strong>{formatNum(pipe.balance_weight_kg ?? pipe.weight_kg, 2)} KG</strong>
+        </div>
+        <div>
+          <span className="text-muted">Rate</span>
+          <strong>₹{formatNum(pipe.rate_per_kg ?? 0, 2)}/KG</strong>
+        </div>
+        <div>
+          <span className="text-muted">Amount</span>
+          <strong>₹{formatNum(pipe.amount ?? 0, 2)}</strong>
+        </div>
+        <div>
+          <span className="text-muted">Current Location</span>
+          <strong>{pipe.location}</strong>
+        </div>
+        <div>
+          <span className="text-muted">Current Status</span>
+          <span className={statusBadgeClass(pipeStockLabel(pipe))}>{pipeStockLabel(pipe)}</span>
+        </div>
       </div>
+
+      <h3 className="section-title">Transaction History</h3>
       <div className="wym-table-wrap">
         <table className="wym-table">
           <thead>
@@ -2455,37 +2599,31 @@ function HistoryModal({
               <th>Date</th>
               <th>Transaction</th>
               <th>Location</th>
-              <th>Machine</th>
-              <th>Warper</th>
-              <th>Quality</th>
-              <th>KG</th>
               <th>Meter</th>
               <th>Balance</th>
+              <th>KG</th>
               <th>User</th>
               <th>Reference</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((t) => (
+            {sorted.map((t) => (
               <tr key={t.id}>
                 <td>{t.txn_date}</td>
                 <td>{t.txn_type}</td>
                 <td>
                   {t.from_location || '—'} → {t.to_location || '—'}
                 </td>
-                <td>{t.machine_no || '—'}</td>
-                <td>{t.warper_name || '—'}</td>
-                <td>{t.quality || '—'}</td>
-                <td className="num">{formatNum(t.kg, 2)}</td>
-                <td className="num">{formatNum(t.total_meter || t.meter)}</td>
+                <td className="num">{formatNum(t.issue_meter ?? t.total_meter ?? t.meter)}</td>
                 <td className="num">{t.balance_meter != null ? formatNum(t.balance_meter) : '—'}</td>
+                <td className="num">{formatNum(t.kg, 2)}</td>
                 <td>{t.user_name || '—'}</td>
                 <td>{t.reference || '—'}</td>
               </tr>
             ))}
-            {!rows.length ? (
+            {!sorted.length ? (
               <tr>
-                <td colSpan={11} className="text-muted">
+                <td colSpan={8} className="text-muted">
                   No history for this pipe yet
                 </td>
               </tr>

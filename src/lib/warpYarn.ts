@@ -28,6 +28,28 @@ export const WARP_TXN_TYPES = [
   'Move to Godown',
   'Empty Pipe',
   'Adjustment',
+  'Manual Stock Entry',
+] as const
+
+export const FILLED_PIPE_ENTRY_TYPES = [
+  'Purchase / Yarn Inward',
+  'Receive from Warper',
+  'Return from Machine',
+  'Manual Stock Entry',
+] as const
+
+export type FilledPipeEntryType = (typeof FILLED_PIPE_ENTRY_TYPES)[number]
+
+export const GODOWN_OPTIONS = ['Godown A', 'Godown B', 'Godown C', 'Godown'] as const
+
+export const PIPE_STOCK_LABELS = [
+  'Filled',
+  'Available',
+  'Reserved',
+  'Issued',
+  'Partial',
+  'Consumed',
+  'Returned',
 ] as const
 
 export type WarpTxnType = (typeof WARP_TXN_TYPES)[number]
@@ -56,6 +78,20 @@ export type WarpPipe = {
   last_used_at: string | null
   remarks: string | null
   beam_loading_id: string | null
+  rate_per_kg?: number
+  amount?: number
+  rate_source?: string | null
+  rate_effective_from?: string | null
+  rate_master_id?: string | null
+  godown_name?: string | null
+  rack?: string | null
+  bay?: string | null
+  entry_date?: string | null
+  entry_type?: string | null
+  original_weight_kg?: number | null
+  balance_weight_kg?: number | null
+  entered_by?: string | null
+  updated_by?: string | null
   created_at: string
   updated_at: string
 }
@@ -80,6 +116,12 @@ export type WarpYarnTransaction = {
   reference: string | null
   status: string | null
   remarks: string | null
+  rate_per_kg?: number
+  amount?: number
+  rate_source?: string | null
+  rate_effective_from?: string | null
+  issue_meter?: number | null
+  updated_by?: string | null
   created_at: string
 }
 
@@ -144,6 +186,31 @@ export type WarpYarnFilters = {
   machine: string
   warper: string
   status: string
+  godown: string
+}
+
+export type FilledPipeEntryInput = {
+  entry_date: string
+  entry_type: FilledPipeEntryType
+  yarn_quality: string
+  yarn_specification: string
+  meter: number
+  multiplier: number
+  weight_kg: number
+  rate_per_kg: number
+  amount: number
+  rate_source: string
+  rate_effective_from: string | null
+  rate_master_id: string | null
+  godown_name: string
+  rack: string
+  bay: string
+  stock_label: string
+  warper_name: string
+  machine_no: string
+  supplier: string
+  remarks: string
+  manual_rate_override: boolean
 }
 
 export function emptyWarpFilters(): WarpYarnFilters {
@@ -156,6 +223,7 @@ export function emptyWarpFilters(): WarpYarnFilters {
     machine: '',
     warper: '',
     status: '',
+    godown: '',
   }
 }
 
@@ -199,8 +267,71 @@ export function statusLabel(status: string): string {
     IN_PROCESS: 'In Process',
     RECEIVED: 'Received',
     DIFFERENCE: 'Difference',
+    CONSUMED: 'Consumed',
+    PARTIAL: 'Partial',
+    Filled: 'Filled',
+    Available: 'Available',
+    Reserved: 'Reserved',
+    Issued: 'Issued',
+    Partial: 'Partial',
+    Consumed: 'Consumed',
+    Returned: 'Returned',
   }
   return map[status] || status
+}
+
+export function pipeStockLabel(pipe: WarpPipe): string {
+  if (pipe.remarks?.startsWith('stock:')) {
+    const label = pipe.remarks.replace(/^stock:/, '').split('|')[0]
+    if (label) return label
+  }
+  if (pipe.status === 'FILLED_GODOWN') {
+    if (Number(pipe.used_meter) > 0 && Number(pipe.balance_meter) > 0) return 'Partial'
+    if (Number(pipe.balance_meter) <= 0) return 'Consumed'
+    return 'Filled'
+  }
+  if (pipe.status === 'ON_MACHINE') return 'Issued'
+  if (pipe.status === 'EMPTY' && Number(pipe.balance_meter) > 0) return 'Returned'
+  return statusLabel(pipe.status)
+}
+
+export function composeGodownLocation(godown: string, rack: string, bay: string): string {
+  const parts = [godown, rack, bay].map((p) => p.trim()).filter(Boolean)
+  return parts.length ? parts.join(' / ') : 'Godown'
+}
+
+export function calcAmount(weightKg: number, ratePerKg: number): number {
+  return Math.round(Number(weightKg || 0) * Number(ratePerKg || 0) * 100) / 100
+}
+
+export function entryTypeToTxnType(entryType: FilledPipeEntryType): WarpTxnType {
+  switch (entryType) {
+    case 'Purchase / Yarn Inward':
+      return 'Purchase Yarn'
+    case 'Receive from Warper':
+      return 'Receive from Warper'
+    case 'Return from Machine':
+      return 'Return from Machine'
+    default:
+      return 'Manual Stock Entry'
+  }
+}
+
+export function canIssuePipe(pipe: WarpPipe, issueMeter: number): boolean {
+  if (pipe.status === 'CONSUMED' || Number(pipe.balance_meter) <= 0) return false
+  if (pipe.status !== 'FILLED_GODOWN') return false
+  return issueMeter > 0 && issueMeter <= Number(pipe.balance_meter)
+}
+
+export function canReturnPipe(pipe: WarpPipe): boolean {
+  return pipe.status === 'ON_MACHINE' || (pipe.status === 'FILLED_GODOWN' && Number(pipe.used_meter) > 0)
+}
+
+export function lastTxnForPipe(pipe: WarpPipe, txns: WarpYarnTransaction[]): WarpYarnTransaction | null {
+  const rows = txns
+    .filter((t) => t.pipe_no === pipe.pipe_no || t.pipe_id === pipe.id)
+    .sort((a, b) => `${b.txn_date}${b.created_at}`.localeCompare(`${a.txn_date}${a.created_at}`))
+  return rows[0] ?? null
 }
 
 export function computeKpis(pipes: WarpPipe[]): WarpYarnKpis {
@@ -227,7 +358,10 @@ export function computeKpis(pipes: WarpPipe[]): WarpYarnKpis {
 export function filterPipes(pipes: WarpPipe[], f: WarpYarnFilters): WarpPipe[] {
   const q = f.search.trim().toLowerCase()
   return pipes.filter((p) => {
-    if (f.status && p.status !== f.status) return false
+    if (f.status && p.status !== f.status && pipeStockLabel(p) !== f.status) return false
+    if (f.godown && !(p.godown_name || p.location || '').toLowerCase().includes(f.godown.toLowerCase())) {
+      return false
+    }
     if (f.quality && !(p.yarn_quality || '').toLowerCase().includes(f.quality.toLowerCase())) return false
     if (f.pipeNo && !(p.pipe_no || '').toLowerCase().includes(f.pipeNo.toLowerCase())) return false
     if (f.machine && (p.machine_no || '') !== f.machine) return false
@@ -297,13 +431,119 @@ export function filterWarperJobs(rows: WarpWarperJob[], f: WarpYarnFilters): War
 }
 
 export async function nextPipeNo(client: SupabaseClient): Promise<string> {
-  const { data } = await client.from('warp_pipes').select('pipe_no').order('pipe_no', { ascending: false }).limit(200)
+  const { data } = await client.from('warp_pipes').select('pipe_no').order('pipe_no', { ascending: false }).limit(500)
   let max = 0
   for (const row of data || []) {
     const m = String((row as { pipe_no: string }).pipe_no || '').match(/^BP-(\d+)$/i)
     if (m) max = Math.max(max, Number(m[1]))
   }
-  return `BP-${String(max + 1).padStart(3, '0')}`
+  return `BP-${String(max + 1).padStart(5, '0')}`
+}
+
+export async function saveFilledPipeEntry(
+  client: SupabaseClient,
+  input: FilledPipeEntryInput,
+  userName: string,
+): Promise<WarpPipe> {
+  if (!input.yarn_quality.trim()) throw new Error('Yarn quality required')
+  if (!(Number(input.meter) > 0)) throw new Error('Meter must be greater than 0')
+  if (!(Number(input.multiplier) > 0)) throw new Error('Multiplier must be greater than 0')
+  if (Number(input.weight_kg) < 0) throw new Error('Weight cannot be negative')
+  if (Number(input.rate_per_kg) < 0) throw new Error('Rate cannot be negative')
+  if (input.entry_type === 'Receive from Warper' && !input.warper_name.trim()) {
+    throw new Error('Warper name required for Receive from Warper')
+  }
+
+  const pipeNo = await nextPipeNo(client)
+  const { data: dup } = await client.from('warp_pipes').select('id').eq('pipe_no', pipeNo).maybeSingle()
+  if (dup) throw new Error(`Pipe number ${pipeNo} already exists`)
+
+  const fields = meterFields(Number(input.meter), Number(input.multiplier), 0)
+  const location = composeGodownLocation(input.godown_name, input.rack, input.bay)
+  const amount = calcAmount(input.weight_kg, input.rate_per_kg)
+  const stockRemark = `stock:${input.stock_label || 'Filled'}${input.remarks ? `|${input.remarks}` : ''}`
+
+  const payload = {
+    pipe_no: pipeNo,
+    serial_no: pipeNo,
+    location,
+    status: 'FILLED_GODOWN',
+    yarn_quality: input.yarn_quality.trim(),
+    yarn_specification: input.yarn_specification.trim() || null,
+    ...fields,
+    weight_kg: Number(input.weight_kg) || 0,
+    original_weight_kg: Number(input.weight_kg) || 0,
+    balance_weight_kg: Number(input.weight_kg) || 0,
+    warper_name: input.warper_name.trim() || null,
+    machine_no: input.machine_no.trim() || null,
+    rate_per_kg: Number(input.rate_per_kg) || 0,
+    amount,
+    rate_source: input.rate_source,
+    rate_effective_from: input.rate_effective_from,
+    rate_master_id: input.rate_master_id,
+    godown_name: input.godown_name.trim() || 'Godown A',
+    rack: input.rack.trim() || null,
+    bay: input.bay.trim() || null,
+    entry_date: input.entry_date || todayISO(),
+    entry_type: input.entry_type,
+    entered_by: userName,
+    updated_by: userName,
+    remarks: stockRemark,
+    last_used_at: new Date().toISOString(),
+  }
+
+  const { data, error } = await client.from('warp_pipes').insert(payload).select('*').single()
+  if (error) throw error
+  const pipe = data as WarpPipe
+
+  const txnType = entryTypeToTxnType(input.entry_type)
+  await insertTxn(client, {
+    txn_date: input.entry_date || todayISO(),
+    pipe_id: pipe.id,
+    pipe_no: pipe.pipe_no,
+    txn_type: txnType,
+    from_location:
+      input.entry_type === 'Receive from Warper'
+        ? `Warper · ${input.warper_name}`
+        : input.supplier.trim() || input.entry_type,
+    to_location: location,
+    quality: pipe.yarn_quality,
+    kg: pipe.weight_kg,
+    meter: pipe.meter,
+    multiplier: pipe.multiplier,
+    total_meter: pipe.total_meter,
+    balance_meter: pipe.balance_meter,
+    machine_no: pipe.machine_no,
+    warper_name: pipe.warper_name,
+    user_name: userName,
+    reference: null,
+    status: input.stock_label || 'Filled',
+    remarks: input.remarks.trim() || null,
+    rate_per_kg: pipe.rate_per_kg ?? 0,
+    amount: pipe.amount ?? 0,
+    rate_source: pipe.rate_source ?? null,
+    rate_effective_from: pipe.rate_effective_from ?? null,
+  })
+
+  if (input.entry_type === 'Purchase / Yarn Inward' && input.supplier.trim()) {
+    await client.from('warp_yarn_purchases').insert({
+      purchase_date: input.entry_date || todayISO(),
+      supplier: input.supplier.trim(),
+      invoice_no: null,
+      yarn_quality: input.yarn_quality.trim(),
+      yarn_specification: input.yarn_specification.trim() || null,
+      quantity_kg: Number(input.weight_kg) || 0,
+      rate: Number(input.rate_per_kg) || 0,
+      amount,
+      gst_pct: 0,
+      total_amount: amount,
+      destination: location,
+      remarks: `Filled pipe ${pipeNo}`,
+      entered_by: userName,
+    })
+  }
+
+  return pipe
 }
 
 export async function insertTxn(
