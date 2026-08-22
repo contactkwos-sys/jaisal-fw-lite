@@ -528,7 +528,17 @@
     min-width: 1100px;
   }
 
+  .hr-emp-toolbar-row {
+    flex-wrap: nowrap;
+    align-items: end;
+  }
+
+  .hr-emp-toolbar-row .hr-emp-filters {
+    flex: 1 1 auto;
+  }
+
   .hr-emp-toolbar-row > .primary-save {
+    width: auto;
     margin-bottom: 0.1rem;
   }
 }
