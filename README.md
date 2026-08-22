@@ -2,7 +2,9 @@
 
 Lightweight factory floor app (Phases 1–8) on Vite + React + Supabase.
 
-**Live:** https://jaisal-fw-lite.netlify.app
+**Live (GitHub Pages):** https://contactkwos-sys.github.io/jaisal-fw-lite/
+
+**Netlify (paused — usage limit):** https://jaisal-fw-lite.netlify.app — restore by upgrading the Netlify plan or waiting for the billing cycle reset, then redeploy from the Netlify dashboard.
 
 ## Theme
 
