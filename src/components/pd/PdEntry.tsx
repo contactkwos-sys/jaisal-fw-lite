@@ -4,6 +4,7 @@ import { MACHINES } from '../../lib/database.types'
 import { applyOrQueue, todayISO } from '../../lib/mutate'
 import { maybeCompleteProgramFromProduction } from '../../lib/programs'
 import { supabase } from '../../lib/supabase'
+import { deductWarpBeamConsumption } from '../../lib/warpBeamStock'
 
 type ProgramOpt = {
   id: string
@@ -126,6 +127,7 @@ export function PdEntry() {
         apply: async () => {
           const { error: iErr } = await supabase.from('production_entries').insert(payload)
           if (iErr) throw iErr
+          await deductWarpBeamConsumption(supabase, machine, date, Number(meter) || 0)
           await maybeCompleteProgramFromProduction(programId)
           await supabase.from('programs').update({ status: 'Running' }).eq('id', programId).in('status', [
             'pending',

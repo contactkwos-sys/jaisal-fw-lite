@@ -590,3 +590,306 @@
     font-size: 1.45rem; /* ~23px */
   }
 }
+
+/* ——— Warp Beam Stock Entry ——— */
+
+.wbs-entry-layout {
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 1100px) {
+  .wbs-entry-layout {
+    grid-template-columns: 1fr 17rem;
+    align-items: start;
+  }
+}
+
+.wbs-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.wbs-form {
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.wbs-form-header .wbs-title {
+  margin: 0;
+  font-size: clamp(1.25rem, 2vw, 1.5rem);
+  font-weight: 800;
+  color: var(--teal-deep);
+}
+
+.wbs-subtitle {
+  margin: 0.15rem 0 0;
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+
+.wbs-top-fields {
+  display: grid;
+  gap: 0.65rem;
+}
+
+@media (min-width: 720px) {
+  .wbs-top-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1000px) {
+  .wbs-top-fields {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.wbs-info-banner {
+  background: var(--info-soft);
+  border: 1px solid var(--info);
+  border-radius: var(--radius);
+  padding: 0.65rem 0.85rem;
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.wbs-notes textarea {
+  min-height: 3rem;
+  resize: vertical;
+}
+
+.wbs-section-heading {
+  margin: 0.25rem 0 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.wbs-machine-grid {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (min-width: 720px) {
+  .wbs-machine-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1100px) {
+  .wbs-machine-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.wbs-machine-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  background: var(--surface-2, #fafbfc);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.wbs-machine-name {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.wbs-machine-code {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.wbs-double-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.wbs-double-value {
+  font-size: 1.15rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--teal-deep);
+  padding: 0.45rem 0.55rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.wbs-save-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.wbs-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+}
+
+.wbs-total-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.wbs-total-label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.wbs-total-value {
+  font-size: clamp(1.35rem, 2.5vw, 1.75rem);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.wbs-total-double {
+  color: var(--teal-deep);
+}
+
+.wbs-save-btn {
+  font-size: 1.1rem;
+  font-weight: 800;
+  padding: 0.85rem 2rem;
+  min-width: 10rem;
+  min-height: 3rem;
+}
+
+.wbs-recent {
+  padding: 0.85rem 1rem;
+}
+
+.wbs-recent-table th,
+.wbs-recent-table td {
+  font-size: 0.88rem;
+}
+
+.wbs-side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.wbs-side-panel {
+  padding: 0.85rem 1rem;
+}
+
+.wbs-item-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 14rem;
+  overflow-y: auto;
+}
+
+.wbs-item-chip {
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 0.45rem 0.6rem;
+  background: var(--surface);
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.wbs-item-chip:hover {
+  border-color: var(--teal);
+  background: var(--info-soft);
+}
+
+.wbs-summary-count {
+  margin: 0 0 0.65rem;
+  font-size: 1rem;
+}
+
+.wbs-summary-meters {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.wbs-summary-meters div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.wbs-summary-meters strong {
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.wbs-summary-hint {
+  margin: 0.65rem 0 0;
+  font-size: 0.82rem;
+}
+
+.wbs-footer {
+  padding: 1rem;
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 720px) {
+  .wbs-footer {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.wbs-how h4,
+.wbs-notes-block h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.wbs-how ol {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+.wbs-notes-block p {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.wbs-machine-status {
+  padding: 0.85rem 1rem;
+}
+
+.wbs-gate-passes {
+  padding: 0.85rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.wbs-gate-passes .section-title {
+  margin-top: 0;
+}

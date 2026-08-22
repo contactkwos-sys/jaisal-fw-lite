@@ -275,7 +275,7 @@ export const MAIN_MODULES: MainModule[] = [
     sub: 'overview',
     items: [
       { id: 'wy-overview', label: 'Overview', screen: 'warp-yarn', sub: 'overview', hint: 'Live beam / pipe KPIs' },
-      { id: 'wy-machines', label: 'Machine Beam Stock', screen: 'warp-yarn', sub: 'machines', hint: 'M1–M6 beams on loom' },
+      { id: 'wy-machines', label: 'Warp Yarn Stock', screen: 'warp-yarn', sub: 'machines', hint: 'M1–M6 + Others beams on loom' },
       { id: 'wy-godown', label: 'Warehouse Filled Beams', screen: 'warp-yarn', sub: 'godown', hint: 'Godown filled stock' },
       { id: 'wy-empty', label: 'Empty Pipe Stock', screen: 'warp-yarn', sub: 'empty', hint: 'Empty pipe inventory' },
       { id: 'wy-warper', label: 'Warper / Job Worker', screen: 'warp-yarn', sub: 'warper', hint: 'Issue · return · KG/meter' },
@@ -803,7 +803,7 @@ export function titleFor(screen: AppScreen, sub?: string, moduleId?: MainModuleI
   if (screen === 'warp-yarn') {
     const labels: Record<string, string> = {
       overview: 'Warp Yarn Management',
-      machines: 'Machine Beam Stock',
+      machines: 'Warp Yarn Stock Entry',
       godown: 'Warehouse Filled Beams',
       empty: 'Empty Pipe Stock',
       warper: 'Warper / Job Worker',
