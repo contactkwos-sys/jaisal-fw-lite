@@ -18,6 +18,7 @@
     "smoke:mwp": "node scripts/machine-wise-production-smoke.mjs",
     "smoke:daily-costing": "node scripts/daily-costing-smoke.mjs",
     "test:design-wise-costing": "node scripts/test-design-wise-costing.mjs",
+    "test:rate-master": "node scripts/test-rate-master.mjs",
     "start": "node scripts/serve-app.mjs",
     "functions:local": "node scripts/local-functions-server.mjs"
   },

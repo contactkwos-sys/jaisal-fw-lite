@@ -924,6 +924,8 @@ export type DesignCostingWarp = {
   weight_kg: number | null
   rate_per_kg: number | null
   amount: number | null
+  rate_source: string | null
+  rate_master_id: string | null
 }
 
 export type DesignCostingWeft = {
@@ -938,6 +940,35 @@ export type DesignCostingWeft = {
   weight_kg: number | null
   rate_per_kg: number | null
   amount: number | null
+  rate_source: string | null
+  rate_master_id: string | null
+}
+
+export type RateMasterConfig = {
+  id: string
+  default_gst_percent: number
+  default_freight_per_kg: number
+  updated_by: string | null
+  updated_at: string | null
+}
+
+export type RateMaster = {
+  id: string
+  category: 'warp' | 'weft'
+  item_name: string
+  denier: string | null
+  supplier_name: string | null
+  basic_rate: number
+  gst_percent: number
+  gst_amount: number
+  freight_per_kg: number
+  effective_rate: number
+  effective_from: string
+  is_active: boolean
+  created_by: string | null
+  updated_by: string | null
+  created_at: string | null
+  updated_at: string | null
 }
 
 /** Machine-wise weft yarn issue header */
