@@ -506,6 +506,73 @@ table{width:100%;border-collapse:collapse;margin-top:16px}td,th{border:1px solid
   w.print()
 }
 
+export function printPersonWiseReport(works: DpwWork[]) {
+  const pending = works.filter((w) => w.status !== 'Completed')
+  const byPerson = new Map<string, DpwWork[]>()
+  for (const w of pending) {
+    const key = w.assigned_to?.trim() || 'Unassigned'
+    const list = byPerson.get(key) || []
+    list.push(w)
+    byPerson.set(key, list)
+  }
+  const sections = Array.from(byPerson.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([person, items]) => {
+      const rows = items.map((w) => `
+        <tr>
+          <td>${w.work_id}</td>
+          <td>${w.work_date}</td>
+          <td>${w.work_description || '—'}</td>
+          <td>${w.machine_no ? machineLabelOnly(w.machine_no) : w.area || '—'}</td>
+          <td>${w.priority || '—'}</td>
+          <td>${w.status}</td>
+        </tr>`).join('')
+      return `<h3>${person} (${items.length})</h3>
+<table><thead><tr><th>Work ID</th><th>Date</th><th>Description</th><th>Machine/Area</th><th>Priority</th><th>Status</th></tr></thead>
+<tbody>${rows}</tbody></table>`
+    }).join('')
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Person-wise Pending Work</title>
+<style>body{font-family:system-ui,sans-serif;padding:24px}h1{text-align:center;color:#1e40af}h3{margin-top:20px;color:#334155}
+table{width:100%;border-collapse:collapse;margin-top:8px}td,th{border:1px solid #ddd;padding:8px;font-size:13px}th{background:#f0f4f8}</style>
+</head><body>
+<h1>JAISAL FASHIONWEAV INDUSTRIES</h1>
+<h2 style="text-align:center">Person-wise Pending Work</h2>
+${sections || '<p>No pending work</p>'}
+</body></html>`
+  const w = window.open('', '_blank')
+  if (!w) return
+  w.document.write(html)
+  w.document.close()
+  w.focus()
+  w.print()
+}
+
+export function printCommHistoryReport(history: DpwCommHistory[]) {
+  const rows = history.map((h) => `
+    <tr>
+      <td>${new Date(h.activity_at).toLocaleString('en-IN')}</td>
+      <td>${h.activity}</td>
+      <td>${h.person || '—'}</td>
+      <td>${h.communication_mode || '—'}</td>
+      <td>${(h.message || '—').slice(0, 120)}</td>
+    </tr>`).join('')
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>WhatsApp Communication History</title>
+<style>body{font-family:system-ui,sans-serif;padding:24px}h1{text-align:center;color:#1e40af}
+table{width:100%;border-collapse:collapse;margin-top:16px}td,th{border:1px solid #ddd;padding:8px;font-size:13px}th{background:#f0f4f8}</style>
+</head><body>
+<h1>JAISAL FASHIONWEAV INDUSTRIES</h1>
+<h2 style="text-align:center">WhatsApp Communication History</h2>
+<table><thead><tr><th>Date/Time</th><th>Activity</th><th>Person</th><th>Mode</th><th>Message</th></tr></thead>
+<tbody>${rows}</tbody></table>
+</body></html>`
+  const w = window.open('', '_blank')
+  if (!w) return
+  w.document.write(html)
+  w.document.close()
+  w.focus()
+  w.print()
+}
+
 export function addDaysISO(date: string, days: number): string {
   const d = new Date(date + 'T12:00:00')
   d.setDate(d.getDate() + days)
