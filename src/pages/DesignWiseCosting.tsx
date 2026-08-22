@@ -9,6 +9,10 @@ import {
   computeWeftRow,
   emptyWarp,
   emptyWeft,
+  finalCostAuditLine,
+  finalCostHint,
+  finalCostLabel,
+  finalDesignCostMeterLabel,
   fmtInr,
   fmtMoney,
   fmtQty,
@@ -1219,18 +1223,23 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
             <span className="dwc-hint">Shown separately from base</span>
           </div>
           <div className="dwc-gst-card dwc-gst-final">
-            <span className="text-muted">Final Cost Including GST</span>
+            <span className="text-muted">{finalCostLabel(buildup.gstPercent)}</span>
             <strong className="num">{fmtInr(buildup.finalCostPerMtr)}</strong>
-            <span className="dwc-hint">Base + GST</span>
+            <span className="dwc-hint">{finalCostHint(buildup.gstPercent)}</span>
           </div>
         </div>
 
         <div className="dwc-final">
           <div>
-            <span>Final Design Cost / Meter (Inc. GST)</span>
+            <span>{finalDesignCostMeterLabel(buildup.gstPercent)}</span>
             <p className="dwc-final-sub text-muted">
-              Auditable chain · length {fmtQty(buildup.designLengthMtr, 0)} mtr · PIC {fmtQty(buildup.totalPic, 0)} ·
-              base {fmtInr(buildup.afterMuPerMtr)} + GST {fmtInr(buildup.gstAmount)}
+              {finalCostAuditLine(
+                buildup.afterMuPerMtr,
+                buildup.gstAmount,
+                buildup.gstPercent,
+                buildup.designLengthMtr,
+                buildup.totalPic,
+              )}
             </p>
           </div>
           <strong className="num">{fmtInr(buildup.finalCostPerMtr)}</strong>

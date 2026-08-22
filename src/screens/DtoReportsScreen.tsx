@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { DtoStatusPill, ImageLightbox } from '../components/ImageLightbox'
 import { fetchDins, fetchDtoStats, fmtInrIn, type DinWithMatchings } from '../lib/designToOrder'
+import { finalPerMeterColumnLabel } from '../lib/designWiseCosting'
 import type { NavTarget } from '../lib/nav'
 
 type Props = { onNavigate: (t: NavTarget) => void }
@@ -90,7 +91,7 @@ export function DtoReportsScreen({ onNavigate }: Props) {
                   <th>Design</th>
                   <th>Base</th>
                   <th>GST</th>
-                  <th>Final Inc. GST</th>
+                  <th>{finalPerMeterColumnLabel()}</th>
                 </tr>
               </thead>
               <tbody>

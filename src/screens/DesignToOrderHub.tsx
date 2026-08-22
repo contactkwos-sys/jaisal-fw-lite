@@ -7,6 +7,7 @@ import {
   fmtInrIn,
   type DinWithMatchings,
 } from '../lib/designToOrder'
+import { perMeterCostSuffix } from '../lib/designWiseCosting'
 import type { NavTarget } from '../lib/nav'
 
 type Props = { onNavigate: (t: NavTarget) => void }
@@ -248,7 +249,7 @@ export function DesignToOrderHub({ onNavigate }: Props) {
                   Costing:{' '}
                   <strong>
                     {detail.final_cost_per_mtr != null
-                      ? `${fmtInrIn(detail.final_cost_per_mtr)} / Mtr (Inc. GST)`
+                      ? `${fmtInrIn(detail.final_cost_per_mtr)} ${perMeterCostSuffix(detail.gst_percent)}`
                       : detail.costing_status}
                   </strong>
                 </p>
