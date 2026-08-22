@@ -62,6 +62,14 @@ type OverviewStat = {
   tone: HubTone
 }
 
+const EMPTY_INVENTORY_OVERVIEW: OverviewStat[] = [
+  { id: 'sku', label: 'Total SKU', value: '—', tone: 'purple' },
+  { id: 'in', label: 'In Stock', value: '—', tone: 'green' },
+  { id: 'out', label: 'Out of Stock', value: '—', tone: 'pink' },
+  { id: 'beam', label: 'Beam Pcs', value: '—', tone: 'blue' },
+  { id: 'yarn', label: 'Yarn Kg', value: '—', tone: 'orange' },
+]
+
 function toneFor(moduleId: MainModuleId, item: SubItem, index: number): HubTone {
   if (moduleId === 'inventory' && INVENTORY_TONES[item.id]) return INVENTORY_TONES[item.id]
   return FALLBACK_TONES[index % FALLBACK_TONES.length]
@@ -207,24 +215,28 @@ export function ModuleHub({ moduleId, onNavigate }: Props) {
   const mod = moduleById(moduleId)
   const items = mod.items.filter((item) => canAccessSub(roleName, moduleId, item.id))
   const isInventory = moduleId === 'inventory'
-  const [overview, setOverview] = useState<OverviewStat[]>([])
+  const [overview, setOverview] = useState<OverviewStat[]>(
+    isInventory ? EMPTY_INVENTORY_OVERVIEW : [],
+  )
 
   useEffect(() => {
     if (!isInventory) {
       setOverview([])
       return
     }
+    setOverview(EMPTY_INVENTORY_OVERVIEW)
     let cancelled = false
     void (async () => {
       try {
-        const [{ data: beams }, { data: yarns }, pipesRes] = await Promise.all([
+        const [beamsRes, yarnsRes, pipesRes] = await Promise.all([
           supabase.from('beam_pipe_stock').select('id,quantity_pcs'),
           supabase.from('weft_yarn_stock').select('id,stock_kg'),
           supabase.from('warp_pipes').select('id,status'),
         ])
         if (cancelled) return
-        const beamRows = (beams as Pick<BeamPipeStock, 'id' | 'quantity_pcs'>[]) ?? []
-        const yarnRows = (yarns as Pick<WeftYarnStock, 'id' | 'stock_kg'>[]) ?? []
+        if (beamsRes.error || yarnsRes.error) return
+        const beamRows = (beamsRes.data as Pick<BeamPipeStock, 'id' | 'quantity_pcs'>[]) ?? []
+        const yarnRows = (yarnsRes.data as Pick<WeftYarnStock, 'id' | 'stock_kg'>[]) ?? []
         const pipeRows = pipesRes.error
           ? []
           : ((pipesRes.data as Array<{ id: string; status: string }> | null) ?? [])
@@ -274,7 +286,7 @@ export function ModuleHub({ moduleId, onNavigate }: Props) {
           },
         ])
       } catch {
-        if (!cancelled) setOverview([])
+        /* keep placeholder overview */
       }
     })()
     return () => {
@@ -313,7 +325,7 @@ export function ModuleHub({ moduleId, onNavigate }: Props) {
         ) : null}
       </div>
 
-      {isInventory && overview.length > 0 ? (
+      {isInventory ? (
         <section className="hub-overview" aria-label="Inventory overview">
           <header className="hub-overview-header">
             <h2 className="hub-section-title">Inventory Overview</h2>
