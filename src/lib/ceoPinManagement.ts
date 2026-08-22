@@ -362,7 +362,7 @@ export async function createSalaryAdvance(
     worker_id: string
     advance_date: string
     amount: number
-    payment_mode: 'Cash' | 'Cheque' | 'Bank Transfer'
+    payment_mode: 'Cash' | 'Cheque' | 'Bank Transfer' | 'Other'
     reference_no?: string
     bank_name?: string
     remarks?: string

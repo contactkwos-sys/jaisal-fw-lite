@@ -90,4 +90,20 @@ const calc = calculateEmployeePayroll({
 })
 assert(calc.gross > calc.basic)
 assert(calc.net < calc.gross)
+
+// Matrix code helpers
+function statusToCode(status) {
+  const map = { Present: 'P', Absent: 'A', 'Half Day': 'HD', Leave: 'L', 'Weekly Off': 'WO', Holiday: 'H' }
+  return map[(status || '').trim()] || ''
+}
+function nextCode(cur, def = 'A') {
+  const codes = ['P', 'A', 'HD', 'L', 'WO', 'H']
+  if (!cur) return def
+  return codes[(codes.indexOf(cur) + 1) % codes.length]
+}
+assert(statusToCode('Present') === 'P')
+assert(statusToCode('Half Day') === 'HD')
+assert(nextCode('P') === 'A')
+assert(nextCode('') === 'A')
+
 console.log('hr-payroll-helpers-smoke: PASS')
