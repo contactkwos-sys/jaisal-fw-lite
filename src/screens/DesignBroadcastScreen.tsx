@@ -58,8 +58,12 @@ export function DesignBroadcastScreen({ initialDesignId }: Props) {
     if (err) throw err
     const list = (data ?? []) as DesignOpt[]
     setDesigns(list)
-    if (!designId && list[0]) setDesignId(list[0].id)
-  }, [designId])
+    setDesignId((prev) => {
+      if (prev && list.some((d) => d.id === prev)) return prev
+      if (initialDesignId && list.some((d) => d.id === initialDesignId)) return initialDesignId
+      return list[0]?.id || prev || ''
+    })
+  }, [initialDesignId])
 
   useEffect(() => {
     void loadDesigns().catch((e: Error) => setError(e.message))
@@ -173,10 +177,19 @@ export function DesignBroadcastScreen({ initialDesignId }: Props) {
     <div className="screen">
       <header className="screen-header">
         <h1>Design Broadcast</h1>
-        <p className="text-muted">2 photos + caption → device share sheet (WhatsApp / Business)</p>
+        <p className="text-muted">Post 2 photos + caption → device share sheet (WhatsApp / Business)</p>
       </header>
 
       <div className="form-stack">
+        {!designs.length && !error ? (
+          <p className="text-muted">Loading designs…</p>
+        ) : null}
+        {error && !designs.length ? (
+          <p className="form-error text-danger">
+            Could not load designs ({error}). You can still stay on this page — retry by reopening Design Broadcast.
+          </p>
+        ) : null}
+
         <label className="field">
           <span className="text-muted">Design No.</span>
           <select

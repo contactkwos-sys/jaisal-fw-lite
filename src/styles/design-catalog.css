@@ -132,12 +132,31 @@
   color: var(--text);
 }
 
+.dna-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.65rem;
+  align-items: center;
+}
+
 .dna-add-btn {
   margin: 0;
   white-space: nowrap;
   width: auto;
   flex: 0 0 auto;
   align-self: center;
+}
+
+.dna-thumb-empty {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-align: center;
+  padding: 0.5rem;
+  background: var(--surface2);
 }
 
 .dna-toolbar {
@@ -392,12 +411,142 @@
   resize: vertical;
 }
 
+.dna-bulk-panel {
+  width: min(44rem, 100%);
+  max-height: min(94vh, 56rem);
+  display: flex;
+  flex-direction: column;
+}
+
+.dna-bulk-hint {
+  margin: 0 0 0.85rem;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.dna-bulk-pick {
+  margin-bottom: 0.75rem;
+}
+
+.dna-bulk-count {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+}
+
+.dna-bulk-list {
+  list-style: none;
+  margin: 0 0 0.85rem;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+  overflow: auto;
+  flex: 1 1 auto;
+  max-height: min(52vh, 28rem);
+}
+
+.dna-bulk-row {
+  display: grid;
+  grid-template-columns: 4.5rem 5.5rem minmax(0, 1fr) auto;
+  gap: 0.55rem 0.65rem;
+  align-items: end;
+  padding: 0.55rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.dna-bulk-thumb {
+  width: 4.5rem;
+  height: 4.5rem;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+}
+
+.dna-bulk-no input {
+  background: var(--surface2) !important;
+}
+
+.dna-bulk-jfg input {
+  min-height: 2.5rem;
+  font-size: 1rem;
+}
+
+.dna-bulk-remove {
+  width: 2.5rem;
+  min-width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  align-self: end;
+}
+
+.dna-bulk-progress {
+  margin: 0 0 0.75rem;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.dna-bulk-progress-bar {
+  height: 0.45rem;
+  border-radius: 999px;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.dna-bulk-progress-fill {
+  height: 100%;
+  background: var(--weft, #d9a441);
+  transition: width 0.2s ease;
+}
+
+.dna-bulk-footer {
+  position: sticky;
+  bottom: 0;
+  padding-top: 0.35rem;
+  background: var(--surface);
+  margin-top: auto;
+}
+
+@media (max-width: 640px) {
+  .dna-bulk-row {
+    grid-template-columns: 4rem 1fr auto;
+    grid-template-areas:
+      'thumb no remove'
+      'thumb jfg jfg';
+  }
+
+  .dna-bulk-thumb {
+    grid-area: thumb;
+    width: 4rem;
+    height: 4rem;
+  }
+
+  .dna-bulk-no {
+    grid-area: no;
+  }
+
+  .dna-bulk-jfg {
+    grid-area: jfg;
+  }
+
+  .dna-bulk-remove {
+    grid-area: remove;
+  }
+}
+
 @media (max-width: 520px) {
   .dna-upload-pair {
     grid-template-columns: 1fr;
   }
 
   .dna-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .dna-header-actions {
     flex-direction: column;
     align-items: stretch;
   }

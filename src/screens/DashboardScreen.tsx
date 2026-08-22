@@ -8,6 +8,9 @@ import {
 import { applyOrQueue, todayISO } from '../lib/mutate'
 import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
+import { ApprovalsWidget } from '../components/ApprovalsWidget'
+import { PendingOrdersWidget } from './OrdersPendingScreen'
+import { inr, loadDashboardPnLCards } from '../lib/dailyCosting'
 
 type Props = {
   onNavigate: (t: NavTarget) => void
@@ -19,6 +22,10 @@ type Kpis = {
   weftYarnStock: number
   greigeToday: number
   dispatchToday: number
+  pendingDin: number
+  pendingSamples: number
+  pendingOrders: number
+  openBreakdowns: number
 }
 
 type Alerts = {
@@ -60,6 +67,10 @@ export function DashboardScreen({ onNavigate }: Props) {
     weftYarnStock: 0,
     greigeToday: 0,
     dispatchToday: 0,
+    pendingDin: 0,
+    pendingSamples: 0,
+    pendingOrders: 0,
+    openBreakdowns: 0,
   })
   const [alerts, setAlerts] = useState<Alerts>({
     beamPending: 0,
@@ -80,6 +91,22 @@ export function DashboardScreen({ onNavigate }: Props) {
   const [yarns, setYarns] = useState<WeftYarnStock[]>([])
   const [recentInward, setRecentInward] = useState<InwardRow[]>([])
   const [topMachines, setTopMachines] = useState<MachineRow[]>([])
+  const [pnlToday, setPnlToday] = useState({
+    productionMeters: 0,
+    productionValue: 0,
+    dispatchMeters: 0,
+    dispatchValue: 0,
+    totalCost: 0,
+    grossProfit: 0,
+    netProfit: 0,
+  })
+  const [pnlMtd, setPnlMtd] = useState({
+    productionMeters: 0,
+    dispatchMeters: 0,
+    revenue: 0,
+    totalCost: 0,
+    netProfit: 0,
+  })
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -138,11 +165,21 @@ export function DashboardScreen({ onNavigate }: Props) {
         .select('id, party_name, grand_total, created_at')
         .order('created_at', { ascending: false })
         .limit(6),
-      supabase
-        .from('production_entries')
-        .select('machine_no, total_meter')
-        .eq('entry_date', today),
+      supabase.from('production_entries').select('machine_no, total_meter').eq('entry_date', today),
     ])
+
+    // Optional module tables — never fail the whole dashboard if migrations lag
+    const [dinsRes, samplesRes, orderBookRes, maintOpenRes] = await Promise.all([
+      supabase.from('dins').select('id, status').limit(500),
+      supabase.from('sample_job_cards').select('id, status').limit(500),
+      supabase.from('order_book').select('id, status').limit(500),
+      supabase.from('maintenance_requests').select('id, status, resolved_at').limit(500),
+    ])
+
+    const dins = dinsRes.error ? [] : (dinsRes.data ?? [])
+    const samples = samplesRes.error ? [] : (samplesRes.data ?? [])
+    const orderBook = orderBookRes.error ? [] : (orderBookRes.data ?? [])
+    const maintOpen = maintOpenRes.error ? [] : (maintOpenRes.data ?? [])
 
     const present = (att.data ?? []).filter((a) => {
       const s = String(a.status || '').toLowerCase()
@@ -154,12 +191,37 @@ export function DashboardScreen({ onNavigate }: Props) {
     const greige = (prod.data ?? []).reduce((s, p) => s + Number(p.total_meter || 0), 0)
     const dispatchM = (challan.data ?? []).reduce((s, c) => s + Number(c.meter || 0), 0)
 
+    const pendingDin = dins.filter((d: { status?: string | null }) => {
+      const st = String(d.status || '').toLowerCase()
+      return !st.includes('closed') && !st.includes('cancelled') && !st.includes('dispatched')
+    }).length
+
+    const pendingSamples = samples.filter((s: { status?: string | null }) => {
+      const st = String(s.status || '').toLowerCase()
+      return !st.includes('approved') && !st.includes('closed') && !st.includes('cancelled')
+    }).length
+
+    const pendingOrders = orderBook.filter((o: { status?: string | null }) => {
+      const st = String(o.status || 'pending').toLowerCase()
+      return st.includes('pending') || st === '' || st.includes('open')
+    }).length
+
+    const openBreakdowns = maintOpen.filter((m: { status?: string | null; resolved_at?: string | null }) => {
+      if (m.resolved_at) return false
+      const st = String(m.status || '').toLowerCase()
+      return st !== 'resolved' && st !== 'closed'
+    }).length
+
     setKpis({
       attendanceToday: present,
       warpBeamStock: beamPcs,
       weftYarnStock: weftKg,
       greigeToday: greige,
       dispatchToday: dispatchM,
+      pendingDin,
+      pendingSamples,
+      pendingOrders,
+      openBreakdowns,
     })
     setBeams((beamStock.data as BeamPipeStock[]) ?? [])
     setYarns((weftStock.data as WeftYarnStock[]) ?? [])
@@ -175,14 +237,6 @@ export function DashboardScreen({ onNavigate }: Props) {
         .select('machine_no, entry_date')
         .eq('entry_date', today)
       const machinesWithProd = new Set((pe ?? []).map((p) => p.machine_no))
-      programPending = jobIds.filter((j) => j.created_at?.startsWith(today) && !machinesWithProd.size).length
-        || jobIds.filter((j) => {
-          // fallback: count today's job cards if no production at all
-          return String(j.created_at || '').startsWith(today)
-        }).length && !(pe ?? []).length
-        ? jobIds.filter((j) => String(j.created_at || '').startsWith(today)).length
-        : 0
-      // simpler: today's job cards minus distinct machines that produced today
       const todayJobs = jobIds.filter((j) => String(j.created_at || '').startsWith(today))
       programPending = Math.max(0, todayJobs.length - machinesWithProd.size)
     }
@@ -190,7 +244,7 @@ export function DashboardScreen({ onNavigate }: Props) {
     setAlerts({
       beamPending: beamOut.count ?? 0,
       weftLow,
-      repairOut: repair.count ?? 0,
+      repairOut: (repair.count ?? 0) + openBreakdowns,
       programPending,
       gatepassPending: gp.count ?? 0,
     })
@@ -246,6 +300,28 @@ export function DashboardScreen({ onNavigate }: Props) {
     setTopMachines(
       [...machineMap.values()].sort((a, b) => b.meters - a.meters).slice(0, 6),
     )
+
+    try {
+      const pnl = await loadDashboardPnLCards(today)
+      setPnlToday({
+        productionMeters: pnl.today.productionMeters,
+        productionValue: pnl.today.productionValue,
+        dispatchMeters: pnl.today.dispatchMeters,
+        dispatchValue: pnl.today.dispatchValue,
+        totalCost: pnl.today.totalCost,
+        grossProfit: pnl.today.grossProfit,
+        netProfit: pnl.today.netProfit,
+      })
+      setPnlMtd({
+        productionMeters: pnl.mtd.productionMeters,
+        dispatchMeters: pnl.mtd.dispatchMeters,
+        revenue: pnl.mtd.revenue,
+        totalCost: pnl.mtd.totalCost,
+        netProfit: pnl.mtd.netProfit,
+      })
+    } catch {
+      // P&L cards are additive — do not fail the whole dashboard
+    }
   }, [today])
 
   useEffect(() => {
@@ -366,49 +442,66 @@ export function DashboardScreen({ onNavigate }: Props) {
     }
   }
 
-  const quick: Array<{ label: string; screen: AppScreen; sub?: string }> = [
-    { label: 'Attendance', screen: 'attendance' },
-    { label: 'Inward', screen: 'purchase', sub: 'general' },
-    { label: 'Weft Issue', screen: 'purchase', sub: 'weft' },
-    { label: 'Production', screen: 'production', sub: 'entry' },
-    { label: 'Folding', screen: 'dispatch', sub: 'folding' },
-    { label: 'Dispatch', screen: 'dispatch', sub: 'challan' },
+  const quick: Array<{ label: string; screen: AppScreen; sub?: string; module?: import('../lib/nav').MainModuleId }> = [
+    { label: 'Design to Order', screen: 'dto-hub', module: 'design-to-order' },
+    { label: 'Design-wise Costing', screen: 'design-wise-costing', module: 'design-to-order' },
+    { label: 'Daily Costing & P&L', screen: 'costing', sub: 'factory', module: 'reports' },
+    { label: 'Program & Dispatch', screen: 'program-dispatch', sub: 'pto', module: 'program-dispatch' },
+    { label: 'Warp Yarn Management', screen: 'warp-yarn', sub: 'overview', module: 'warp-yarn' },
+    { label: 'Attendance & Payroll', screen: 'hr-payroll', sub: 'dashboard', module: 'hr-payroll' },
+    { label: 'Machine-wise Maintenance', screen: 'maintenance', sub: 'overview', module: 'maintenance' },
+    { label: 'Security / Inward', screen: 'security-inventory', sub: 'dashboard', module: 'security' },
   ]
 
   const alertRows = (
     [
-      [`Beam Return Pending (${alerts.beamPending})`, { screen: 'purchase' as AppScreen, sub: 'report', filter: 'pending' }],
-      [`Weft Low Stock <${WEFT_LOW_STOCK_KG}kg (${alerts.weftLow})`, { screen: 'stock' as AppScreen, sub: 'weft' }],
-      [`Repair Out Pending (${alerts.repairOut})`, { screen: 'maintenance' as AppScreen, sub: 'repair' }],
-      [`Program Pending (${alerts.programPending})`, { screen: 'production' as AppScreen, sub: 'job' }],
-      [`Gatepass Pending Sign (${alerts.gatepassPending})`, { screen: 'dispatch' as AppScreen, sub: 'gatepass' }],
+      [`Beam Return Pending (${alerts.beamPending})`, { screen: 'purchase' as AppScreen, sub: 'report', filter: 'pending', module: 'inventory' as const }],
+      [`Weft Low Stock <${WEFT_LOW_STOCK_KG}kg (${alerts.weftLow})`, { screen: 'stock' as AppScreen, sub: 'weft', module: 'inventory' as const }],
+      [`Repair Out Pending (${alerts.repairOut})`, { screen: 'maintenance' as AppScreen, sub: 'repair', module: 'maintenance' as const }],
+      [`Program Pending (${alerts.programPending})`, { screen: 'programs' as AppScreen, sub: 'pending', module: 'orders' as const }],
+      [`Gatepass Pending Sign (${alerts.gatepassPending})`, { screen: 'program-dispatch' as AppScreen, sub: 'gatepass', module: 'program-dispatch' as const }],
     ] as const
   ).filter((row) => !row[0].includes('(0)'))
 
+  const alertCount = alertRows.length
+
   const flowSteps = [
-    ['Warp Issue', `${flow.warpIn.toFixed(1)} kg`],
-    ['Weft Issue', `${flow.weftBuy.toFixed(1)} kg`],
-    ['Production', `${flow.production.toFixed(1)} m`],
-    ['Folding', `${flow.folding.toFixed(1)} m`],
-    ['Dispatch', `${flow.dispatch.toFixed(1)} m`],
+    ['Warp Issue', `${flow.warpIn.toFixed(1)} kg`, 'warp'],
+    ['Weft Issue', `${flow.weftBuy.toFixed(1)} kg`, 'weft'],
+    ['Production', `${flow.production.toFixed(1)} m`, 'prod'],
+    ['Folding', `${flow.folding.toFixed(1)} m`, 'fold'],
+    ['Dispatch', `${flow.dispatch.toFixed(1)} m`, 'disp'],
   ] as const
+
+  const stockTotal =
+    beams.reduce((s, b) => s + Number(b.quantity_pcs || 0), 0) +
+    yarns.reduce((s, y) => s + Number(y.stock_kg || 0), 0)
 
   return (
     <div className="screen dashboard-screen">
-      <section className="kpi-grid kpi-grid-5">
+      <section className="dash-hero">
+        <div className="dash-hero-copy">
+          <p className="dash-hero-eyebrow">Fashionweave Industries</p>
+          <h2 className="dash-hero-title">JAISAL FW</h2>
+          <p className="dash-hero-sub text-muted">Mill overview · live floor KPIs for management</p>
+        </div>
+      </section>
+
+      <section className="kpi-grid kpi-grid-6">
         {(
           [
-            ['Attendance Today', kpis.attendanceToday, { screen: 'attendance' as AppScreen }],
-            ['Warp Beam Stock', kpis.warpBeamStock, { screen: 'stock' as AppScreen, sub: 'beam' }],
-            ['Weft Yarn Stock', `${kpis.weftYarnStock.toFixed(1)} kg`, { screen: 'stock' as AppScreen, sub: 'weft' }],
-            ['Greige / Prod Today', `${kpis.greigeToday.toFixed(1)} m`, { screen: 'production' as AppScreen, sub: 'report' }],
-            ['Dispatch Today', `${kpis.dispatchToday.toFixed(1)} m`, { screen: 'dispatch' as AppScreen, sub: 'challan' }],
+            ['Attendance Today', kpis.attendanceToday, 'att', { screen: 'attendance' as AppScreen, module: 'hr-payroll' as const }],
+            ['Warp Yarn Mgmt', `${kpis.warpBeamStock} Beams`, 'beam', { screen: 'warp-yarn' as AppScreen, sub: 'overview', module: 'warp-yarn' as const }],
+            ['Weft Yarn Stock', `${kpis.weftYarnStock.toFixed(0)} kg`, 'yarn', { screen: 'stock' as AppScreen, sub: 'weft', module: 'inventory' as const }],
+            ['Greige Production', `${kpis.greigeToday.toFixed(0)} m`, 'greige', { screen: 'program-dispatch' as AppScreen, sub: 'reports', module: 'program-dispatch' as const }],
+            ['Dispatch Today', `${kpis.dispatchToday.toFixed(0)} m`, 'dispatch', { screen: 'program-dispatch' as AppScreen, sub: 'challan', module: 'program-dispatch' as const }],
+            ['Alerts & Reminders', `${alertCount} Alert${alertCount === 1 ? '' : 's'}`, 'alerts', { screen: 'home' as AppScreen, module: 'dashboard' as const }],
           ] as const
-        ).map(([label, value, nav]) => (
+        ).map(([label, value, tone, nav]) => (
           <button
             key={label}
             type="button"
-            className="kpi-card surface"
+            className={`kpi-card surface kpi-tone-${tone}`}
             onClick={() => onNavigate(nav)}
           >
             <span className="text-muted">{label}</span>
@@ -417,42 +510,86 @@ export function DashboardScreen({ onNavigate }: Props) {
         ))}
       </section>
 
-      <div className="dash-split">
-        <section className="dash-panel">
-          <h2 className="section-title">Quick Access</h2>
-          <div className="quick-grid quick-grid-6">
-            {quick.map((q) => (
-              <button
-                key={q.label}
-                type="button"
-                className="quick-tile surface2"
-                onClick={() => onNavigate({ screen: q.screen, sub: q.sub })}
-              >
-                {q.label}
-              </button>
-            ))}
-          </div>
-        </section>
+      <section className="dash-panel" style={{ marginTop: 12 }}>
+        <h2 className="section-title">Today&apos;s Profit &amp; Loss</h2>
+        <div className="kpi-grid kpi-grid-6">
+          {(
+            [
+              ['Today Production', `${pnlToday.productionMeters.toFixed(0)} m`, { screen: 'costing' as AppScreen, sub: 'production', module: 'reports' as const }],
+              ['Today Production Value', inr(pnlToday.productionValue), { screen: 'costing' as AppScreen, sub: 'production', module: 'reports' as const }],
+              ['Today Dispatch', `${pnlToday.dispatchMeters.toFixed(0)} m`, { screen: 'costing' as AppScreen, sub: 'dispatch', module: 'reports' as const }],
+              ['Today Dispatch Value', inr(pnlToday.dispatchValue), { screen: 'costing' as AppScreen, sub: 'dispatch', module: 'reports' as const }],
+              ['Today Total Cost', inr(pnlToday.totalCost), { screen: 'costing' as AppScreen, sub: 'sources', module: 'reports' as const }],
+              ['Today Gross Profit', inr(pnlToday.grossProfit), { screen: 'costing' as AppScreen, sub: 'factory', module: 'reports' as const }],
+              ['Today Net P&L', inr(pnlToday.netProfit), { screen: 'costing' as AppScreen, sub: 'factory', module: 'reports' as const }],
+            ] as const
+          ).map(([label, value, nav]) => (
+            <button
+              key={label}
+              type="button"
+              className="kpi-card surface kpi-tone-dispatch"
+              onClick={() => onNavigate(nav)}
+            >
+              <span className="text-muted">{label}</span>
+              <strong className="num">{value}</strong>
+            </button>
+          ))}
+        </div>
+        <h2 className="section-title" style={{ marginTop: 16 }}>
+          MTD Profit &amp; Loss
+        </h2>
+        <div className="kpi-grid kpi-grid-6">
+          {(
+            [
+              ['MTD Production', `${pnlMtd.productionMeters.toFixed(0)} m`, { screen: 'costing' as AppScreen, sub: 'mtd', module: 'reports' as const }],
+              ['MTD Dispatch', `${pnlMtd.dispatchMeters.toFixed(0)} m`, { screen: 'costing' as AppScreen, sub: 'mtd', module: 'reports' as const }],
+              ['MTD Revenue', inr(pnlMtd.revenue), { screen: 'costing' as AppScreen, sub: 'mtd', module: 'reports' as const }],
+              ['MTD Cost', inr(pnlMtd.totalCost), { screen: 'costing' as AppScreen, sub: 'mtd', module: 'reports' as const }],
+              ['MTD Profit/Loss', inr(pnlMtd.netProfit), { screen: 'costing' as AppScreen, sub: 'mtd', module: 'reports' as const }],
+            ] as const
+          ).map(([label, value, nav]) => (
+            <button
+              key={label}
+              type="button"
+              className="kpi-card surface kpi-tone-beam"
+              onClick={() => onNavigate(nav)}
+            >
+              <span className="text-muted">{label}</span>
+              <strong className="num">{value}</strong>
+            </button>
+          ))}
+        </div>
+      </section>
 
-        <section className="dash-panel">
-          <h2 className="section-title">Alerts & Reminders</h2>
-          <div className="list alert-list">
-            {alertRows.map(([label, nav]) => (
-              <button key={label} type="button" className="alert-row surface" onClick={() => onNavigate(nav)}>
-                {label}
-              </button>
-            ))}
-            {alertRows.length === 0 ? <p className="text-sage">No alerts</p> : null}
-          </div>
-        </section>
-      </div>
+      <section className="kpi-grid kpi-grid-6" style={{ marginTop: 12 }}>
+        {(
+          [
+            ['Pending DIN', kpis.pendingDin, { screen: 'dto-hub' as AppScreen, module: 'design-to-order' as const }],
+            ['Pending Samples', kpis.pendingSamples, { screen: 'dto-tracking' as AppScreen, module: 'design-to-order' as const }],
+            ['Pending Orders', kpis.pendingOrders, { screen: 'orders-pending' as AppScreen, module: 'orders' as const }],
+            ['Open Breakdowns', kpis.openBreakdowns, { screen: 'maintenance' as AppScreen, sub: 'overview', module: 'maintenance' as const }],
+            ['Today Production', `${kpis.greigeToday.toFixed(0)} m`, { screen: 'program-dispatch' as AppScreen, sub: 'entry', module: 'program-dispatch' as const }],
+            ['Today Dispatch', `${kpis.dispatchToday.toFixed(0)} m`, { screen: 'program-dispatch' as AppScreen, sub: 'challan', module: 'program-dispatch' as const }],
+          ] as const
+        ).map(([label, value, nav]) => (
+          <button
+            key={label}
+            type="button"
+            className="kpi-card surface kpi-tone-beam"
+            onClick={() => onNavigate(nav)}
+          >
+            <span className="text-muted">{label}</span>
+            <strong className="num">{value}</strong>
+          </button>
+        ))}
+      </section>
 
-      <section>
-        <h2 className="section-title">Today&apos;s Summary Flow</h2>
+      <section className="dash-panel">
+        <h2 className="section-title">Today&apos;s Production Flow</h2>
         <div className="flow-row flow-row-h">
-          {flowSteps.map(([label, val], idx) => (
+          {flowSteps.map(([label, val, tone], idx) => (
             <div key={label} className="flow-step">
-              <div className="flow-card surface2">
+              <div className={`flow-card surface flow-tone-${tone}`}>
                 <span className="text-muted2">{label}</span>
                 <strong className="num">{val}</strong>
               </div>
@@ -468,6 +605,45 @@ export function DashboardScreen({ onNavigate }: Props) {
 
       <div className="dash-split dash-split-tables">
         <section className="dash-panel dash-panel-wide">
+          <h2 className="section-title">Top Machines (Today)</h2>
+          <div className="dash-table-wrap surface">
+            <table className="dash-table">
+              <thead>
+                <tr>
+                  <th>Machine</th>
+                  <th className="num">Meters</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {topMachines.length === 0 ? (
+                  <tr>
+                    <td colSpan={3} className="text-muted">
+                      No production today
+                    </td>
+                  </tr>
+                ) : (
+                  topMachines.map((row) => (
+                    <tr key={row.machine}>
+                      <td>
+                        {row.machine} — Airjet Loom
+                      </td>
+                      <td className="num">{row.meters.toFixed(1)}</td>
+                      <td>
+                        <span className="machine-status running">
+                          <span className="status-dot" aria-hidden="true" />
+                          Running
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="dash-panel">
           <h2 className="section-title">Recent Inward</h2>
           <div className="dash-table-wrap surface">
             <table className="dash-table">
@@ -498,39 +674,75 @@ export function DashboardScreen({ onNavigate }: Props) {
             </table>
           </div>
         </section>
+      </div>
+
+      <div className="dash-split">
+        <section className="dash-panel">
+          <h2 className="section-title">Stock Summary</h2>
+          <div className="stock-summary surface">
+            <div className="stock-donut" aria-hidden="true">
+              <div className="stock-donut-ring" />
+              <div className="stock-donut-center">
+                <strong className="num">{stockTotal.toFixed(0)}</strong>
+                <span className="text-muted2">total</span>
+              </div>
+            </div>
+            <ul className="stock-legend">
+              <li>
+                <span className="legend-swatch swatch-yarn" /> Yarn{' '}
+                <span className="num">{kpis.weftYarnStock.toFixed(0)}</span>
+              </li>
+              <li>
+                <span className="legend-swatch swatch-beam" /> Beams{' '}
+                <span className="num">{kpis.warpBeamStock}</span>
+              </li>
+              <li>
+                <span className="legend-swatch swatch-greige" /> Greige{' '}
+                <span className="num">{kpis.greigeToday.toFixed(0)}</span>
+              </li>
+              <li>
+                <span className="legend-swatch swatch-other" /> Inward ₹{' '}
+                <span className="num">{flow.inwardSpend.toFixed(0)}</span>
+              </li>
+            </ul>
+          </div>
+        </section>
 
         <section className="dash-panel">
-          <h2 className="section-title">Top Machines</h2>
-          <div className="dash-table-wrap surface">
-            <table className="dash-table">
-              <thead>
-                <tr>
-                  <th>Machine</th>
-                  <th className="num">Meters</th>
-                  <th className="num">Entries</th>
-                </tr>
-              </thead>
-              <tbody>
-                {topMachines.length === 0 ? (
-                  <tr>
-                    <td colSpan={3} className="text-muted">
-                      No production today
-                    </td>
-                  </tr>
-                ) : (
-                  topMachines.map((row) => (
-                    <tr key={row.machine}>
-                      <td>{row.machine}</td>
-                      <td className="num">{row.meters.toFixed(1)}</td>
-                      <td className="num">{row.entries}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+          <h2 className="section-title">Alerts & Reminders</h2>
+          <div className="list alert-list">
+            {alertRows.map(([label, nav]) => (
+              <button key={label} type="button" className="alert-row surface" onClick={() => onNavigate(nav)}>
+                {label}
+              </button>
+            ))}
+            {alertRows.length === 0 ? <p className="text-sage">No alerts</p> : null}
           </div>
         </section>
       </div>
+
+      <section className="dash-panel">
+        <h2 className="section-title">Module Quick Access</h2>
+        <div className="quick-grid quick-grid-8">
+          {quick.map((q) => (
+            <button
+              key={q.label}
+              type="button"
+              className="quick-tile"
+              onClick={() => onNavigate({ screen: q.screen, sub: q.sub, module: q.module })}
+            >
+              {q.label}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {isCeo ? (
+        <div className="dash-split">
+          <ApprovalsWidget />
+          <PendingOrdersWidget />
+        </div>
+      ) : null}
 
       {isCeo ? (
         <section className="dash-stock-edit">
@@ -543,8 +755,12 @@ export function DashboardScreen({ onNavigate }: Props) {
                   <div className="text-muted num">{b.quantity_pcs} pcs</div>
                 </div>
                 <div className="icon-actions">
-                  <button type="button" className="btn-ghost icon-btn" disabled={busy} onClick={() => void editBeam(b)}>✏️</button>
-                  <button type="button" className="btn-ghost icon-btn" disabled={busy} onClick={() => void deleteBeam(b)}>🗑️</button>
+                  <button type="button" className="btn-ghost icon-btn" disabled={busy} onClick={() => void editBeam(b)}>
+                    Edit
+                  </button>
+                  <button type="button" className="btn-ghost icon-btn" disabled={busy} onClick={() => void deleteBeam(b)}>
+                    Delete
+                  </button>
                 </div>
               </article>
             ))}
@@ -555,8 +771,12 @@ export function DashboardScreen({ onNavigate }: Props) {
                   <div className="text-muted num">{y.stock_kg} kg</div>
                 </div>
                 <div className="icon-actions">
-                  <button type="button" className="btn-ghost icon-btn" disabled={busy} onClick={() => void editYarn(y)}>✏️</button>
-                  <button type="button" className="btn-ghost icon-btn" disabled={busy} onClick={() => void deleteYarn(y)}>🗑️</button>
+                  <button type="button" className="btn-ghost icon-btn" disabled={busy} onClick={() => void editYarn(y)}>
+                    Edit
+                  </button>
+                  <button type="button" className="btn-ghost icon-btn" disabled={busy} onClick={() => void deleteYarn(y)}>
+                    Delete
+                  </button>
                 </div>
               </article>
             ))}

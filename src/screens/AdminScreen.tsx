@@ -1,13 +1,37 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ApprovalsWidget } from '../components/ApprovalsWidget'
+import { GmailAdminSection } from '../components/GmailAdminSection'
 import { ShareActions } from '../components/ShareActions'
 import { SubTabs } from '../components/SubTabs'
 import { useAuth } from '../lib/auth'
 import type { ApprovalQueue, PayrollRate, Role, Worker } from '../lib/database.types'
 import { applyOrQueue } from '../lib/mutate'
+import type { MainModuleId } from '../lib/nav'
+import {
+  addPayrollJob,
+  listPayrollJobs,
+  PAYROLL_JOB_LIMIT,
+  removePayrollJob,
+  updatePayrollJob,
+  type PayrollJob,
+} from '../lib/payrollJobs'
+import {
+  ALL_MODULE_OPTIONS,
+  clearRolePermissionOverride,
+  getDefaultPermissions,
+  getPermissionsForRole,
+  saveRolePermissions,
+  type ModulePermission,
+} from '../lib/permissions'
 import { printSummary, rowsToHtml, shareWhatsApp } from '../lib/share'
+import {
+  missingSystemRoleNames,
+  orderRolesBySystemList,
+  SYSTEM_ROLE_NAMES,
+} from '../lib/systemRoles'
 import { supabase } from '../lib/supabase'
 
-type Sub = 'roles' | 'payroll' | 'approvals'
+type Sub = 'roles' | 'payroll' | 'approvals' | 'permissions' | 'gmail'
 type Props = { initialSub?: Sub }
 
 type PayableRow = {
@@ -26,39 +50,78 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
   const [busy, setBusy] = useState(false)
 
   const [roles, setRoles] = useState<Role[]>([])
+  const [rolesLoading, setRolesLoading] = useState(true)
+  const [roleHasPin, setRoleHasPin] = useState<Record<string, boolean>>({})
   const [newPin, setNewPin] = useState<Record<string, string>>({})
+  const [confirmPin, setConfirmPin] = useState<Record<string, string>>({})
   const [editName, setEditName] = useState<Record<string, string>>({})
   const [bulkPins, setBulkPins] = useState<Array<{ role: string; pin: string }> | null>(null)
+  const [permRoleId, setPermRoleId] = useState<string | null>(null)
+  const [permDraft, setPermDraft] = useState<ModulePermission[]>([])
+  const [permMsg, setPermMsg] = useState<string | null>(null)
 
   const [rates, setRates] = useState<PayrollRate[]>([])
   const [rateDraft, setRateDraft] = useState<Record<string, string>>({})
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7))
   const [payables, setPayables] = useState<PayableRow[]>([])
+  const [payrollJobs, setPayrollJobs] = useState<PayrollJob[]>([])
+  const [newJobName, setNewJobName] = useState('')
+  const [editingJobId, setEditingJobId] = useState<string | null>(null)
+  const [editJobName, setEditJobName] = useState('')
+  const [editJobCode, setEditJobCode] = useState('')
 
   const [queue, setQueue] = useState<ApprovalQueue[]>([])
 
-  const loadRoles = useCallback(async () => {
-    // Prefer direct table read (authenticated RLS). Edge `roles-gate` can fail with
-    // browser "TypeError: Load failed" when the function gateway/network flakes.
-    const { data, error } = await supabase
-      .from('roles')
-      .select('id, role_name, is_custom, created_at')
-      .order('created_at', { ascending: true })
-    if (!error && data) {
-      setRoles(data as Role[])
-      return
-    }
+  const pinRoles = useMemo(() => orderRolesBySystemList(roles), [roles])
 
-    const { data: fnData, error: fnErr } = await supabase.functions.invoke('roles-gate', {
-      body: { action: 'list' },
-    })
-    if (fnErr) throw new Error(fnErr.message || error?.message || 'Load failed')
-    if (fnData?.error) throw new Error(fnData.error)
-    setRoles((fnData?.roles ?? []) as Role[])
+  const loadRoles = useCallback(async () => {
+    setRolesLoading(true)
+    try {
+      // Prefer direct table read (authenticated RLS). Edge `roles-gate` can fail with
+      // browser "TypeError: Load failed" when the function gateway/network flakes.
+      const [{ data, error }, usersRes] = await Promise.all([
+        supabase.from('roles').select('id, role_name, is_custom, created_at').order('created_at', {
+          ascending: true,
+        }),
+        supabase.from('users').select('role_id, is_active').eq('is_active', true),
+      ])
+
+      let list = (!error && data ? (data as Role[]) : []) as Role[]
+
+      const has: Record<string, boolean> = {}
+      for (const u of usersRes.data ?? []) {
+        if (u.role_id) has[String(u.role_id)] = true
+      }
+      setRoleHasPin(has)
+
+      // Show whatever we already have immediately — do not block UI on roles-gate
+      if (list.length) {
+        setRoles(orderRolesBySystemList(list))
+        setRolesLoading(false)
+      }
+
+      // Seed any missing system PIN roles (Machine Supervisor, Salesman, …) via roles-gate.
+      if (!list.length || missingSystemRoleNames(list).length) {
+        const { data: fnData, error: fnErr } = await supabase.functions.invoke('roles-gate', {
+          body: { action: 'ensure' },
+        })
+        if (!fnErr && !fnData?.error && fnData?.roles?.length) {
+          list = fnData.roles as Role[]
+          setRoles(orderRolesBySystemList(list))
+        } else if (!list.length) {
+          if (fnErr) throw new Error(fnErr.message || error?.message || 'Load failed')
+          if (fnData?.error) throw new Error(fnData.error)
+        }
+      } else {
+        setRoles(orderRolesBySystemList(list))
+      }
+    } finally {
+      setRolesLoading(false)
+    }
   }, [])
 
   const loadPayroll = useCallback(async () => {
-    const [{ data: r }, { data: workers }, { data: att }] = await Promise.all([
+    const [{ data: r }, { data: workers }, { data: att }, jobs] = await Promise.all([
       supabase.from('payroll_rates').select('*'),
       supabase.from('workers').select('*').eq('is_active', true),
       supabase
@@ -66,7 +129,9 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
         .select('worker_id, status, date')
         .gte('date', `${month}-01`)
         .lte('date', `${month}-31`),
+      listPayrollJobs(),
     ])
+    setPayrollJobs(jobs)
     setRates((r as PayrollRate[]) ?? [])
     const rateByRole = new Map((r as PayrollRate[] | null)?.map((x) => [x.role_id, x.rate_per_day]) ?? [])
     const roleMap = new Map(roles.map((x) => [x.id, x.role_name]))
@@ -108,7 +173,10 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
   }, [])
 
   useEffect(() => {
-    void loadRoles().catch((e: Error) => setError(e.message))
+    void loadRoles().catch((e: Error) => {
+      setError(e.message)
+      setRolesLoading(false)
+    })
   }, [loadRoles])
 
   useEffect(() => {
@@ -120,19 +188,46 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
     if (initialSub) setSub(initialSub)
   }, [initialSub])
 
+  useEffect(() => {
+    if (sub !== 'permissions') return
+    const role = roles.find((r) => r.id === permRoleId) || roles[0]
+    if (!role) return
+    if (!permRoleId) setPermRoleId(role.id)
+    setPermDraft(getPermissionsForRole(role.role_name))
+  }, [sub, roles, permRoleId])
+
   const monthTotal = useMemo(
     () => payables.reduce((s, p) => s + p.payable, 0),
     [payables],
   )
+
+  async function writePinAudit(role: Role, action: string) {
+    try {
+      await supabase.from('pin_change_audit').insert({
+        role_id: role.id,
+        role_name: role.role_name,
+        action,
+        changed_by: profile?.id ?? null,
+        changed_by_name: profile?.full_name || profile?.roles?.role_name || null,
+      })
+    } catch {
+      // Audit must not block PIN change UX
+    }
+  }
 
   async function resetPin(role: Role) {
     if (!isCeo) {
       setError('CEO only')
       return
     }
-    const pin = newPin[role.id]
-    if (!pin || pin.length !== 4) {
-      setError('Enter 4-digit PIN')
+    const pin = newPin[role.id] || ''
+    const confirm = confirmPin[role.id] || ''
+    if (!/^\d{4}$/.test(pin)) {
+      setError('PIN must be exactly 4 numeric digits')
+      return
+    }
+    if (pin !== confirm) {
+      setError('New PIN and Confirm PIN must match')
       return
     }
     setBusy(true)
@@ -143,8 +238,11 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
       })
       if (fnErr) throw fnErr
       if (data?.error) throw new Error(data.error)
-      setMessage(`PIN reset for ${role.role_name}${data?.pin_hint ? ` (hint set)` : ''}`)
+      await writePinAudit(role, 'change')
+      setMessage(`PIN updated for ${role.role_name}`)
       setNewPin((p) => ({ ...p, [role.id]: '' }))
+      setConfirmPin((p) => ({ ...p, [role.id]: '' }))
+      setRoleHasPin((m) => ({ ...m, [role.id]: true }))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'PIN reset failed')
     } finally {
@@ -161,43 +259,53 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
       setError('No roles loaded')
       return
     }
+    const existingCount = roles.filter((r) => roleHasPin[r.id]).length
+    const confirmMsg =
+      existingCount > 0
+        ? `This will overwrite existing PINs for ${existingCount} role(s) and generate new unique 4-digit PINs for all ${roles.length} roles. Continue?`
+        : `Generate unique 4-digit PINs for all ${roles.length} roles?`
+    if (!window.confirm(confirmMsg)) return
+
     setBusy(true)
     setError(null)
     setMessage(null)
     setBulkPins(null)
     try {
-      // CEO first, then remaining roles in stable name order
-      const ceoRole = roles.find((r) => r.role_name.toLowerCase() === 'ceo')
-      const others = roles
-        .filter((r) => r.role_name.toLowerCase() !== 'ceo')
-        .sort((a, b) => a.role_name.localeCompare(b.role_name))
-      const ordered = ceoRole ? [ceoRole, ...others] : others
-
+      const ordered = orderRolesBySystemList(roles)
       const assigned: Array<{ role: string; pin: string }> = []
-      const pinByRoleId: Record<string, string> = {}
-      let nextPin = 1001
+      const used = new Set<string>()
+      const cryptoRand = () => {
+        const arr = new Uint32Array(1)
+        crypto.getRandomValues(arr)
+        return 1000 + (arr[0] % 9000)
+      }
       for (const role of ordered) {
+        let pin = ''
         const isCeoRole = role.role_name.toLowerCase() === 'ceo'
-        // CEO fixed 3060; everyone else gets unique 4-digit sequential PINs (1001, 1002, …)
-        let pin: string
         if (isCeoRole) {
-          pin = '3060'
+          do {
+            pin = String(cryptoRand())
+          } while (used.has(pin))
         } else {
-          pin = String(nextPin)
-          nextPin += 1
+          do {
+            pin = String(cryptoRand())
+          } while (used.has(pin))
         }
+        used.add(pin)
 
         const { data, error: fnErr } = await supabase.functions.invoke('pin-reset', {
           body: { role_id: role.id, role_name: role.role_name, pin },
         })
         if (fnErr) throw new Error(fnErr.message || 'PIN reset request failed')
         if (data?.error) throw new Error(data.error)
+        await writePinAudit(role, 'bulk_generate')
         assigned.push({ role: role.role_name, pin })
-        pinByRoleId[role.id] = pin
       }
       setBulkPins(assigned)
-      setNewPin((prev) => ({ ...prev, ...pinByRoleId }))
-      setMessage(`Auto-generated PINs for ${assigned.length} roles`)
+      setRoleHasPin(Object.fromEntries(ordered.map((r) => [r.id, true])))
+      setNewPin({})
+      setConfirmPin({})
+      setMessage(`Auto-generated PINs for ${assigned.length} roles — note them securely (shown once)`)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Bulk PIN generation failed')
     } finally {
@@ -281,6 +389,66 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
     }
   }
 
+  async function handleAddPayrollJob() {
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const next = await addPayrollJob(newJobName)
+      setPayrollJobs(next)
+      setNewJobName('')
+      setMessage(`Job “${newJobName.trim()}” added`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Add job failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleSavePayrollJobEdit() {
+    if (!editingJobId) return
+    setBusy(true)
+    setError(null)
+    try {
+      const next = await updatePayrollJob(editingJobId, {
+        job_name: editJobName,
+        job_code: editJobCode,
+      })
+      setPayrollJobs(next)
+      setEditingJobId(null)
+      setMessage('Job updated')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Update failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleDeletePayrollJob(id: string, name: string) {
+    if (!window.confirm(`Remove job “${name}” from Payroll Master?`)) return
+    setBusy(true)
+    setError(null)
+    try {
+      const next = await removePayrollJob(id)
+      setPayrollJobs(next)
+      setMessage(`Job “${name}” removed`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Delete failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const jobWorkerCount = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const p of payables) {
+      const dept = (p.worker.department || '').trim().toLowerCase()
+      if (!dept) continue
+      map.set(dept, (map.get(dept) || 0) + 1)
+    }
+    return map
+  }, [payables])
+
   async function resolveQueue(item: ApprovalQueue, status: 'approved' | 'rejected') {
     if (!isCeo || !profile) return
     setBusy(true)
@@ -314,23 +482,75 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
     }
   }
 
-  if (!isCeo && sub === 'approvals') {
+  if (!isCeo && (sub === 'approvals' || sub === 'permissions')) {
     return (
       <div className="screen">
-        <p className="text-danger">CEO only — approval queue</p>
+        <p className="text-danger">CEO / Admin only</p>
       </div>
     )
+  }
+
+  function toggleModule(moduleId: MainModuleId) {
+    setPermDraft((prev) => {
+      const exists = prev.find((p) => p.moduleId === moduleId)
+      if (exists) return prev.filter((p) => p.moduleId !== moduleId)
+      return [...prev, { moduleId }]
+    })
+  }
+
+  function toggleSub(moduleId: MainModuleId, subId: string) {
+    setPermDraft((prev) => {
+      const copy = prev.map((p) => ({ ...p, subIds: p.subIds ? [...p.subIds] : undefined }))
+      let row = copy.find((p) => p.moduleId === moduleId)
+      if (!row) {
+        row = { moduleId, subIds: [subId] }
+        copy.push(row)
+        return copy
+      }
+      const mod = ALL_MODULE_OPTIONS.find((m) => m.id === moduleId)
+      const allIds = mod?.items.map((i) => i.id) || []
+      const current = row.subIds && row.subIds.length ? row.subIds : allIds
+      if (current.includes(subId)) {
+        row.subIds = current.filter((id) => id !== subId)
+      } else {
+        row.subIds = [...current, subId]
+      }
+      if (row.subIds.length === 0) {
+        return copy.filter((p) => p.moduleId !== moduleId)
+      }
+      if (row.subIds.length === allIds.length) {
+        row.subIds = undefined
+      }
+      return copy
+    })
+  }
+
+  function savePermissions() {
+    const role = roles.find((r) => r.id === permRoleId)
+    if (!role) return
+    saveRolePermissions(role.role_name, permDraft)
+    setPermMsg(`Saved module access for ${role.role_name}`)
+  }
+
+  function resetPermissions() {
+    const role = roles.find((r) => r.id === permRoleId)
+    if (!role) return
+    clearRolePermissionOverride(role.role_name)
+    setPermDraft(getDefaultPermissions(role.role_name))
+    setPermMsg(`Reset ${role.role_name} to default access`)
   }
 
   return (
     <div className="screen">
       <header className="screen-header">
-        <h1>Master / Admin</h1>
+        <h1>PIN Management</h1>
         <SubTabs
           value={sub}
           onChange={(id) => setSub(id as Sub)}
           options={[
             { id: 'roles', label: 'Roles & PIN' },
+            { id: 'permissions', label: 'Permissions' },
+            ...(isCeo ? [{ id: 'gmail', label: 'Gmail' }] : []),
             { id: 'payroll', label: 'Payroll' },
             ...(isCeo ? [{ id: 'approvals', label: 'Approvals' }] : []),
           ]}
@@ -338,86 +558,367 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
       </header>
 
       {sub === 'roles' ? (
-        <div className="list">
+        <div className="pin-mgmt">
           {isCeo ? (
-            <div className="form-stack">
+            <div className="pin-mgmt-toolbar">
+              <p className="text-muted" style={{ margin: 0 }}>
+                All roles on one page. PINs are hashed — current values stay masked.
+              </p>
               <button
                 type="button"
-                className="primary-save"
+                className="btn-primary"
                 disabled={busy}
                 onClick={() => void autoGenerateAllPins()}
               >
                 Auto-Generate All PINs
               </button>
-              {bulkPins ? (
-                <article className="card-row surface form-stack">
-                  <strong>Assigned PINs — note & share</strong>
-                  <ul className="pin-bulk-list">
-                    {bulkPins.map((row) => (
-                      <li key={row.role} className="row-top">
-                        <span>{row.role}</span>
-                        <strong className="num text-weft">{row.pin}</strong>
-                      </li>
-                    ))}
-                  </ul>
-                  <button type="button" className="btn-ghost" onClick={() => setBulkPins(null)}>
-                    Dismiss
-                  </button>
-                </article>
-              ) : null}
+            </div>
+          ) : (
+            <p className="text-muted">Only CEO can view and change PINs.</p>
+          )}
+
+          {bulkPins && isCeo ? (
+            <div className="pin-bulk-banner">
+              <strong>Generated PINs — copy now (shown once to CEO)</strong>
+              <ul>
+                {bulkPins.map((row) => (
+                  <li key={row.role}>
+                    <span>{row.role}</span>
+                    <strong className="num">{row.pin}</strong>
+                  </li>
+                ))}
+              </ul>
+              <button
+                type="button"
+                className="btn-secondary"
+                style={{ marginTop: '0.65rem' }}
+                onClick={() => setBulkPins(null)}
+              >
+                Dismiss
+              </button>
             </div>
           ) : null}
-          {roles.map((role) => (
-            <article key={role.id} className="card-row surface form-stack">
-              <div className="row-top">
-                <strong>{role.role_name}</strong>
-                <span className="text-muted2">{role.is_custom ? 'custom' : 'default'}</span>
-              </div>
-              {isCeo ? (
-                <>
-                  <label className="field">
-                    <span className="text-muted">Rename</span>
-                    <input
-                      value={editName[role.id] ?? role.role_name}
-                      onChange={(e) => setEditName((m) => ({ ...m, [role.id]: e.target.value }))}
-                    />
-                  </label>
-                  <div className="share-actions">
-                    <button type="button" className="btn-ghost" disabled={busy} onClick={() => void renameRole(role)}>
-                      Save name
-                    </button>
-                    {role.is_custom ? (
-                      <button type="button" className="btn-ghost text-danger" disabled={busy} onClick={() => void deleteRole(role)}>
-                        Delete
-                      </button>
-                    ) : null}
-                  </div>
-                  <label className="field">
-                    <span className="text-muted">New PIN (4 digit)</span>
-                    <input
-                      className="num"
-                      inputMode="numeric"
-                      maxLength={4}
-                      value={newPin[role.id] ?? ''}
-                      onChange={(e) =>
-                        setNewPin((m) => ({ ...m, [role.id]: e.target.value.replace(/\D/g, '').slice(0, 4) }))
-                      }
-                    />
-                  </label>
-                  <button type="button" disabled={busy} onClick={() => void resetPin(role)}>
-                    Generate / Reset PIN
-                  </button>
-                </>
-              ) : (
-                <p className="text-muted2">CEO can reset PINs</p>
-              )}
-            </article>
-          ))}
+
+          <div className="pin-table-wrap">
+            {rolesLoading ? (
+              <p className="text-muted" style={{ padding: '1rem' }}>
+                Loading roles…
+              </p>
+            ) : null}
+            <table className="pin-table">
+              <thead>
+                <tr>
+                  <th>Role</th>
+                  <th>User / Role Name</th>
+                  <th>Current PIN</th>
+                  <th>New PIN</th>
+                  <th>Confirm PIN</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {!rolesLoading && pinRoles.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="yarn-empty">
+                      No roles found
+                    </td>
+                  </tr>
+                ) : null}
+                {pinRoles.map((role) => {
+                  const hasPin = !!roleHasPin[role.id]
+                  return (
+                    <tr key={role.id}>
+                      <td>
+                        <strong>{role.role_name}</strong>
+                        <div className="text-muted2" style={{ fontSize: '0.72rem' }}>
+                          {role.is_custom
+                            ? 'custom'
+                            : (SYSTEM_ROLE_NAMES as readonly string[]).includes(role.role_name)
+                              ? 'system'
+                              : 'default'}
+                        </div>
+                      </td>
+                      <td>
+                        {isCeo ? (
+                          <div className="form-stack" style={{ gap: '0.35rem' }}>
+                            <input
+                              value={editName[role.id] ?? role.role_name}
+                              onChange={(e) =>
+                                setEditName((m) => ({ ...m, [role.id]: e.target.value }))
+                              }
+                              aria-label={`Rename ${role.role_name}`}
+                            />
+                            <div className="share-actions">
+                              <button
+                                type="button"
+                                className="btn-secondary"
+                                disabled={busy}
+                                onClick={() => void renameRole(role)}
+                              >
+                                Save name
+                              </button>
+                              {role.is_custom ? (
+                                <button
+                                  type="button"
+                                  className="btn-ghost text-danger"
+                                  disabled={busy}
+                                  onClick={() => void deleteRole(role)}
+                                >
+                                  Delete
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                        ) : (
+                          role.role_name
+                        )}
+                      </td>
+                      <td>
+                        <span className="pin-masked">{hasPin ? '••••' : '— —'}</span>
+                      </td>
+                      <td>
+                        {isCeo ? (
+                          <input
+                            className="num"
+                            inputMode="numeric"
+                            maxLength={4}
+                            autoComplete="off"
+                            placeholder="••••"
+                            value={newPin[role.id] ?? ''}
+                            onChange={(e) =>
+                              setNewPin((m) => ({
+                                ...m,
+                                [role.id]: e.target.value.replace(/\D/g, '').slice(0, 4),
+                              }))
+                            }
+                            aria-label={`New PIN for ${role.role_name}`}
+                          />
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td>
+                        {isCeo ? (
+                          <input
+                            className="num"
+                            inputMode="numeric"
+                            maxLength={4}
+                            autoComplete="off"
+                            placeholder="••••"
+                            value={confirmPin[role.id] ?? ''}
+                            onChange={(e) =>
+                              setConfirmPin((m) => ({
+                                ...m,
+                                [role.id]: e.target.value.replace(/\D/g, '').slice(0, 4),
+                              }))
+                            }
+                            aria-label={`Confirm PIN for ${role.role_name}`}
+                          />
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td>
+                        <span className={`pin-status-pill ${hasPin ? 'set' : 'unset'}`}>
+                          {hasPin ? 'SET' : 'NOT SET'}
+                        </span>
+                      </td>
+                      <td>
+                        {isCeo ? (
+                          <button
+                            type="button"
+                            className="btn-primary"
+                            disabled={busy}
+                            onClick={() => void resetPin(role)}
+                          >
+                            Change
+                          </button>
+                        ) : (
+                          <span className="text-muted2">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       ) : null}
 
+      {sub === 'permissions' && isCeo ? (
+        <div className="form-stack perm-panel">
+          <label className="field">
+            <span className="text-muted">Role</span>
+            <select
+              value={permRoleId ?? ''}
+              onChange={(e) => {
+                setPermRoleId(e.target.value)
+                setPermMsg(null)
+              }}
+            >
+              {roles.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.role_name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="text-muted2">
+            Choose exactly which modules and sub-functions this role can open. Unauthorized tabs stay hidden.
+          </p>
+          <div className="perm-module-list">
+            {ALL_MODULE_OPTIONS.map((mod) => {
+              const enabled = permDraft.some((p) => p.moduleId === mod.id)
+              const perm = permDraft.find((p) => p.moduleId === mod.id)
+              return (
+                <article key={mod.id} className="card-row surface perm-module-card">
+                  <label className="check-row">
+                    <input
+                      type="checkbox"
+                      checked={enabled}
+                      onChange={() => toggleModule(mod.id as MainModuleId)}
+                    />
+                    <strong>{mod.label}</strong>
+                  </label>
+                  {enabled && mod.items.length ? (
+                    <div className="perm-sub-grid">
+                      {mod.items.map((item) => {
+                        const allOn = !perm?.subIds || perm.subIds.length === 0
+                        const on = allOn || (perm?.subIds || []).includes(item.id)
+                        return (
+                          <label key={item.id} className="check-row perm-sub-check">
+                            <input
+                              type="checkbox"
+                              checked={on}
+                              onChange={() => toggleSub(mod.id as MainModuleId, item.id)}
+                            />
+                            <span>{item.label}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  ) : null}
+                </article>
+              )
+            })}
+          </div>
+          <div className="share-actions">
+            <button type="button" onClick={savePermissions}>
+              Save permissions
+            </button>
+            <button type="button" className="btn-ghost" onClick={resetPermissions}>
+              Reset to defaults
+            </button>
+          </div>
+          {permMsg ? <p className="form-ok text-sage">{permMsg}</p> : null}
+        </div>
+      ) : null}
+
+      {sub === 'gmail' && isCeo ? <GmailAdminSection /> : null}
+
       {sub === 'payroll' ? (
         <div className="form-stack">
+          <p className="text-muted">
+            Payroll processing has moved to <strong>HR & Payroll</strong>. This page keeps the Master Job List and
+            role-day rates for costing compatibility.
+          </p>
+          <h2 className="section-title">Master Job List</h2>
+          <p className="text-muted2">
+            Payroll designations (ASO, Security Guard, Sweeper, sweeper 1 / 2, …). Use these names as
+            worker department / designation in Attendance or HR Employee Master.
+          </p>
+          <div className="list payroll-job-list">
+            {payrollJobs.map((job) => {
+              const count = jobWorkerCount.get(job.job_name.trim().toLowerCase()) || 0
+              const editing = editingJobId === job.id
+              return (
+                <article key={job.id} className="card-row surface payroll-job-card">
+                  {editing ? (
+                    <div className="form-stack" style={{ flex: 1, gap: '0.5rem' }}>
+                      <label className="field">
+                        <span className="text-muted">Job name</span>
+                        <input value={editJobName} onChange={(e) => setEditJobName(e.target.value)} />
+                      </label>
+                      <label className="field">
+                        <span className="text-muted">Code</span>
+                        <input value={editJobCode} onChange={(e) => setEditJobCode(e.target.value)} />
+                      </label>
+                      <div className="share-actions">
+                        <button type="button" disabled={busy} onClick={() => void handleSavePayrollJobEdit()}>
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-ghost"
+                          onClick={() => setEditingJobId(null)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <strong>{job.job_name}</strong>
+                        <div className="text-muted">
+                          {count} Job{count === 1 ? '' : 's'}
+                        </div>
+                        <div className="text-muted2 payroll-job-code">{job.job_code}</div>
+                      </div>
+                      <div className="share-actions">
+                        <button
+                          type="button"
+                          className="btn-ghost"
+                          disabled={busy}
+                          onClick={() => {
+                            setEditingJobId(job.id)
+                            setEditJobName(job.job_name)
+                            setEditJobCode(job.job_code)
+                          }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-ghost"
+                          disabled={busy}
+                          onClick={() => void handleDeletePayrollJob(job.id, job.job_name)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </article>
+              )
+            })}
+            {!payrollJobs.length ? <p className="text-muted">No jobs yet</p> : null}
+          </div>
+          <div className="card-row surface row-top">
+            <label className="field" style={{ flex: 1 }}>
+              <span className="text-muted">Add job name</span>
+              <input
+                value={newJobName}
+                onChange={(e) => setNewJobName(e.target.value)}
+                placeholder="e.g. sweeper 1"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    void handleAddPayrollJob()
+                  }
+                }}
+              />
+            </label>
+            <button type="button" className="primary-save" disabled={busy || !newJobName.trim()} onClick={() => void handleAddPayrollJob()}>
+              Add Card
+            </button>
+          </div>
+          <p className="text-muted2">
+            Available Jobs count: {payrollJobs.length}/{PAYROLL_JOB_LIMIT}
+          </p>
+
           <h2 className="section-title">Rates per role / day</h2>
           {roles.map((role) => (
             <div key={role.id} className="card-row surface row-top">
@@ -482,24 +983,28 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
       ) : null}
 
       {sub === 'approvals' && isCeo ? (
-        <div className="list">
-          {queue.map((q) => (
-            <article key={q.id} className="card-row surface form-stack">
-              <strong>
-                {q.action} · {q.table_name}
-              </strong>
-              <pre className="payload-preview">{JSON.stringify(q.payload, null, 2)}</pre>
-              <div className="share-actions">
-                <button type="button" disabled={busy} onClick={() => void resolveQueue(q, 'approved')}>
-                  Approve
-                </button>
-                <button type="button" className="btn-ghost" disabled={busy} onClick={() => void resolveQueue(q, 'rejected')}>
-                  Reject
-                </button>
-              </div>
-            </article>
-          ))}
-          {!queue.length ? <p className="text-muted">No pending approvals</p> : null}
+        <div className="form-stack">
+          <ApprovalsWidget />
+          <h2 className="section-title">Legacy approval queue</h2>
+          <div className="list">
+            {queue.map((q) => (
+              <article key={q.id} className="card-row surface form-stack">
+                <strong>
+                  {q.action} · {q.table_name}
+                </strong>
+                <pre className="payload-preview">{JSON.stringify(q.payload, null, 2)}</pre>
+                <div className="share-actions">
+                  <button type="button" disabled={busy} onClick={() => void resolveQueue(q, 'approved')}>
+                    Approve
+                  </button>
+                  <button type="button" className="btn-ghost" disabled={busy} onClick={() => void resolveQueue(q, 'rejected')}>
+                    Reject
+                  </button>
+                </div>
+              </article>
+            ))}
+            {!queue.length ? <p className="text-muted">No legacy queue items</p> : null}
+          </div>
         </div>
       ) : null}
 

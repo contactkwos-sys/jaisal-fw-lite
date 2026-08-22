@@ -4,6 +4,25 @@ export function shareWhatsApp(text: string) {
   window.open(url, '_blank', 'noopener,noreferrer')
 }
 
+/** WhatsApp Business deep-link (same wa.me; OS / app chooser picks Business when installed). */
+export function shareWhatsAppBusiness(text: string) {
+  const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`
+  window.open(url, '_blank', 'noopener,noreferrer')
+}
+
+/** Native share sheet when available (WhatsApp / WhatsApp Business picker). */
+export async function shareNativeOrWhatsApp(text: string, title = 'JAISAL FW'): Promise<void> {
+  if (navigator.share) {
+    try {
+      await navigator.share({ title, text })
+      return
+    } catch {
+      /* fall through */
+    }
+  }
+  shareWhatsApp(text)
+}
+
 /** Open a simple printable HTML summary in a new window. */
 export function printSummary(title: string, bodyHtml: string) {
   const w = window.open('', '_blank', 'noopener,noreferrer,width=720,height=900')
@@ -21,7 +40,7 @@ export function printSummary(title: string, bodyHtml: string) {
 </style></head><body>
 <h1>${escapeHtml(title)}</h1>
 ${bodyHtml}
-<p class="muted">Jaisal FW Lite · ${new Date().toLocaleString()}</p>
+<p class="muted">JAISAL FW – Fashionweave Industries · ${new Date().toLocaleString()}</p>
 <script>window.onload=()=>{window.print()}</script>
 </body></html>`)
   w.document.close()

@@ -1,0 +1,1030 @@
+/* HR & Payroll — JAISAL FW professional light ERP */
+
+.hr-screen {
+  gap: 1rem;
+}
+
+.hr-subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0.35rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.hr-subnav button {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-family: "Outfit", sans-serif;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.4rem 0.7rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.hr-subnav button:hover {
+  background: var(--teal-soft);
+  color: var(--teal-deep);
+}
+
+.hr-subnav button.active {
+  background: var(--teal);
+  color: #fff;
+  border-color: var(--teal-deep);
+}
+
+.hr-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: 0.75rem;
+}
+
+.hr-kpi {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 0.85rem 1rem;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.hr-kpi-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.hr-kpi-value {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 1.45rem;
+  font-weight: 700;
+  color: var(--teal-deep);
+}
+
+.hr-kpi.ok .hr-kpi-value { color: var(--success); }
+.hr-kpi.warn .hr-kpi-value { color: var(--warning); }
+.hr-kpi.danger .hr-kpi-value { color: var(--danger); }
+
+.hr-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.hr-quick-actions button {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.85rem;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--teal-deep);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+
+.hr-quick-actions button:hover {
+  border-color: var(--teal);
+  background: var(--teal-soft);
+}
+
+.hr-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: end;
+  padding: 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.hr-toolbar .field {
+  min-width: 8rem;
+}
+
+.hr-totals-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.7rem 0.9rem;
+  background: var(--teal-soft);
+  border: 1px solid color-mix(in srgb, var(--teal) 30%, var(--line));
+  border-radius: var(--radius);
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--teal-deep);
+}
+
+.hr-totals-bar .num {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+.hr-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+}
+
+.hr-toggle.on {
+  background: var(--success-soft);
+  border-color: color-mix(in srgb, var(--success) 40%, var(--line));
+  color: var(--success);
+}
+
+.hr-toggle.off {
+  background: var(--danger-soft);
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--line));
+  color: var(--danger);
+}
+
+.hr-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: var(--surface2);
+  color: var(--muted);
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.hr-badge-ok {
+  background: var(--success-soft);
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 35%, var(--line));
+}
+
+.hr-badge-warn {
+  background: var(--warning-soft);
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 35%, var(--line));
+}
+
+.hr-badge-danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--line));
+}
+
+.hr-badge-info {
+  background: var(--info-soft);
+  color: var(--info);
+  border-color: color-mix(in srgb, var(--info) 35%, var(--line));
+}
+
+.hr-table-wrap {
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+
+.hr-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 960px;
+  font-size: 0.9rem;
+}
+
+.hr-table th,
+.hr-table td {
+  padding: 0.55rem 0.6rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.hr-table th {
+  position: sticky;
+  top: 0;
+  background: var(--surface2);
+  font-family: "Outfit", sans-serif;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+  z-index: 1;
+}
+
+/* —— Employee Master: full-width, readable, iPad-safe —— */
+.hr-emp-master {
+  display: grid;
+  gap: 0.85rem;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.hr-emp-master .hr-toolbar {
+  align-items: end;
+}
+
+.hr-emp-filters {
+  display: grid;
+  grid-template-columns: minmax(10rem, 1.4fr) repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: 0.65rem;
+  align-items: end;
+  min-width: 0;
+  flex: 1 1 36rem;
+}
+
+.hr-emp-filters .field {
+  min-width: 0;
+}
+
+.hr-emp-filters .field > span,
+.hr-emp-form .field > span {
+  font-size: 0.94rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.hr-emp-filters input,
+.hr-emp-filters select,
+.hr-emp-form input,
+.hr-emp-form select {
+  font-size: 1rem;
+  min-height: 2.75rem;
+  padding: 0.6rem 0.75rem;
+}
+
+.hr-emp-toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: end;
+  justify-content: space-between;
+}
+
+.hr-emp-toolbar-row .hr-emp-filters {
+  flex: 1 1 36rem;
+}
+
+.hr-emp-toolbar-row > .primary-save {
+  flex: 0 0 auto;
+  min-height: 2.75rem;
+  padding: 0.65rem 1.15rem;
+  white-space: nowrap;
+}
+
+.hr-emp-count {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.hr-emp-table-wrap {
+  display: block !important;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.hr-emp-table {
+  width: 100%;
+  min-width: 1100px;
+  border-collapse: collapse;
+  table-layout: auto;
+  font-size: 0.9375rem; /* 15px */
+  color: var(--text);
+}
+
+.hr-emp-table th,
+.hr-emp-table td {
+  padding: 0.85rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.hr-emp-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface2);
+  font-family: "Outfit", sans-serif;
+  font-size: 0.9375rem; /* 15px */
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--text);
+}
+
+.hr-emp-table tbody tr:hover {
+  background: color-mix(in srgb, var(--teal-soft) 55%, transparent);
+}
+
+.hr-emp-table .hr-emp-name,
+.hr-emp-table .hr-emp-desig,
+.hr-emp-table .hr-emp-dept,
+.hr-emp-table .hr-emp-shift {
+  white-space: normal;
+  word-break: break-word;
+  max-width: 16rem;
+  min-width: 7rem;
+  line-height: 1.35;
+}
+
+.hr-emp-table .hr-emp-actions {
+  position: sticky;
+  right: 0;
+  background: var(--surface);
+  box-shadow: -6px 0 10px -8px rgba(15, 40, 60, 0.25);
+  z-index: 1;
+}
+
+.hr-emp-table thead .hr-emp-actions {
+  background: var(--surface2);
+  z-index: 3;
+}
+
+.hr-emp-table tbody tr:hover .hr-emp-actions {
+  background: color-mix(in srgb, var(--teal-soft) 55%, var(--surface));
+}
+
+.hr-emp-actions .share-actions {
+  flex-wrap: nowrap;
+  gap: 0.35rem;
+}
+
+.hr-emp-actions .btn-ghost {
+  min-height: 2.4rem;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.hr-emp-form {
+  display: grid;
+  gap: 1rem;
+  padding: 1.1rem 1.15rem 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.hr-emp-form .section-title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--teal-deep);
+}
+
+.hr-emp-section {
+  display: grid;
+  gap: 0.75rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--line);
+}
+
+.hr-emp-section:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.hr-emp-section-title {
+  margin: 0;
+  font-family: "Outfit", sans-serif;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.hr-emp-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.85rem 1rem;
+}
+
+.hr-emp-form .field.has-error input,
+.hr-emp-form .field.has-error select {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.hr-emp-field-error {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--danger);
+}
+
+.hr-emp-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+}
+
+.hr-emp-checks .check-row {
+  font-size: 0.95rem;
+  min-height: 2.4rem;
+  align-items: center;
+}
+
+.hr-emp-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  padding-top: 0.35rem;
+}
+
+.hr-emp-form-actions .primary-save,
+.hr-emp-form-actions .btn-ghost {
+  min-height: 2.75rem;
+  padding: 0.65rem 1.25rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+/* Use full content width on iPad + desktop for Employee Master */
+@media (min-width: 768px) {
+  .app-shell[data-screen='hr-payroll'] .app-main {
+    max-width: none;
+    width: 100%;
+  }
+}
+
+@media (max-width: 1199px) {
+  .hr-emp-filters {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .hr-emp-filters .hr-emp-search {
+    grid-column: 1 / -1;
+  }
+
+  .hr-emp-toolbar-row > .primary-save {
+    width: 100%;
+  }
+
+  /* Priority columns when content is iPad-narrow; secondary via Edit / desktop */
+  .hr-emp-table {
+    min-width: 0;
+    width: 100%;
+    font-size: 0.9rem;
+  }
+
+  .hr-emp-table th {
+    font-size: 0.9rem;
+  }
+
+  .hr-emp-table .hr-emp-secondary {
+    display: none;
+  }
+
+  .hr-emp-table .hr-emp-name,
+  .hr-emp-table .hr-emp-desig,
+  .hr-emp-table .hr-emp-dept {
+    max-width: 12rem;
+    min-width: 5.5rem;
+  }
+
+  .hr-emp-table .hr-emp-actions {
+    position: static;
+    box-shadow: none;
+  }
+}
+
+@media (min-width: 1200px) {
+  .hr-emp-table {
+    min-width: 1100px;
+  }
+
+  .hr-emp-toolbar-row {
+    flex-wrap: nowrap;
+    align-items: end;
+  }
+
+  .hr-emp-toolbar-row .hr-emp-filters {
+    flex: 1 1 auto;
+  }
+
+  .hr-emp-toolbar-row > .primary-save {
+    width: auto;
+    margin-bottom: 0.1rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .hr-emp-filters {
+    grid-template-columns: 1fr;
+  }
+}
+
+.hr-table tbody tr:hover {
+  background: color-mix(in srgb, var(--teal-soft) 55%, transparent);
+}
+
+.hr-table input[type="time"],
+.hr-table input[type="text"],
+.hr-table input[type="number"],
+.hr-table select {
+  width: 100%;
+  min-width: 5.5rem;
+  font-size: 0.8rem;
+}
+
+.hr-row-dirty {
+  background: var(--warning-soft);
+}
+
+.hr-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.65rem;
+}
+
+.hr-att-cards {
+  display: none;
+}
+
+.hr-report-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.75rem;
+}
+
+.hr-report-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1rem;
+  box-shadow: var(--shadow-sm);
+  display: grid;
+  gap: 0.4rem;
+  cursor: pointer;
+}
+
+.hr-report-card:hover {
+  border-color: var(--teal);
+}
+
+.hr-report-card strong {
+  font-family: "Outfit", sans-serif;
+  color: var(--teal-deep);
+}
+
+/* Bank salary letter — A4 print */
+.hr-letter {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  padding: 1.5rem;
+  max-width: 210mm;
+  margin: 0 auto;
+  color: #111;
+}
+
+.hr-letter-head {
+  text-align: center;
+  border-bottom: 2px solid var(--teal);
+  padding-bottom: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.hr-letter-head h1 {
+  margin: 0;
+  font-family: "Outfit", sans-serif;
+  font-size: 1.25rem;
+  letter-spacing: 0.04em;
+  color: var(--teal-deep);
+}
+
+.hr-letter-head p {
+  margin: 0.2rem 0 0;
+  color: #555;
+  font-size: 0.85rem;
+}
+
+.hr-letter h2 {
+  text-align: center;
+  font-family: "Outfit", sans-serif;
+  font-size: 1.05rem;
+  letter-spacing: 0.08em;
+  margin: 1rem 0;
+}
+
+.hr-letter-meta {
+  display: grid;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.hr-letter table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.hr-letter th,
+.hr-letter td {
+  border: 1px solid #c9d4e0;
+  padding: 0.4rem 0.45rem;
+  text-align: left;
+}
+
+.hr-letter th {
+  background: #eef3f8;
+}
+
+.hr-letter-totals {
+  margin-top: 1rem;
+  font-size: 0.9rem;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.hr-letter-auth {
+  margin-top: 2rem;
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.hr-letter-sign {
+  margin-top: 1.5rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+.hr-letter-sign .box {
+  border-top: 1px solid #999;
+  padding-top: 0.4rem;
+  min-height: 4rem;
+  font-size: 0.82rem;
+  color: #444;
+}
+
+/* —— Attendance date-range matrix —— */
+.hr-att-matrix-screen {
+  max-width: 100%;
+}
+
+.hr-att-toolbar {
+  align-items: end;
+}
+
+.hr-att-range-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  grid-column: 1 / -1;
+}
+
+.hr-att-preset {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.4rem 0.65rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.hr-att-preset.active,
+.hr-att-preset:hover {
+  background: var(--teal-soft);
+  border-color: var(--teal);
+  color: var(--teal-deep);
+}
+
+.hr-att-search {
+  min-width: 12rem;
+}
+
+.hr-att-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.hr-att-summary-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.65rem 0.85rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: 0.92rem;
+}
+
+.hr-att-matrix-wrap {
+  overflow: auto;
+  max-width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  -webkit-overflow-scrolling: touch;
+}
+
+.hr-att-matrix-wrap.compact {
+  max-width: 100%;
+}
+
+.hr-att-matrix {
+  border-collapse: separate;
+  border-spacing: 0;
+  min-width: max-content;
+  width: 100%;
+  font-size: 0.88rem;
+}
+
+.hr-att-matrix th,
+.hr-att-matrix td {
+  padding: 0.35rem 0.3rem;
+  border-bottom: 1px solid var(--line);
+  text-align: center;
+  vertical-align: middle;
+}
+
+.hr-att-matrix th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--surface2);
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.hr-att-sticky-emp {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  background: var(--surface);
+  text-align: left !important;
+  min-width: 10rem;
+  max-width: 14rem;
+  box-shadow: 4px 0 8px -6px rgba(15, 40, 60, 0.2);
+}
+
+.hr-att-sticky-meta {
+  position: sticky;
+  left: 10rem;
+  z-index: 3;
+  background: var(--surface);
+  text-align: left !important;
+  min-width: 6rem;
+  box-shadow: 4px 0 8px -6px rgba(15, 40, 60, 0.12);
+}
+
+.hr-att-matrix thead .hr-att-sticky-emp,
+.hr-att-matrix thead .hr-att-sticky-meta {
+  background: var(--surface2);
+  z-index: 5;
+}
+
+.hr-att-date-col {
+  min-width: 2.35rem;
+  width: 2.35rem;
+}
+
+.hr-att-sum-col {
+  min-width: 2.5rem;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--teal-soft) 40%, var(--surface));
+}
+
+.hr-att-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  min-height: 2rem;
+  padding: 0.15rem 0.35rem;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+  background: var(--surface2);
+  color: var(--muted);
+}
+
+.hr-att-cell:focus,
+.hr-att-cell.focused {
+  outline: 2px solid var(--teal);
+  outline-offset: 1px;
+}
+
+.hr-att-cell.dirty {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--warning) 45%, transparent);
+}
+
+.hr-att-p { background: var(--success-soft); color: var(--success); border-color: color-mix(in srgb, var(--success) 40%, var(--line)); }
+.hr-att-a { background: var(--danger-soft); color: var(--danger); border-color: color-mix(in srgb, var(--danger) 35%, var(--line)); }
+.hr-att-hd { background: var(--warning-soft); color: var(--warning); border-color: color-mix(in srgb, var(--warning) 35%, var(--line)); }
+.hr-att-l { background: var(--info-soft); color: var(--info); border-color: color-mix(in srgb, var(--info) 35%, var(--line)); }
+.hr-att-wo { background: #e8eef5; color: #4a6078; border-color: #c5d3e0; }
+.hr-att-h { background: #f3e8ff; color: #6b4c9a; border-color: #d8c4f0; }
+.hr-att-empty { background: var(--surface2); color: var(--muted); }
+
+.hr-att-mobile-cards {
+  display: none;
+  gap: 0.75rem;
+}
+
+.hr-att-mobile-card {
+  padding: 0.85rem;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.hr-att-mobile-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.hr-att-mobile-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--teal-deep);
+}
+
+.hr-att-mobile-dates {
+  display: flex;
+  gap: 0.35rem;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+  -webkit-overflow-scrolling: touch;
+}
+
+.hr-att-mobile-dates .hr-att-cell {
+  flex-direction: column;
+  min-width: 2.6rem;
+  min-height: 2.8rem;
+  gap: 0.1rem;
+}
+
+.hr-att-mobile-day {
+  font-size: 0.65rem;
+  color: var(--muted);
+}
+
+.hr-kpi.danger .hr-kpi-value {
+  color: var(--danger);
+}
+
+.hr-report-card.active {
+  border-color: var(--teal);
+  background: var(--teal-soft);
+}
+
+.hr-reports-table-wrap {
+  max-height: 70vh;
+}
+
+/* —— Attendance bulk table view —— */
+.hr-att-view-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.hr-att-bulk-summary {
+  margin-top: 0.25rem;
+}
+
+.hr-att-autosave {
+  margin-left: auto;
+}
+
+.hr-att-bulk-table input[type='time'],
+.hr-att-bulk-table input[type='text'],
+.hr-att-bulk-table select {
+  font-size: 0.88rem;
+  min-height: 2.25rem;
+  padding: 0.35rem 0.45rem;
+}
+
+.hr-att-mark {
+  text-align: center;
+  font-weight: 700;
+  color: var(--teal-deep);
+  width: 2rem;
+}
+
+.hr-att-remarks {
+  min-width: 8rem;
+}
+
+.hr-att-bulk-cards {
+  display: none;
+  gap: 0.75rem;
+}
+
+.screen-header {
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+@media (min-width: 768px) {
+  .app-shell[data-screen='attendance'] .app-main {
+    max-width: none;
+    width: 100%;
+  }
+}
+
+@media (max-width: 900px) {
+  .hr-att-matrix-wrap:not(.compact) {
+    display: none;
+  }
+  .hr-att-mobile-cards:not(.hr-att-bulk-cards) {
+    display: grid;
+  }
+  .hr-att-bulk-wrap {
+    display: none;
+  }
+  .hr-att-bulk-cards {
+    display: grid;
+  }
+}
+
+@media (max-width: 900px) {
+  .hr-table-wrap {
+    display: none;
+  }
+  .hr-att-cards {
+    display: grid;
+  }
+  .hr-screen .hr-table-wrap.hr-force-table {
+    display: block;
+  }
+}
+
+@media print {
+  .app-sidebar,
+  .mobile-topbar,
+  .bottom-nav,
+  .hr-subnav,
+  .hr-toolbar,
+  .hr-quick-actions,
+  .primary-save,
+  .share-actions,
+  .screen-header button,
+  .btn-ghost {
+    display: none !important;
+  }
+  .hr-letter {
+    box-shadow: none;
+    border: none;
+    max-width: none;
+    padding: 0;
+  }
+  .hr-letter-print {
+    break-inside: avoid;
+  }
+}

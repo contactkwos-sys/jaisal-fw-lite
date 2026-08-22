@@ -27,11 +27,14 @@ type MaintItem = { key: string; item_name: string; qty: string; rate: string }
 
 type ReportRow = {
   id: string
-  type: 'General' | 'Weft' | 'Maint In' | 'Repair Inv'
+  type: 'General' | 'Weft' | 'Maint In' | 'Repair Inv' | 'Yarn Stock'
   date: string
   party: string
   docNo: string
   grandTotal: number
+  openingStockKg?: number
+  currentStockKg?: number
+  unit?: string
   created_at: string
   detail: Record<string, unknown>
 }
@@ -191,7 +194,7 @@ export function PurchaseScreen({ initialSub }: Props) {
   }, [])
 
   const loadReport = useCallback(async () => {
-    const [g, w, m, r] = await Promise.all([
+    const [g, w, m, r, yarn] = await Promise.all([
       supabase
         .from('general_purchases')
         .select('*, general_purchase_items(*)')
@@ -212,11 +215,17 @@ export function PurchaseScreen({ initialSub }: Props) {
         .select('*')
         .order('created_at', { ascending: false })
         .limit(100),
+      supabase
+        .from('weft_yarn_stock')
+        .select('*')
+        .order('updated_at', { ascending: false })
+        .limit(200),
     ])
     if (g.error) throw g.error
     if (w.error) throw w.error
     if (m.error) throw m.error
     if (r.error) throw r.error
+    if (yarn.error) throw yarn.error
 
     const rows: ReportRow[] = [
       ...(g.data ?? []).map((row) => ({
@@ -259,6 +268,40 @@ export function PurchaseScreen({ initialSub }: Props) {
         created_at: String(row.created_at),
         detail: row as Record<string, unknown>,
       })),
+      ...(yarn.data ?? []).map((row) => {
+        const colour = String(row.colour_name || '').trim()
+        const colourNo = String(row.colour_no || '').trim()
+        const name = [colour, colourNo].filter(Boolean).join(' ') || 'Yarn'
+        const opening = Number(row.opening_stock ?? 0)
+        const current = Number(row.stock_kg || 0)
+        const unit = String(row.unit || 'KG')
+        return {
+          id: row.id as string,
+          type: 'Yarn Stock' as const,
+          date: String(row.updated_at || row.created_at || '').slice(0, 10),
+          party: `${name}${row.supplier ? ` · ${row.supplier}` : ''}`,
+          docNo: `${opening} ${unit} opening`,
+          grandTotal: current * Number(row.rate_per_kg || 0),
+          openingStockKg: opening,
+          currentStockKg: current,
+          unit,
+          created_at: String(row.updated_at || row.created_at || ''),
+          detail: {
+            colour_name: row.colour_name,
+            colour_no: row.colour_no,
+            supplier: row.supplier,
+            quality: row.quality,
+            yarn_specification: row.yarn_specification,
+            unit,
+            opening_stock_kg: opening,
+            current_stock_kg: current,
+            rate_per_kg: row.rate_per_kg,
+            stock_value: current * Number(row.rate_per_kg || 0),
+            location: row.location,
+            lot_number: row.lot_number,
+          },
+        }
+      }),
     ].sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
 
     setReportRows(rows)
@@ -405,23 +448,69 @@ export function PurchaseScreen({ initialSub }: Props) {
               .eq('supplier', wParty.trim())
               .eq('colour_name', it.quality)
               .maybeSingle()
+            let yarnId: string
+            let newStock: number
             if (existing) {
+              newStock = Number(existing.stock_kg) + it.weight_kg
+              yarnId = existing.id
               const { error: uErr } = await supabase
                 .from('weft_yarn_stock')
                 .update({
-                  stock_kg: Number(existing.stock_kg) + it.weight_kg,
+                  stock_kg: newStock,
+                  rate_per_kg: it.rate,
                   updated_at: new Date().toISOString(),
                 })
                 .eq('id', existing.id)
               if (uErr) throw uErr
             } else {
-              const { error: sErr } = await supabase.from('weft_yarn_stock').insert({
-                supplier: wParty.trim() || null,
-                colour_name: it.quality,
-                stock_kg: it.weight_kg,
-              })
+              newStock = it.weight_kg
+              const { data: inserted, error: sErr } = await supabase
+                .from('weft_yarn_stock')
+                .insert({
+                  supplier: wParty.trim() || null,
+                  colour_name: it.quality,
+                  quality: it.quality,
+                  stock_kg: it.weight_kg,
+                  opening_stock: it.weight_kg,
+                  rate_per_kg: it.rate,
+                })
+                .select('id')
+                .single()
               if (sErr) throw sErr
+              yarnId = inserted.id
             }
+
+            const year = new Date().getFullYear()
+            const { data: lastTxn } = await supabase
+              .from('yarn_stock_ledger')
+              .select('txn_no')
+              .like('txn_no', `INW-${year}-%`)
+              .order('created_at', { ascending: false })
+              .limit(1)
+            let seq = 1
+            const last = lastTxn?.[0]?.txn_no
+            if (last) {
+              const m = String(last).match(/(\d+)\s*$/)
+              if (m) seq = Number(m[1]) + 1
+            }
+            const txn_no = `INW-${year}-${String(seq).padStart(4, '0')}`
+            await supabase.from('yarn_stock_ledger').insert({
+              yarn_id: yarnId,
+              txn_date: wDate,
+              txn_no,
+              txn_type: 'purchase',
+              reference: wChallan.trim() || data.id,
+              inward_kg: it.weight_kg,
+              outward_kg: 0,
+              balance_kg: newStock,
+              rate: it.rate,
+              value_amount: it.weight_kg * it.rate,
+              invoice_no: wChallan.trim() || null,
+              gst_pct: wGst,
+              remarks: 'Weft purchase inward',
+              created_by: profile.id,
+              created_by_name: profile.full_name || profile.roles?.role_name || null,
+            })
           }
         },
       })
@@ -986,6 +1075,7 @@ export function PurchaseScreen({ initialSub }: Props) {
                 <option value="Weft">Weft</option>
                 <option value="Maint In">Maint In</option>
                 <option value="Repair Inv">Repair Inv</option>
+                <option value="Yarn Stock">Yarn Stock</option>
               </select>
             </label>
             <label className="field" style={{ flex: '1 1 120px' }}>
@@ -1011,10 +1101,21 @@ export function PurchaseScreen({ initialSub }: Props) {
                   <strong>
                     {row.type} · {row.party}
                   </strong>
-                  <span className="num text-weft">₹{money(row.grandTotal)}</span>
+                  {row.type === 'Yarn Stock' ? (
+                    <span className="num text-weft">
+                      Open {Number(row.openingStockKg ?? 0).toLocaleString('en-IN')}{' '}
+                      {row.unit || 'KG'} · Now{' '}
+                      {Number(row.currentStockKg ?? 0).toLocaleString('en-IN')} {row.unit || 'KG'}
+                    </span>
+                  ) : (
+                    <span className="num text-weft">₹{money(row.grandTotal)}</span>
+                  )}
                 </div>
                 <div className="text-muted">
                   {row.date} · {row.docNo}
+                  {row.type === 'Yarn Stock'
+                    ? ` · Value ₹${money(row.grandTotal)}`
+                    : ''}
                 </div>
               </button>
             ))}

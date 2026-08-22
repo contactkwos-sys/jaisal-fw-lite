@@ -1,8 +1,11 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+const pagesBase = process.env.GITHUB_PAGES === 'true' ? '/jaisal-fw-lite/' : '/'
+
 // https://vite.dev/config/
 export default defineConfig({
+  base: pagesBase,
   plugins: [react()],
   server: {
     host: true,

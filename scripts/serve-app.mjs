@@ -26,7 +26,17 @@ if (!SUPABASE_URL || !SERVICE_KEY) {
 }
 
 const admin = createClient(SUPABASE_URL, SERVICE_KEY)
-const DEFAULT_ROLES = ['CEO', 'Programmer', 'Security', 'Operator']
+const DEFAULT_ROLES = [
+  'CEO',
+  'Manager',
+  'Machine Supervisor',
+  'Salesman',
+  'Checker & Dispatch',
+  'Program Supervisor',
+  'Programmer',
+  'Security',
+  'Operator',
+]
 
 function cors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -78,12 +88,24 @@ async function verifyPin(pin, stored) {
 
 async function handleRoles(body) {
   const action = body.action || 'list'
-  if (action === 'list') {
+  if (action === 'list' || action === 'ensure') {
     const { data, error } = await admin
       .from('roles')
       .select('id, role_name, is_custom, created_at')
       .order('created_at', { ascending: true })
-    if (!error && data?.length) return { roles: data }
+    let rows = !error && data ? data : []
+    const have = new Set(rows.map((r) => r.role_name))
+    const missing = DEFAULT_ROLES.filter((name) => !have.has(name))
+    if (missing.length) {
+      await admin.from('roles').insert(missing.map((role_name) => ({ role_name, is_custom: false })))
+      const again = await admin
+        .from('roles')
+        .select('id, role_name, is_custom, created_at')
+        .order('created_at', { ascending: true })
+      if (!again.error && again.data?.length) rows = again.data
+    }
+    if (rows.length) return { roles: rows }
+
     const { data: listed } = await admin.auth.admin.listUsers({ perPage: 200 })
     const fromUsers = (listed?.users || [])
       .map((u) => u.user_metadata?.role_name)

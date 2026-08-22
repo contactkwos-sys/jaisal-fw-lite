@@ -1,0 +1,561 @@
+/* Program & Dispatch — JAISAL FW professional ERP */
+
+.pd-screen {
+  gap: 0;
+  padding-bottom: 5rem;
+}
+
+.pd-hub-header,
+.pd-sub-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.pd-eyebrow {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--teal);
+}
+
+.pd-hub-header h1,
+.pd-sub-header h1 {
+  margin: 0.15rem 0;
+  font-size: clamp(1.35rem, 2.5vw, 1.75rem);
+  color: var(--text);
+}
+
+.pd-lead {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  max-width: 36rem;
+}
+
+.pd-date-chip {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.45rem 0.75rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+}
+
+/* Workflow strip */
+.pd-workflow {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.pd-workflow-step {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  padding: 0.65rem 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.pd-workflow-step:hover {
+  border-color: var(--teal);
+  box-shadow: var(--shadow-sm);
+}
+
+.pd-workflow-num {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 999px;
+  background: var(--teal-soft);
+  color: var(--teal-deep);
+  font-size: 0.75rem;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+
+.pd-workflow-label {
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.pd-workflow-hint {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+/* Quick actions */
+.pd-quick-actions,
+.pd-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.pd-qa {
+  border: none;
+  border-radius: var(--radius);
+  padding: 0.65rem 1rem;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: #fff;
+  cursor: pointer;
+  min-height: 2.75rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.pd-qa:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pd-qa-blue { background: #1769c2; }
+.pd-qa-green { background: #16a34a; }
+.pd-qa-purple { background: #7c3aed; }
+.pd-qa-orange { background: #d97706; }
+.pd-qa-teal { background: #0f766e; }
+.pd-qa-slate { background: #475569; }
+.pd-qa-brown { background: #92400e; }
+
+/* KPIs */
+.pd-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+}
+
+.pd-kpi {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.pd-kpi span {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.pd-kpi strong {
+  font-size: 1.35rem;
+  font-variant-numeric: tabular-nums;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+.pd-kpi em {
+  font-style: normal;
+  font-size: 0.7rem;
+  color: var(--muted2);
+}
+
+.pd-kpi-blue { border-top: 3px solid #1769c2; }
+.pd-kpi-green { border-top: 3px solid #16a34a; }
+.pd-kpi-teal { border-top: 3px solid #0f766e; }
+.pd-kpi-orange { border-top: 3px solid #d97706; }
+.pd-kpi-brown { border-top: 3px solid #92400e; }
+.pd-kpi-purple { border-top: 3px solid #7c3aed; }
+.pd-kpi-slate { border-top: 3px solid #64748b; }
+
+/* Panels */
+.pd-panels {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.pd-panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.85rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.pd-panel-h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+}
+
+.pd-panel-h h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.pd-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pd-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  min-width: 640px;
+}
+
+.pd-table th,
+.pd-table td {
+  padding: 0.45rem 0.55rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.pd-table th {
+  background: var(--teal-soft);
+  color: var(--teal-deep);
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+}
+
+.pd-table tr.is-selected {
+  background: var(--teal-soft);
+}
+
+.pd-table-compact {
+  min-width: 480px;
+}
+
+.pd-pill {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.pd-pill.ok { background: var(--success-soft); color: var(--success); }
+.pd-pill.pending { background: var(--warning-soft); color: var(--warning); }
+.pd-pill.run { background: var(--info-soft); color: var(--info); }
+
+.btn-sm {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.65rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 2.25rem;
+  color: var(--teal-deep);
+}
+
+.btn-sm:hover {
+  background: var(--teal-soft);
+}
+
+.pd-marka {
+  color: var(--teal-deep);
+  letter-spacing: 0.04em;
+}
+
+.pd-order-detail {
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  background: var(--surface2);
+  border-radius: var(--radius);
+}
+
+.pd-order-detail h3 {
+  margin: 0 0 0.65rem;
+  font-size: 1rem;
+}
+
+.pd-detail-grid,
+.pd-autofill,
+.pd-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.65rem;
+}
+
+.pd-detail-grid > div,
+.pd-autofill > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.pd-detail-grid span,
+.pd-autofill span {
+  font-size: 0.7rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.pd-span-2 {
+  grid-column: span 2;
+}
+
+.pd-program-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.65rem;
+  margin-top: 0.75rem;
+  align-items: end;
+}
+
+.pd-autofill {
+  background: var(--teal-soft);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  margin: 0.75rem 0;
+}
+
+.pd-machine-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.pd-machine-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.65rem;
+  background: var(--bg);
+}
+
+.pd-machine-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.pd-machine-card h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.pd-empty {
+  padding: 1rem;
+}
+
+/* Progress footer */
+.pd-progress-bar {
+  margin-top: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: var(--shadow-sm);
+}
+
+.pd-progress-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.pd-progress-metrics strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.pd-progress-track {
+  position: relative;
+  flex: 1;
+  min-width: 160px;
+  max-width: 280px;
+  height: 1.5rem;
+  background: var(--surface2);
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+
+.pd-progress-lg {
+  max-width: none;
+  height: 2rem;
+  margin-bottom: 1rem;
+}
+
+.pd-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #1769c2, #0f766e);
+  border-radius: 999px;
+  transition: width 0.35s ease;
+}
+
+.pd-progress-track > span {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.pd-final-meter {
+  font-weight: 700;
+  color: var(--success);
+}
+
+.pd-damage-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.5rem;
+  padding: 0.65rem;
+  background: var(--danger-soft);
+  border-radius: var(--radius);
+  margin-bottom: 0.5rem;
+}
+
+.pd-split {
+  display: grid;
+  grid-template-columns: minmax(200px, 280px) 1fr;
+  gap: 1rem;
+}
+
+.pd-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.pd-list button {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.65rem;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.pd-list button.is-active {
+  border-color: var(--teal);
+  background: var(--teal-soft);
+}
+
+.pd-list button span {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.pd-tax-box {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  padding: 0.85rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin: 0.75rem 0 1rem;
+  font-size: 0.9rem;
+}
+
+.pd-grand {
+  margin-left: auto;
+  font-size: 1.05rem;
+}
+
+.checkbox-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.checkbox-field input[type='checkbox'] {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.form-success {
+  color: var(--success);
+  background: var(--success-soft);
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-sm);
+  margin: 0.5rem 0;
+}
+
+/* Responsive */
+@media (max-width: 1023px) {
+  .pd-workflow {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .pd-kpi-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .pd-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .pd-workflow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .pd-kpi-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .pd-quick-actions .pd-qa {
+    flex: 1 1 calc(50% - 0.5rem);
+  }
+  .pd-span-2 {
+    grid-column: span 1;
+  }
+  .pd-progress-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .pd-progress-track {
+    max-width: none;
+  }
+  .pd-machine-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media print {
+  .app-sidebar,
+  .hamburger,
+  .bottom-nav,
+  .pd-quick-actions,
+  .pd-action-row,
+  .btn-sm {
+    display: none !important;
+  }
+  .pd-screen {
+    padding: 0;
+  }
+}

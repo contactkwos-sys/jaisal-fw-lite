@@ -100,12 +100,13 @@ export function SampleRegister() {
   return (
     <div className="screen sample-register-screen">
       <header className="screen-header no-print">
-        <h1>Sample Register</h1>
+        <h1>Sample Register (Archive)</h1>
+        <p className="text-muted">Archive / report · live DESI workflow is Sample Tracking</p>
       </header>
 
       <div className="no-print sample-stats">
         <article className="surface sample-stat">
-          <span className="text-muted">Total DIN Issued</span>
+          <span className="text-muted">Total DESI Issued</span>
           <strong className="num text-weft">{stats.total}</strong>
         </article>
         <article className="surface sample-stat">
@@ -139,7 +140,7 @@ export function SampleRegister() {
         <table className="dash-table sample-register-table">
           <thead>
             <tr>
-              <th>DIN No.</th>
+              <th>DESI No.</th>
               <th>Date</th>
               <th>Machine</th>
               <th>Work/Quality</th>

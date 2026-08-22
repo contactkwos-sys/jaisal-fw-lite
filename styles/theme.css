@@ -1,24 +1,78 @@
 /**
- * Jaisal FW Lite — design tokens
- * Textile-inspired palette: warp (blue), weft (gold), greige (neutral yarn)
+ * JAISAL FW — Fashionweave Industries design tokens
+ * Light industrial: brand blue primary, white cards, cool grey canvas
  */
 :root {
-  --bg: #14171c;
-  --surface: #1c2027;
-  --surface2: #232833;
-  --line: #2d323d;
+  /* Surfaces */
+  --bg: #f5f7fa;
+  --surface: #ffffff;
+  --surface2: #eef2f6;
+  --line: #d9e1ea;
 
-  --warp: #5b7fb0; /* blue accent — warp yarn */
-  --warp-soft: #3a4a63;
-  --weft: #d9a441; /* gold accent — weft yarn, primary buttons */
-  --weft-soft: #4a3f26;
-  --greige: #b8ad98;
-  --sage: #7a9a7f; /* success / positive numbers */
+  /* Brand — JAISAL FW Blue */
+  --teal: #1769c2;
+  --teal-deep: #1254a0;
+  --teal-soft: #e8f1fb;
+  --mint: #1769c2;
+  --mint-soft: #e8f1fb;
 
-  --text: #ede9e2;
-  --muted: #9096a1;
-  --muted2: #6b7280;
+  /* Accents */
+  --amber: #d97706;
+  --amber-soft: #fff7ed;
+  --purple-soft: #eef2f6;
+  --orange-soft: #fff7ed;
+  --blue-soft: #e8f1fb;
 
-  --danger: #c96a5a;
-  --wa: #5fb583; /* WhatsApp button green */
+  /* Inventory / module hub pastel tones */
+  --hub-purple: #5b6b7c;
+  --hub-purple-soft: #eef2f6;
+  --hub-green: #16a34a;
+  --hub-green-soft: #ecfdf3;
+  --hub-orange: #d97706;
+  --hub-orange-soft: #fff7ed;
+  --hub-blue: #1769c2;
+  --hub-blue-soft: #e8f1fb;
+  --hub-pink: #dc2626;
+  --hub-pink-soft: #fef2f2;
+  --hub-teal: #0f766e;
+  --hub-teal-soft: #ecfdf8;
+  --hub-amber: #d97706;
+  --hub-amber-soft: #fff7ed;
+  --hub-slate: #5a6b7d;
+  --hub-slate-soft: #eef1f4;
+  --hub-violet: #5b6b7c;
+  --hub-violet-soft: #eef2f6;
+  --sidebar-bg: #f8fafc;
+
+  /* Legacy aliases */
+  --warp: var(--teal);
+  --warp-soft: var(--teal-soft);
+  --weft: var(--amber);
+  --weft-soft: var(--amber-soft);
+  --greige: #64748b;
+  --sage: #16a34a;
+
+  /* Text */
+  --text: #1e293b;
+  --muted: #64748b;
+  --muted2: #94a3b8;
+
+  /* Status */
+  --success: #16a34a;
+  --success-soft: #ecfdf3;
+  --warning: #d97706;
+  --warning-soft: #fff7ed;
+  --danger: #dc2626;
+  --danger-soft: #fef2f2;
+  --info: #1769c2;
+  --info-soft: #e8f1fb;
+  --wa: #25a366;
+
+  /* Elevation — subtle, professional */
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 2px 6px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --radius: 6px;
+  --radius-sm: 4px;
+  --sidebar-w: 16.5rem;
+  --sidebar-collapsed: 4.25rem;
 }

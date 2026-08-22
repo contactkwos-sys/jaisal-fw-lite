@@ -1,11 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../lib/auth'
 import type { DesignCatalog } from '../lib/database.types'
 import {
-  CATALOG_CUSTOMERS_PLACEHOLDER,
+  downloadTextFile,
+  exportCustomersCsv,
+  fetchCrmCustomers,
+} from '../lib/crmCustomers'
+import {
   catalogShareCaption,
   fetchDesignCatalog,
   insertDesignCatalog,
+  loadCatalogCustomers,
   nextCatalogDesignNo,
   shareCatalogDesign,
   uploadCatalogImage,
@@ -13,6 +18,14 @@ import {
 } from '../lib/designCatalog'
 
 type ShareMode = 'one' | 'broadcast'
+
+type BulkRow = {
+  key: string
+  file: File
+  previewUrl: string
+  designNo: number
+  jfgNo: string
+}
 
 function useObjectUrl(file: File | null) {
   const [url, setUrl] = useState<string | null>(null)
@@ -45,22 +58,48 @@ export function DesignCatalogScreen() {
   const designPreview = useObjectUrl(designFile)
   const matchingPreview = useObjectUrl(matchingFile)
 
+  const [bulkOpen, setBulkOpen] = useState(false)
+  const [bulkRows, setBulkRows] = useState<BulkRow[]>([])
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(
+    null,
+  )
+  const bulkFileRef = useRef<HTMLInputElement>(null)
+
   const [shareRow, setShareRow] = useState<DesignCatalog | null>(null)
   const [shareMode, setShareMode] = useState<ShareMode>('one')
   const [customerQuery, setCustomerQuery] = useState('')
   const [selectedCustomerId, setSelectedCustomerId] = useState('')
-  const [manualPhone, setManualPhone] = useState('')
-
-  const customers = CATALOG_CUSTOMERS_PLACEHOLDER
+  const [customers, setCustomers] = useState<CatalogCustomerStub[]>([])
+  const [broadcastIndex, setBroadcastIndex] = useState(0)
+  const [broadcastActive, setBroadcastActive] = useState(false)
 
   const load = useCallback(async () => {
     const data = await fetchDesignCatalog()
     setRows(data)
   }, [])
 
+  const loadCustomers = useCallback(async () => {
+    const list = await loadCatalogCustomers()
+    setCustomers(list)
+  }, [])
+
   useEffect(() => {
     void load().catch((e: Error) => setError(e.message))
   }, [load])
+
+  useEffect(() => {
+    void loadCustomers().catch(() => {
+      /* share modal will show empty */
+    })
+  }, [loadCustomers])
+
+  const bulkRowsRef = useRef(bulkRows)
+  bulkRowsRef.current = bulkRows
+  useEffect(() => {
+    return () => {
+      for (const r of bulkRowsRef.current) URL.revokeObjectURL(r.previewUrl)
+    }
+  }, [])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -78,12 +117,20 @@ export function DesignCatalogScreen() {
     return customers.filter(
       (c) =>
         c.name.toLowerCase().includes(q) ||
-        c.whatsapp.includes(q),
+        c.whatsapp.includes(q) ||
+        c.whatsapp.replace(/\D/g, '').includes(q.replace(/\D/g, '')),
     )
   }, [customers, customerQuery])
 
   const selectedCustomer: CatalogCustomerStub | null =
     customers.find((c) => c.id === selectedCustomerId) ?? null
+
+  const broadcastTargets = useMemo(
+    () => customers.filter((c) => c.whatsapp.replace(/\D/g, '').length >= 10),
+    [customers],
+  )
+
+  const broadcastCurrent = broadcastTargets[broadcastIndex] ?? null
 
   async function openAddForm() {
     setError(null)
@@ -99,6 +146,109 @@ export function DesignCatalogScreen() {
       setDesignNo('1')
     }
     setFormOpen(true)
+  }
+
+  function clearBulkRows() {
+    setBulkRows((prev) => {
+      for (const r of prev) URL.revokeObjectURL(r.previewUrl)
+      return []
+    })
+    setBulkProgress(null)
+    if (bulkFileRef.current) bulkFileRef.current.value = ''
+  }
+
+  async function openBulkForm() {
+    setError(null)
+    setMessage(null)
+    clearBulkRows()
+    setBulkOpen(true)
+  }
+
+  async function handleBulkFiles(fileList: FileList | null) {
+    if (!fileList?.length) return
+    setError(null)
+    const images = Array.from(fileList).filter((f) => f.type.startsWith('image/'))
+    if (images.length === 0) {
+      setError('Select image files only')
+      return
+    }
+    let startNo = 1
+    try {
+      startNo = await nextCatalogDesignNo()
+    } catch {
+      startNo = 1
+    }
+    // Continue numbering after any rows already staged
+    const afterStaged = bulkRows.length
+      ? Math.max(...bulkRows.map((r) => r.designNo)) + 1
+      : startNo
+    const base = Math.max(startNo, afterStaged)
+    const nextRows: BulkRow[] = images.map((file, i) => ({
+      key: `${Date.now()}-${i}-${file.name}`,
+      file,
+      previewUrl: URL.createObjectURL(file),
+      designNo: base + i,
+      jfgNo: '',
+    }))
+    setBulkRows((prev) => [...prev, ...nextRows])
+  }
+
+  function updateBulkJfg(key: string, jfg: string) {
+    setBulkRows((prev) => prev.map((r) => (r.key === key ? { ...r, jfgNo: jfg } : r)))
+  }
+
+  function removeBulkRow(key: string) {
+    setBulkRows((prev) => {
+      const hit = prev.find((r) => r.key === key)
+      if (hit) URL.revokeObjectURL(hit.previewUrl)
+      const remaining = prev.filter((r) => r.key !== key)
+      if (remaining.length === 0) return remaining
+      // Re-sequence design numbers from the first remaining row's number chain
+      const first = remaining[0].designNo
+      return remaining.map((r, i) => ({ ...r, designNo: first + i }))
+    })
+  }
+
+  async function handleBulkSaveAll() {
+    if (!profile) return
+    if (bulkRows.length === 0) {
+      setError('Choose at least one photo')
+      return
+    }
+    const missing = bulkRows.filter((r) => !r.jfgNo.trim())
+    if (missing.length > 0) {
+      setError(`Enter JFG No. for all rows (${missing.length} missing)`)
+      return
+    }
+
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    setBulkProgress({ done: 0, total: bulkRows.length })
+    try {
+      for (let i = 0; i < bulkRows.length; i++) {
+        const row = bulkRows[i]
+        const designUrl = await uploadCatalogImage(row.file, 'design')
+        await insertDesignCatalog({
+          design_no: row.designNo,
+          jfg_no: row.jfgNo.trim(),
+          design_image_url: designUrl,
+          matching_image_url: null,
+          notes: null,
+          created_by: profile.id,
+        })
+        setBulkProgress({ done: i + 1, total: bulkRows.length })
+      }
+      setMessage(`Saved ${bulkRows.length} designs`)
+      clearBulkRows()
+      setBulkOpen(false)
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Bulk save failed — fix and retry')
+    } finally {
+      setBusy(false)
+      setBulkProgress(null)
+    }
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -151,21 +301,32 @@ export function DesignCatalogScreen() {
     setShareMode('one')
     setCustomerQuery('')
     setSelectedCustomerId('')
-    setManualPhone('')
+    setBroadcastActive(false)
+    setBroadcastIndex(0)
     setError(null)
     setMessage(null)
+    void loadCustomers().catch(() => undefined)
   }
 
   async function handleShareSubmit() {
     if (!shareRow) return
 
     if (shareMode === 'broadcast') {
-      // Phase 1: CRM broadcast list not connected yet.
-      setMessage('Broadcast to all — customer list TODO (CRM phase). No recipients yet.')
+      if (broadcastTargets.length === 0) {
+        setMessage('No CRM customers with WhatsApp numbers yet.')
+        return
+      }
+      setBroadcastActive(true)
+      setBroadcastIndex(0)
+      setMessage(null)
       return
     }
 
-    const phone = selectedCustomer?.whatsapp || manualPhone.trim() || null
+    if (!selectedCustomer) {
+      setError('Select a customer from CRM')
+      return
+    }
+
     setBusy(true)
     setError(null)
     setMessage(null)
@@ -175,18 +336,16 @@ export function DesignCatalogScreen() {
         caption,
         designImageUrl: shareRow.design_image_url,
         matchingImageUrl: shareRow.matching_image_url,
-        phone,
+        phone: selectedCustomer.whatsapp,
       })
       if (result === 'shared') {
-        setMessage('Share sheet opened — pick WhatsApp / WhatsApp Business')
+        setMessage(`Shared to ${selectedCustomer.name}`)
         setShareRow(null)
       } else if (result === 'cancelled') {
         setMessage('Share cancelled')
       } else if (result === 'fallback-text') {
         setMessage(
-          phone
-            ? 'Opened WhatsApp with caption — attach both images if the browser could not share files.'
-            : 'Browser could not attach images. Caption shared — attach Design + Matching manually if needed.',
+          'Opened WhatsApp with caption — attach both images if the browser could not share files.',
         )
       } else {
         setMessage('Opened WhatsApp text fallback')
@@ -198,6 +357,48 @@ export function DesignCatalogScreen() {
     }
   }
 
+  async function shareBroadcastCurrent() {
+    if (!shareRow || !broadcastCurrent) return
+    setBusy(true)
+    setError(null)
+    try {
+      const caption = catalogShareCaption(shareRow.design_no, shareRow.jfg_no)
+      await shareCatalogDesign({
+        caption,
+        designImageUrl: shareRow.design_image_url,
+        matchingImageUrl: shareRow.matching_image_url,
+        phone: broadcastCurrent.whatsapp,
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Share failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function advanceBroadcast(skip = false) {
+    if (!skip) {
+      /* already shared via shareBroadcastCurrent */
+    }
+    const next = broadcastIndex + 1
+    if (next >= broadcastTargets.length) {
+      setBroadcastActive(false)
+      setMessage(`Broadcast finished — ${broadcastTargets.length} customers`)
+      setShareRow(null)
+      return
+    }
+    setBroadcastIndex(next)
+  }
+
+  async function exportBroadcastCsv() {
+    if (!shareRow) return
+    const full = await fetchCrmCustomers()
+    const caption = catalogShareCaption(shareRow.design_no, shareRow.jfg_no)
+    const csv = exportCustomersCsv(full, caption)
+    downloadTextFile(`design-${shareRow.design_no}-broadcast.csv`, csv)
+    setMessage('CSV downloaded')
+  }
+
   return (
     <div className="screen dna-screen">
       <header className="screen-header dna-header">
@@ -205,9 +406,14 @@ export function DesignCatalogScreen() {
           <h1>Design Catalog</h1>
           <p className="text-muted">DNA — design + matching photos for WhatsApp sharing</p>
         </div>
-        <button type="button" className="primary-save dna-add-btn" onClick={() => void openAddForm()}>
-          + Add New Design
-        </button>
+        <div className="dna-header-actions">
+          <button type="button" className="btn-ghost dna-add-btn" onClick={() => void openBulkForm()}>
+            Bulk Add Designs
+          </button>
+          <button type="button" className="primary-save dna-add-btn" onClick={() => void openAddForm()}>
+            + Add New Design
+          </button>
+        </div>
       </header>
 
       <div className="dna-toolbar">
@@ -226,8 +432,12 @@ export function DesignCatalogScreen() {
         </p>
       </div>
 
-      {error ? <p className="form-error text-danger">{error}</p> : null}
-      {message ? <p className="form-ok text-sage">{message}</p> : null}
+      {error && !formOpen && !bulkOpen && !shareRow ? (
+        <p className="form-error text-danger">{error}</p>
+      ) : null}
+      {message && !formOpen && !bulkOpen && !shareRow ? (
+        <p className="form-ok text-sage">{message}</p>
+      ) : null}
 
       {filtered.length === 0 ? (
         <p className="text-muted dna-empty">
@@ -245,7 +455,11 @@ export function DesignCatalogScreen() {
                   <span className="dna-thumb-label">Design</span>
                 </div>
                 <div className="dna-thumb">
-                  <img src={row.matching_image_url} alt={`Matching ${row.jfg_no}`} />
+                  {row.matching_image_url ? (
+                    <img src={row.matching_image_url} alt={`Matching ${row.jfg_no}`} />
+                  ) : (
+                    <div className="dna-thumb-empty">No matching</div>
+                  )}
                   <span className="dna-thumb-label">Matching</span>
                 </div>
               </div>
@@ -273,6 +487,7 @@ export function DesignCatalogScreen() {
           <div className="dna-modal-backdrop" onClick={() => !busy && setFormOpen(false)} />
           <div className="dna-modal-panel surface">
             <h2 id="dna-form-title">Add New Design</h2>
+            {error ? <p className="form-error text-danger">{error}</p> : null}
             <form className="form-stack dna-form" onSubmit={(e) => void handleSave(e)}>
               <label className="field">
                 <span className="text-muted">Design No.</span>
@@ -361,6 +576,118 @@ export function DesignCatalogScreen() {
         </div>
       ) : null}
 
+      {bulkOpen ? (
+        <div className="dna-modal" role="dialog" aria-modal="true" aria-labelledby="dna-bulk-title">
+          <div
+            className="dna-modal-backdrop"
+            onClick={() => {
+              if (!busy) {
+                clearBulkRows()
+                setBulkOpen(false)
+              }
+            }}
+          />
+          <div className="dna-modal-panel dna-bulk-panel surface">
+            <h2 id="dna-bulk-title">Bulk Add Designs</h2>
+            <p className="text-muted dna-bulk-hint">
+              Select many design photos. Design No. auto-fills; type JFG No. on each row. Matching
+              photos can be added later.
+            </p>
+            {error ? <p className="form-error text-danger">{error}</p> : null}
+
+            <label className="field dna-bulk-pick">
+              <span className="text-muted">Photos</span>
+              <input
+                ref={bulkFileRef}
+                type="file"
+                accept="image/*"
+                multiple
+                disabled={busy}
+                onChange={(e) => void handleBulkFiles(e.target.files)}
+              />
+              <p className="text-muted2 dna-bulk-count">
+                {bulkRows.length === 0
+                  ? 'No photos selected'
+                  : `${bulkRows.length} photo${bulkRows.length === 1 ? '' : 's'} selected`}
+              </p>
+            </label>
+
+            {bulkRows.length > 0 ? (
+              <ul className="dna-bulk-list">
+                {bulkRows.map((row) => (
+                  <li key={row.key} className="dna-bulk-row">
+                    <img className="dna-bulk-thumb" src={row.previewUrl} alt="" />
+                    <label className="field dna-bulk-no">
+                      <span className="text-muted">Design No.</span>
+                      <input type="number" value={row.designNo} readOnly tabIndex={-1} />
+                    </label>
+                    <label className="field dna-bulk-jfg">
+                      <span className="text-muted">JFG No.</span>
+                      <input
+                        type="text"
+                        placeholder="e.g. JFG2244"
+                        value={row.jfgNo}
+                        disabled={busy}
+                        onChange={(e) => updateBulkJfg(row.key, e.target.value)}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="btn-ghost dna-bulk-remove"
+                      disabled={busy}
+                      aria-label={`Remove design ${row.designNo}`}
+                      onClick={() => removeBulkRow(row.key)}
+                    >
+                      ✕
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+
+            {bulkProgress ? (
+              <div className="dna-bulk-progress" role="status" aria-live="polite">
+                <div className="dna-bulk-progress-bar">
+                  <div
+                    className="dna-bulk-progress-fill"
+                    style={{
+                      width: `${Math.round((bulkProgress.done / bulkProgress.total) * 100)}%`,
+                    }}
+                  />
+                </div>
+                <p className="text-muted">
+                  {bulkProgress.done} of {bulkProgress.total} uploaded…
+                </p>
+              </div>
+            ) : null}
+
+            <div className="dna-modal-actions dna-bulk-footer">
+              <button
+                type="button"
+                className="btn-ghost"
+                disabled={busy}
+                onClick={() => {
+                  clearBulkRows()
+                  setBulkOpen(false)
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="primary-save"
+                disabled={busy || bulkRows.length === 0}
+                onClick={() => void handleBulkSaveAll()}
+              >
+                {busy
+                  ? 'Saving…'
+                  : `Save All${bulkRows.length ? ` (${bulkRows.length})` : ''}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {shareRow ? (
         <div className="dna-modal" role="dialog" aria-modal="true" aria-labelledby="dna-share-title">
           <div className="dna-modal-backdrop" onClick={() => !busy && setShareRow(null)} />
@@ -371,6 +698,8 @@ export function DesignCatalogScreen() {
             <p className="text-muted dna-share-caption">
               {catalogShareCaption(shareRow.design_no, shareRow.jfg_no)}
             </p>
+            {error ? <p className="form-error text-danger">{error}</p> : null}
+            {message ? <p className="form-ok text-sage">{message}</p> : null}
 
             <fieldset className="dna-share-modes">
               <legend className="text-muted">Share options</legend>
@@ -397,7 +726,7 @@ export function DesignCatalogScreen() {
             {shareMode === 'one' ? (
               <div className="dna-customer-pick">
                 <label className="field">
-                  <span className="text-muted">Customer (CRM placeholder)</span>
+                  <span className="text-muted">Customer (CRM)</span>
                   <input
                     type="search"
                     placeholder="Search saved customers…"
@@ -407,7 +736,7 @@ export function DesignCatalogScreen() {
                 </label>
                 {filteredCustomers.length === 0 ? (
                   <p className="text-muted2">
-                    No customers yet — CRM customer list will connect in the next phase.
+                    No CRM customers yet — add them under CRM, or Sync from KMOS.
                   </p>
                 ) : (
                   <select
@@ -422,31 +751,68 @@ export function DesignCatalogScreen() {
                     ))}
                   </select>
                 )}
-                <label className="field">
-                  <span className="text-muted">Or WhatsApp number (optional)</span>
-                  <input
-                    type="tel"
-                    inputMode="tel"
-                    placeholder="e.g. 919876543210"
-                    value={manualPhone}
-                    onChange={(e) => setManualPhone(e.target.value)}
-                  />
-                </label>
+              </div>
+            ) : broadcastActive && broadcastCurrent ? (
+              <div className="dna-broadcast-stub">
+                <p className="text-muted">
+                  Sharing {broadcastIndex + 1} of {broadcastTargets.length}
+                </p>
+                <p>
+                  <strong>{broadcastCurrent.name}</strong>
+                  <br />
+                  <span className="text-muted2">{broadcastCurrent.whatsapp}</span>
+                </p>
+                <div className="dna-modal-actions" style={{ justifyContent: 'flex-start' }}>
+                  <button
+                    type="button"
+                    className="btn-wa"
+                    disabled={busy}
+                    onClick={() => void shareBroadcastCurrent()}
+                  >
+                    {busy ? 'Opening…' : 'Share to this customer'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    disabled={busy}
+                    onClick={() => advanceBroadcast(true)}
+                  >
+                    Skip
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    disabled={busy}
+                    onClick={() => advanceBroadcast(false)}
+                  >
+                    Next
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="dna-broadcast-stub">
                 <p className="text-muted2">
-                  Broadcast will send to all CRM customers with WhatsApp numbers. List is empty
-                  until the CRM phase.
+                  Sequential share to {broadcastTargets.length} CRM customers with WhatsApp
+                  numbers (one share sheet at a time). Or export a CSV list.
                 </p>
-                <button
-                  type="button"
-                  className="btn-wa"
-                  disabled={busy}
-                  onClick={() => void handleShareSubmit()}
-                >
-                  Broadcast to all
-                </button>
+                <div className="dna-modal-actions" style={{ justifyContent: 'flex-start' }}>
+                  <button
+                    type="button"
+                    className="btn-wa"
+                    disabled={busy || broadcastTargets.length === 0}
+                    onClick={() => void handleShareSubmit()}
+                  >
+                    Start broadcast
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    disabled={busy}
+                    onClick={() => void exportBroadcastCsv()}
+                  >
+                    Export CSV
+                  </button>
+                </div>
               </div>
             )}
 
@@ -455,7 +821,10 @@ export function DesignCatalogScreen() {
                 type="button"
                 className="btn-ghost"
                 disabled={busy}
-                onClick={() => setShareRow(null)}
+                onClick={() => {
+                  setShareRow(null)
+                  setBroadcastActive(false)
+                }}
               >
                 Cancel
               </button>
@@ -463,7 +832,7 @@ export function DesignCatalogScreen() {
                 <button
                   type="button"
                   className="btn-wa"
-                  disabled={busy}
+                  disabled={busy || !selectedCustomerId}
                   onClick={() => void handleShareSubmit()}
                 >
                   {busy ? 'Opening…' : 'Open WhatsApp'}

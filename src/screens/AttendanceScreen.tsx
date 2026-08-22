@@ -1,99 +1,300 @@
-import { useCallback, useEffect, useState } from 'react'
-import { computeAttendanceStatus } from '../lib/attendanceStatus'
+/**
+ * Attendance — bulk detail table (default) + date-range matrix for fast P/A/HD/L/WO/H entry.
+ */
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Attendance, Worker } from '../lib/database.types'
+import {
+  ATTENDANCE_STATUS_FILTERS,
+  buildMatrixAttendancePayload,
+  datesBetween,
+  formatDateHeader,
+  matrixBadgeClass,
+  matrixCodeToStatus,
+  nextMatrixCode,
+  resolveDateRangePreset,
+  statusToMatrixCode,
+  summarizeStatuses,
+  type AttendanceSummary,
+  type DateRangePreset,
+  type MatrixCode,
+  workerMatchesAttendanceFilter,
+} from '../lib/attendanceMatrix'
+import { SHIFTS, todayISO } from '../lib/hrPayroll'
 import { supabase } from '../lib/supabase'
+import { AttendanceBulkTable } from '../components/hr/AttendanceBulkTable'
 
-function todayISO() {
-  return new Date().toISOString().slice(0, 10)
+type ViewMode = 'table' | 'matrix'
+
+type CellState = {
+  attendanceId: string | null
+  code: MatrixCode | ''
+  dirty: boolean
 }
 
 type RowState = {
   worker: Worker
-  attendanceId: string | null
-  in_time: string
-  break_out: string
-  break_in: string
-  out_time: string
-  status: string
+  cells: Map<string, CellState>
+  summary: AttendanceSummary
 }
 
-function emptyTimes(): Pick<RowState, 'in_time' | 'break_out' | 'break_in' | 'out_time' | 'status'> {
-  return { in_time: '', break_out: '', break_in: '', out_time: '', status: 'Absent' }
-}
+const DEPT_SUGGESTIONS = [
+  'Weaving',
+  'Folding',
+  'Security',
+  'Maintenance',
+  'Office',
+  'Quality',
+  'Other',
+]
 
-const DEPT_SUGGESTIONS = ['Weaving', 'Folding', 'Security', 'Maintenance', 'Office', 'Other']
+const DEFAULT_MATRIX_CODE: MatrixCode = 'A'
 
 export function AttendanceScreen() {
-  const [date, setDate] = useState(todayISO)
+  const [viewMode, setViewMode] = useState<ViewMode>('table')
+  const [fromDate, setFromDate] = useState(() => todayISO())
+  const [toDate, setToDate] = useState(() => todayISO())
+  const [rangePreset, setRangePreset] = useState<DateRangePreset>('today')
+  const [shiftFilter, setShiftFilter] = useState('All')
+  const [deptFilter, setDeptFilter] = useState('All')
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [defaultCode, setDefaultCode] = useState<MatrixCode>(DEFAULT_MATRIX_CODE)
   const [rows, setRows] = useState<RowState[]>([])
+  const [dates, setDates] = useState<string[]>([])
+  const [loaded, setLoaded] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
   const [newName, setNewName] = useState('')
   const [newDept, setNewDept] = useState('')
-
-  const load = useCallback(async () => {
-    setError(null)
-    const { data: workers, error: wErr } = await supabase
-      .from('workers')
-      .select('*')
-      .eq('is_active', true)
-      .order('full_name')
-    if (wErr) throw wErr
-
-    const { data: attendance, error: aErr } = await supabase
-      .from('attendance')
-      .select('*')
-      .eq('date', date)
-    if (aErr) throw aErr
-
-    const byWorker = new Map((attendance as Attendance[]).map((a) => [a.worker_id, a]))
-    setRows(
-      ((workers as Worker[]) ?? []).map((worker) => {
-        const a = byWorker.get(worker.id)
-        if (!a) {
-          return { worker, attendanceId: null, ...emptyTimes() }
-        }
-        const times = {
-          in_time: a.in_time?.slice(0, 5) ?? '',
-          break_out: a.break_out?.slice(0, 5) ?? '',
-          break_in: a.break_in?.slice(0, 5) ?? '',
-          out_time: a.out_time?.slice(0, 5) ?? '',
-        }
-        return {
-          worker,
-          attendanceId: a.id,
-          ...times,
-          status: a.status ?? computeAttendanceStatus({
-            in_time: times.in_time || null,
-            break_out: times.break_out || null,
-            break_in: times.break_in || null,
-            out_time: times.out_time || null,
-          }),
-        }
-      }),
-    )
-  }, [date])
+  const [newCode, setNewCode] = useState('')
+  const [newDesig, setNewDesig] = useState('')
+  const [focusCell, setFocusCell] = useState<{ workerId: string; date: string } | null>(null)
+  const matrixRef = useRef<HTMLDivElement>(null)
+  const [deptOptions, setDeptOptions] = useState<string[]>([])
 
   useEffect(() => {
-    void load().catch((e: Error) => setError(e.message))
-  }, [load])
+    void (async () => {
+      const { data } = await supabase.from('workers').select('department').eq('is_active', true)
+      const set = new Set<string>()
+      for (const w of (data as { department?: string | null }[]) ?? []) {
+        if (w.department) set.add(w.department)
+      }
+      setDeptOptions([...set].sort())
+    })()
+  }, [])
 
-  function updateRow(workerId: string, field: keyof RowState, value: string) {
+  useEffect(() => {
+    void (async () => {
+      const { data } = await supabase.from('app_settings').select('value').eq('key', 'attendance_default_code').maybeSingle()
+      const v = (data as { value?: string } | null)?.value?.trim().toUpperCase()
+      if (v === 'P' || v === 'A' || v === 'HD' || v === 'L' || v === 'WO' || v === 'H') {
+        setDefaultCode(v as MatrixCode)
+      }
+    })()
+  }, [])
+
+  function applyPreset(preset: DateRangePreset) {
+    setRangePreset(preset)
+    if (preset === 'custom') return
+    const { from, to } = resolveDateRangePreset(preset, fromDate, toDate)
+    setFromDate(from)
+    setToDate(to)
+  }
+
+  function recomputeRow(worker: Worker, cells: Map<string, CellState>, dateKeys: string[]): RowState {
+    const statusMap: Record<string, string> = {}
+    for (const d of dateKeys) {
+      const c = cells.get(d)
+      if (c?.code) statusMap[d] = matrixCodeToStatus(c.code)
+    }
+    return {
+      worker,
+      cells,
+      summary: summarizeStatuses(statusMap, dateKeys),
+    }
+  }
+
+  const loadAttendance = useCallback(async () => {
+    setError(null)
+    setBusy(true)
+    try {
+      const keys = datesBetween(fromDate, toDate)
+      if (!keys.length) {
+        setError('Invalid date range')
+        return
+      }
+      const { data: workers, error: wErr } = await supabase
+        .from('workers')
+        .select('*')
+        .eq('is_active', true)
+        .order('full_name')
+      if (wErr) throw wErr
+
+      const { data: attendance, error: aErr } = await supabase
+        .from('attendance')
+        .select('*')
+        .gte('date', fromDate)
+        .lte('date', toDate)
+      if (aErr) throw aErr
+
+      const byWorkerDate = new Map<string, Attendance>()
+      for (const a of (attendance as Attendance[]) ?? []) {
+        byWorkerDate.set(`${a.worker_id}|${a.date}`, a)
+      }
+
+      const nextRows: RowState[] = ((workers as Worker[]) ?? []).map((worker) => {
+        const cells = new Map<string, CellState>()
+        for (const d of keys) {
+          const a = byWorkerDate.get(`${worker.id}|${d}`)
+          cells.set(d, {
+            attendanceId: a?.id ?? null,
+            code: a ? statusToMatrixCode(a.status) : '',
+            dirty: false,
+          })
+        }
+        return recomputeRow(worker, cells, keys)
+      })
+
+      setDates(keys)
+      setRows(nextRows)
+      setLoaded(true)
+      setMessage(`Loaded ${nextRows.length} employees · ${keys.length} days`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Load failed')
+    } finally {
+      setBusy(false)
+    }
+  }, [fromDate, toDate])
+
+  const departments = useMemo(() => {
+    const set = new Set<string>(deptOptions)
+    for (const r of rows) {
+      if (r.worker.department) set.add(r.worker.department)
+    }
+    return [...set].sort()
+  }, [rows, deptOptions])
+
+  const visibleRows = useMemo(() => {
+    return rows.filter((row) => {
+      if (shiftFilter !== 'All' && (row.worker.shift || 'Day') !== shiftFilter) return false
+      if (deptFilter !== 'All' && row.worker.department !== deptFilter) return false
+      return workerMatchesAttendanceFilter(row.summary, statusFilter, search, row.worker)
+    })
+  }, [rows, shiftFilter, deptFilter, statusFilter, search])
+
+  function setCellCode(workerId: string, date: string, code: MatrixCode) {
     setRows((prev) =>
       prev.map((row) => {
         if (row.worker.id !== workerId) return row
-        const next = { ...row, [field]: value }
-        next.status = computeAttendanceStatus({
-          in_time: next.in_time || null,
-          break_out: next.break_out || null,
-          break_in: next.break_in || null,
-          out_time: next.out_time || null,
-        })
-        return next
+        const cells = new Map(row.cells)
+        const cur = cells.get(date) || { attendanceId: null, code: '', dirty: false }
+        cells.set(date, { ...cur, code, dirty: true })
+        return recomputeRow(row.worker, cells, dates)
       }),
     )
+  }
+
+  function cycleCell(workerId: string, date: string) {
+    setRows((prev) =>
+      prev.map((row) => {
+        if (row.worker.id !== workerId) return row
+        const cells = new Map(row.cells)
+        const cur = cells.get(date) || { attendanceId: null, code: '', dirty: false }
+        const next = nextMatrixCode(cur.code, defaultCode)
+        cells.set(date, { ...cur, code: next, dirty: true })
+        return recomputeRow(row.worker, cells, dates)
+      }),
+    )
+  }
+
+  function handleMatrixKeyDown(e: React.KeyboardEvent, workerId: string, date: string, rowIdx: number, colIdx: number) {
+    const codeMap: Record<string, MatrixCode> = {
+      p: 'P',
+      a: 'A',
+      h: 'H',
+      l: 'L',
+    }
+    const key = e.key.toLowerCase()
+    if (key in codeMap) {
+      e.preventDefault()
+      setCellCode(workerId, date, codeMap[key])
+      return
+    }
+    if (key === 'd' && !e.shiftKey) {
+      e.preventDefault()
+      setCellCode(workerId, date, 'HD')
+      return
+    }
+    if (key === 'w' && e.shiftKey) {
+      e.preventDefault()
+      setCellCode(workerId, date, 'WO')
+      return
+    }
+    let nextRow = rowIdx
+    let nextCol = colIdx
+    if (key === 'ArrowRight') nextCol++
+    else if (key === 'ArrowLeft') nextCol--
+    else if (key === 'ArrowDown') nextRow++
+    else if (key === 'ArrowUp') nextRow--
+    else if (key === 'Enter' || key === ' ') {
+      e.preventDefault()
+      cycleCell(workerId, date)
+      return
+    } else return
+
+    e.preventDefault()
+    const targetRow = visibleRows[nextRow]
+    const targetDate = dates[nextCol]
+    if (targetRow && targetDate) setFocusCell({ workerId: targetRow.worker.id, date: targetDate })
+  }
+
+  async function persistDirtyRows(): Promise<void> {
+    const dirtyRows = rows.filter((r) => [...r.cells.values()].some((c) => c.dirty))
+    for (const row of dirtyRows) {
+      for (const [date, cell] of row.cells) {
+        if (!cell.dirty || !cell.code) continue
+        const payload = buildMatrixAttendancePayload({
+          worker_id: row.worker.id,
+          date,
+          code: cell.code,
+          shift: row.worker.shift || 'Day',
+        })
+        if (cell.attendanceId) {
+          const { error: uErr } = await supabase.from('attendance').update(payload).eq('id', cell.attendanceId)
+          if (uErr) throw uErr
+        } else {
+          const { data, error: iErr } = await supabase.from('attendance').insert(payload).select('id').single()
+          if (iErr) throw iErr
+          cell.attendanceId = (data as { id: string }).id
+        }
+        cell.dirty = false
+      }
+    }
+  }
+
+  async function handleSave() {
+    setBusy(true)
+    setMessage(null)
+    setError(null)
+    try {
+      await persistDirtyRows()
+      setMessage('Attendance saved')
+      await loadAttendance()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Save failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function handleClear() {
+    setRows([])
+    setDates([])
+    setLoaded(false)
+    setMessage(null)
+    setError(null)
   }
 
   async function handleAddWorker(e: { preventDefault: () => void }) {
@@ -105,24 +306,25 @@ export function AttendanceScreen() {
     }
     setBusy(true)
     setError(null)
-    setMessage(null)
     try {
-      const { data, error: iErr } = await supabase
-        .from('workers')
-        .insert({
-          full_name,
-          department: newDept.trim() || null,
-          is_active: true,
-        })
-        .select('*')
-        .single()
+      const insertPayload: Record<string, unknown> = {
+        full_name,
+        department: newDept.trim() || null,
+        is_active: true,
+        designation: newDesig.trim() || null,
+        employee_code: newCode.trim() || null,
+        shift: shiftFilter === 'All' ? 'Day' : shiftFilter,
+      }
+      const { error: iErr } = await supabase.from('workers').insert(insertPayload).select('*').single()
       if (iErr) throw iErr
-      const worker = data as Worker
-      setRows((prev) => [...prev, { worker, attendanceId: null, ...emptyTimes() }])
       setNewName('')
       setNewDept('')
+      setNewCode('')
+      setNewDesig('')
       setShowAdd(false)
-      setMessage(`${worker.full_name} added — fill attendance below`)
+      setMessage(`${full_name} added — load attendance to include in matrix`)
+      if (newDept.trim()) setDeptOptions((prev) => [...new Set([...prev, newDept.trim()])].sort())
+      if (loaded) await loadAttendance()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Add worker failed')
     } finally {
@@ -130,132 +332,325 @@ export function AttendanceScreen() {
     }
   }
 
-  async function handleSave() {
-    setBusy(true)
-    setMessage(null)
-    setError(null)
-    try {
-      for (const row of rows) {
-        const payload = {
-          worker_id: row.worker.id,
-          date,
-          in_time: row.in_time || null,
-          break_out: row.break_out || null,
-          break_in: row.break_in || null,
-          out_time: row.out_time || null,
-          status: row.status,
-        }
-        if (row.attendanceId) {
-          const { error: uErr } = await supabase
-            .from('attendance')
-            .update(payload)
-            .eq('id', row.attendanceId)
-          if (uErr) throw uErr
-        } else {
-          const { error: iErr } = await supabase.from('attendance').insert(payload)
-          if (iErr) throw iErr
-        }
-      }
-      setMessage('Attendance saved')
-      await load()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed')
-    } finally {
-      setBusy(false)
+  const companyTotals = useMemo(() => {
+    const t = {
+      employees: visibleRows.length,
+      present: 0,
+      absent: 0,
+      halfDay: 0,
+      leave: 0,
+      weeklyOff: 0,
+      paidDays: 0,
     }
-  }
+    for (const r of visibleRows) {
+      t.present += r.summary.present
+      t.absent += r.summary.absent
+      t.halfDay += r.summary.halfDay
+      t.leave += r.summary.leave
+      t.weeklyOff += r.summary.weeklyOff
+      t.paidDays += r.summary.paidDays
+    }
+    t.paidDays = Math.round(t.paidDays * 100) / 100
+    return t
+  }, [visibleRows])
 
   return (
-    <div className="screen">
+    <div className="screen hr-screen hr-att-matrix-screen">
       <header className="screen-header">
-        <h1>Attendance</h1>
-        <label className="field">
-          <span className="text-muted">Date</span>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        </label>
-        <button
-          type="button"
-          className="btn-ghost"
-          onClick={() => setShowAdd((v) => !v)}
-        >
-          {showAdd ? 'Cancel' : '+ Add Worker'}
+        <div>
+          <h1>Attendance</h1>
+          <p className="text-muted2">JAISAL FASHIONWEAV INDUSTRIES · Bulk table &amp; date-range matrix</p>
+        </div>
+        <div className="hr-att-view-toggle">
+          <button
+            type="button"
+            className={viewMode === 'table' ? 'hr-att-preset active' : 'hr-att-preset'}
+            onClick={() => setViewMode('table')}
+          >
+            Bulk Table
+          </button>
+          <button
+            type="button"
+            className={viewMode === 'matrix' ? 'hr-att-preset active' : 'hr-att-preset'}
+            onClick={() => setViewMode('matrix')}
+          >
+            Range Matrix
+          </button>
+        </div>
+        <button type="button" className="btn-ghost" onClick={() => setShowAdd((v) => !v)}>
+          {showAdd ? 'Cancel' : '+ Add Employee'}
         </button>
       </header>
 
+      <div className="hr-toolbar hr-att-toolbar">
+        <div className="hr-att-range-presets">
+          {(
+            [
+              ['today', 'Today'],
+              ['this-week', 'This Week'],
+              ['this-month', 'This Month'],
+              ['previous-month', 'Previous Month'],
+              ['custom', 'Custom Range'],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              className={rangePreset === id ? 'hr-att-preset active' : 'hr-att-preset'}
+              onClick={() => applyPreset(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <label className="field">
+          <span className="text-muted">From Date</span>
+          <input
+            type="date"
+            value={fromDate}
+            max={toDate}
+            onChange={(e) => {
+              setFromDate(e.target.value)
+              setRangePreset('custom')
+            }}
+          />
+        </label>
+        <label className="field">
+          <span className="text-muted">To Date</span>
+          <input
+            type="date"
+            value={toDate}
+            min={fromDate}
+            max={todayISO()}
+            onChange={(e) => {
+              setToDate(e.target.value)
+              setRangePreset('custom')
+            }}
+          />
+        </label>
+        <label className="field">
+          <span className="text-muted">Shift</span>
+          <select value={shiftFilter} onChange={(e) => setShiftFilter(e.target.value)}>
+            <option value="All">All</option>
+            {SHIFTS.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span className="text-muted">Department</span>
+          <select value={deptFilter} onChange={(e) => setDeptFilter(e.target.value)}>
+            <option value="All">All</option>
+            {departments.map((d) => (
+              <option key={d} value={d}>{d}</option>
+            ))}
+          </select>
+        </label>
+        <label className="field hr-att-search">
+          <span className="text-muted">Search Employee</span>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Code, name, designation, dept…"
+          />
+        </label>
+        <label className="field">
+          <span className="text-muted">Status filter</span>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            {ATTENDANCE_STATUS_FILTERS.map((f) => (
+              <option key={f.id || 'all'} value={f.id}>{f.label}</option>
+            ))}
+          </select>
+        </label>
+        {viewMode === 'matrix' ? (
+          <>
+            <label className="field">
+              <span className="text-muted">Default cell</span>
+              <select value={defaultCode} onChange={(e) => setDefaultCode(e.target.value as MatrixCode)}>
+                {(['P', 'A', 'HD', 'L', 'WO', 'H'] as const).map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </label>
+            <div className="hr-att-actions">
+              <button type="button" className="primary-save" disabled={busy} onClick={() => void loadAttendance()}>
+                Load Attendance
+              </button>
+              <button type="button" className="btn-ghost" disabled={busy || !loaded} onClick={() => void handleSave()}>
+                Save Changes
+              </button>
+              <button type="button" className="btn-ghost" disabled={busy} onClick={handleClear}>
+                Clear
+              </button>
+            </div>
+          </>
+        ) : null}
+      </div>
+
       {showAdd ? (
         <form className="form-stack surface card-row" onSubmit={(e) => void handleAddWorker(e)}>
-          <label className="field">
-            <span className="text-muted">Full Name</span>
-            <input
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              required
-              placeholder="Worker name"
-              autoFocus
-            />
-          </label>
-          <label className="field">
-            <span className="text-muted">Department</span>
-            <input
-              list="dept-list"
-              value={newDept}
-              onChange={(e) => setNewDept(e.target.value)}
-              placeholder="e.g. Weaving"
-            />
-            <datalist id="dept-list">
-              {DEPT_SUGGESTIONS.map((d) => (
-                <option key={d} value={d} />
-              ))}
-            </datalist>
-          </label>
+          <div className="hr-form-grid">
+            <label className="field">
+              <span className="text-muted">Employee Code</span>
+              <input value={newCode} onChange={(e) => setNewCode(e.target.value)} placeholder="EMP001" />
+            </label>
+            <label className="field">
+              <span className="text-muted">Full Name</span>
+              <input value={newName} onChange={(e) => setNewName(e.target.value)} required placeholder="Worker name" />
+            </label>
+            <label className="field">
+              <span className="text-muted">Designation</span>
+              <input value={newDesig} onChange={(e) => setNewDesig(e.target.value)} placeholder="Operator" />
+            </label>
+            <label className="field">
+              <span className="text-muted">Department</span>
+              <input list="dept-list-att" value={newDept} onChange={(e) => setNewDept(e.target.value)} placeholder="Weaving" />
+              <datalist id="dept-list-att">
+                {DEPT_SUGGESTIONS.map((d) => (
+                  <option key={d} value={d} />
+                ))}
+              </datalist>
+            </label>
+          </div>
           <button type="submit" className="primary-save" disabled={busy || !newName.trim()}>
-            Save Worker
+            Save Employee
           </button>
         </form>
       ) : null}
 
-      <div className="list">
-        {rows.map((row) => (
-          <article key={row.worker.id} className="card-row surface">
-            <div className="row-top">
-              <div>
-                <strong>{row.worker.full_name}</strong>
-                <div className="text-muted2">{row.worker.department ?? '—'}</div>
-              </div>
-              <span className={`status-chip status-${row.status.replace(/\s+/g, '-').toLowerCase()}`}>
-                {row.status}
-              </span>
-            </div>
-            <div className="time-grid">
-              {(
-                [
-                  ['in_time', 'In Time'],
-                  ['break_out', 'Break Out'],
-                  ['break_in', 'Break In'],
-                  ['out_time', 'Out Time'],
-                ] as const
-              ).map(([field, label]) => (
-                <label key={field} className="field">
-                  <span className="text-muted2">{label}</span>
-                  <input
-                    type="time"
-                    value={row[field]}
-                    onChange={(e) => updateRow(row.worker.id, field, e.target.value)}
-                  />
-                </label>
+      {viewMode === 'table' ? (
+        <AttendanceBulkTable
+          fromDate={fromDate}
+          toDate={toDate}
+          shiftFilter={shiftFilter}
+          deptFilter={deptFilter}
+          search={search}
+          statusFilter={statusFilter}
+          onError={setError}
+          onMessage={setMessage}
+        />
+      ) : null}
+
+      {viewMode === 'matrix' && loaded ? (
+        <div className="hr-att-summary-bar">
+          <span>Employees: <strong className="num">{companyTotals.employees}</strong></span>
+          <span>Present days: <strong className="num">{companyTotals.present}</strong></span>
+          <span>Absent days: <strong className="num">{companyTotals.absent}</strong></span>
+          <span>Half Day: <strong className="num">{companyTotals.halfDay}</strong></span>
+          <span>Leave: <strong className="num">{companyTotals.leave}</strong></span>
+          <span>Weekly Off: <strong className="num">{companyTotals.weeklyOff}</strong></span>
+          <span>Total paid days: <strong className="num">{companyTotals.paidDays}</strong></span>
+          <span className="text-muted2">Tap cell or press P/A/HD/L/WO/H · arrows to navigate</span>
+        </div>
+      ) : null}
+
+      {viewMode === 'matrix' && loaded ? (
+        <div className="hr-att-matrix-wrap" ref={matrixRef}>
+          <table className="hr-att-matrix">
+            <thead>
+              <tr>
+                <th className="hr-att-sticky-emp">Employee</th>
+                <th className="hr-att-sticky-meta">Designation</th>
+                <th className="hr-att-sticky-meta">Dept</th>
+                {dates.map((d) => (
+                  <th key={d} className="hr-att-date-col" title={d}>{formatDateHeader(d)}</th>
+                ))}
+                <th className="hr-att-sum-col">P</th>
+                <th className="hr-att-sum-col">A</th>
+                <th className="hr-att-sum-col">HD</th>
+                <th className="hr-att-sum-col">L</th>
+                <th className="hr-att-sum-col">WO</th>
+                <th className="hr-att-sum-col">H</th>
+                <th className="hr-att-sum-col">Paid</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibleRows.map((row, rowIdx) => (
+                <tr key={row.worker.id}>
+                  <td className="hr-att-sticky-emp">
+                    <strong>{row.worker.full_name}</strong>
+                    <div className="text-muted2">{row.worker.employee_code || '—'}</div>
+                  </td>
+                  <td className="hr-att-sticky-meta">{row.worker.designation || '—'}</td>
+                  <td className="hr-att-sticky-meta">{row.worker.department || '—'}</td>
+                  {dates.map((d, colIdx) => {
+                    const cell = row.cells.get(d)
+                    const code = cell?.code || ''
+                    const focused = focusCell?.workerId === row.worker.id && focusCell?.date === d
+                    return (
+                      <td key={d} className="hr-att-date-col">
+                        <button
+                          type="button"
+                          className={`${matrixBadgeClass(code)}${cell?.dirty ? ' dirty' : ''}${focused ? ' focused' : ''}`}
+                          title={`${d} · ${code || 'empty'} — click to cycle`}
+                          onClick={() => cycleCell(row.worker.id, d)}
+                          onKeyDown={(e) => handleMatrixKeyDown(e, row.worker.id, d, rowIdx, colIdx)}
+                          onFocus={() => setFocusCell({ workerId: row.worker.id, date: d })}
+                        >
+                          {code || '—'}
+                        </button>
+                      </td>
+                    )
+                  })}
+                  <td className="hr-att-sum-col num">{row.summary.present}</td>
+                  <td className="hr-att-sum-col num">{row.summary.absent}</td>
+                  <td className="hr-att-sum-col num">{row.summary.halfDay}</td>
+                  <td className="hr-att-sum-col num">{row.summary.leave}</td>
+                  <td className="hr-att-sum-col num">{row.summary.weeklyOff}</td>
+                  <td className="hr-att-sum-col num">{row.summary.holiday}</td>
+                  <td className="hr-att-sum-col num"><strong>{row.summary.paidDays}</strong></td>
+                </tr>
               ))}
-            </div>
-          </article>
-        ))}
-        {!rows.length ? <p className="text-muted">No active workers.</p> : null}
-      </div>
+            </tbody>
+          </table>
+          {!visibleRows.length ? <p className="text-muted">No employees match filters.</p> : null}
+        </div>
+      ) : viewMode === 'matrix' ? (
+        <p className="text-muted">Select date range and click Load Attendance.</p>
+      ) : null}
+
+      {/* Mobile cards — matrix only */}
+      {viewMode === 'matrix' && loaded ? (
+        <div className="hr-att-mobile-cards">
+          {visibleRows.map((row) => (
+            <article key={`m-${row.worker.id}`} className="hr-att-mobile-card surface">
+              <div className="hr-att-mobile-head">
+                <div>
+                  <strong>{row.worker.full_name}</strong>
+                  <div className="text-muted2">
+                    {row.worker.employee_code || '—'} · {row.worker.designation || '—'} · {row.worker.department || '—'}
+                  </div>
+                </div>
+                <div className="hr-att-mobile-summary">
+                  <span>P:{row.summary.present}</span>
+                  <span>A:{row.summary.absent}</span>
+                  <span>Paid:{row.summary.paidDays}</span>
+                </div>
+              </div>
+              <div className="hr-att-mobile-dates">
+                {dates.map((d) => {
+                  const cell = row.cells.get(d)
+                  const code = cell?.code || ''
+                  return (
+                    <button
+                      key={d}
+                      type="button"
+                      className={matrixBadgeClass(code)}
+                      onClick={() => cycleCell(row.worker.id, d)}
+                    >
+                      <span className="hr-att-mobile-day">{formatDateHeader(d)}</span>
+                      <span>{code || '—'}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
 
       {error ? <p className="form-error text-danger">{error}</p> : null}
       {message ? <p className="form-ok text-sage">{message}</p> : null}
-
-      <button type="button" className="primary-save" disabled={busy} onClick={() => void handleSave()}>
-        Save
-      </button>
     </div>
   )
 }

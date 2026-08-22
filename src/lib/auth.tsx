@@ -9,6 +9,7 @@ import {
 import type { Session, User } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 import type { AppUser, Role } from './database.types'
+import { clearModuleUnlocks } from './ceoPinManagement'
 
 type Profile = AppUser & { roles: Role | null }
 
@@ -16,7 +17,10 @@ type AuthState = {
   session: Session | null
   profile: Profile | null
   loading: boolean
+  /** Stable role used for nav permissions (DB → metadata → name). */
+  roleName: string
   isCeo: boolean
+  isManager: boolean
   loginWithPin: (role: Role, pin: string) => Promise<void>
   logout: () => Promise<void>
   refreshProfile: () => Promise<void>
@@ -114,6 +118,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginWithPin = useCallback(
     async (role: Role, pin: string) => {
+      // Local UI smoke only — never enabled in production builds without the env flag.
+      if (import.meta.env.VITE_SMOKE_BYPASS === '1') {
+        const mockUser = {
+          id: `smoke-${role.id}`,
+          full_name: role.role_name,
+          role_id: role.id,
+          pin_hash: '',
+          is_active: true,
+          created_at: new Date().toISOString(),
+          roles: role,
+        }
+        setProfile(mockUser)
+        setSession({
+          access_token: 'smoke',
+          refresh_token: 'smoke',
+          expires_in: 3600,
+          token_type: 'bearer',
+          user: {
+            id: mockUser.id,
+            app_metadata: {},
+            user_metadata: {
+              full_name: role.role_name,
+              role_name: role.role_name,
+              role_id: role.id,
+            },
+            aud: 'authenticated',
+            created_at: mockUser.created_at,
+          },
+        } as Session)
+        return
+      }
       const { data, error } = await supabase.functions.invoke('pin-login', {
         body: { role_id: role.id, role_name: role.role_name, pin },
       })
@@ -147,24 +182,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const logout = useCallback(async () => {
+    clearModuleUnlocks()
     await supabase.auth.signOut()
     setSession(null)
     setProfile(null)
   }, [])
 
+  const meta = (session?.user?.user_metadata || {}) as {
+    role_name?: string
+    full_name?: string
+  }
   const roleName =
     profile?.roles?.role_name ||
-    (session?.user?.user_metadata as { role_name?: string } | undefined)?.role_name ||
+    meta.role_name ||
+    profile?.full_name ||
+    meta.full_name ||
     ''
+  const roleNorm = roleName.trim().toLowerCase()
   const isCeo =
-    roleName === 'CEO' ||
+    roleNorm === 'ceo' ||
+    roleNorm === 'md' ||
+    roleNorm === 'managing director' ||
+    roleNorm === 'owner' ||
     profile?.full_name === 'CEO' ||
-    (session?.user?.user_metadata as { full_name?: string } | undefined)?.full_name === 'CEO'
-
+    meta.full_name === 'CEO'
+  const isManager =
+    roleNorm === 'manager' ||
+    profile?.full_name === 'Manager' ||
+    meta.full_name === 'Manager'
 
   return (
     <AuthContext.Provider
-      value={{ session, profile, loading, isCeo, loginWithPin, logout, refreshProfile }}
+      value={{
+        session,
+        profile,
+        loading,
+        roleName: roleName || (isCeo ? 'CEO' : 'User'),
+        isCeo,
+        isManager,
+        loginWithPin,
+        logout,
+        refreshProfile,
+      }}
     >
       {children}
     </AuthContext.Provider>
