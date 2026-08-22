@@ -579,4 +579,465 @@ export function meterFields(meter: number, multiplier: number, used = 0) {
   return { meter, multiplier, total_meter: total, used_meter: used, balance_meter: balance }
 }
 
+/* ---------- Edit helpers ---------- */
+
+export type WarpYarnAuditEntry = {
+  id: string
+  table_name: string
+  record_id: string
+  field_name: string
+  old_value: string | null
+  new_value: string | null
+  edited_by: string
+  edited_at: string
+}
+
+export function parseStockRemark(remarks: string | null): { stock_label: string; remarks: string } {
+  if (!remarks?.startsWith('stock:')) return { stock_label: 'Filled', remarks: remarks || '' }
+  const rest = remarks.replace(/^stock:/, '')
+  const pipeIdx = rest.indexOf('|')
+  if (pipeIdx === -1) return { stock_label: rest || 'Filled', remarks: '' }
+  return { stock_label: rest.slice(0, pipeIdx) || 'Filled', remarks: rest.slice(pipeIdx + 1) }
+}
+
+export function buildStockRemark(stockLabel: string, remarks: string): string {
+  return `stock:${stockLabel || 'Filled'}${remarks ? `|${remarks}` : ''}`
+}
+
+export function pipeToFilledPipeInput(pipe: WarpPipe): FilledPipeEntryInput {
+  const { stock_label, remarks } = parseStockRemark(pipe.remarks)
+  return {
+    entry_date: pipe.entry_date || pipe.created_at?.slice(0, 10) || todayISO(),
+    entry_type: (pipe.entry_type as FilledPipeEntryType) || 'Manual Stock Entry',
+    yarn_quality: pipe.yarn_quality || '',
+    yarn_specification: pipe.yarn_specification || '',
+    meter: Number(pipe.meter) || 0,
+    multiplier: Number(pipe.multiplier) || DEFAULT_MULTIPLIER,
+    weight_kg: Number(pipe.original_weight_kg ?? pipe.weight_kg) || 0,
+    rate_per_kg: Number(pipe.rate_per_kg) || 0,
+    amount: Number(pipe.amount) || 0,
+    rate_source: pipe.rate_source || 'Manual Override',
+    rate_effective_from: pipe.rate_effective_from || null,
+    rate_master_id: pipe.rate_master_id || null,
+    godown_name: pipe.godown_name || 'Godown A',
+    rack: pipe.rack || '',
+    bay: pipe.bay || '',
+    stock_label,
+    warper_name: pipe.warper_name || '',
+    machine_no: pipe.machine_no || '',
+    supplier: '',
+    remarks,
+    manual_rate_override: pipe.rate_source === 'Manual Override',
+  }
+}
+
+export function formatAuditValue(v: unknown): string {
+  if (v == null) return ''
+  if (typeof v === 'number' && Number.isNaN(v)) return ''
+  return String(v)
+}
+
+export async function logWarpAudit(
+  client: SupabaseClient,
+  tableName: string,
+  recordId: string,
+  changes: Array<{ field: string; oldValue: unknown; newValue: unknown }>,
+  editedBy: string,
+): Promise<void> {
+  const rows = changes
+    .filter((c) => formatAuditValue(c.oldValue) !== formatAuditValue(c.newValue))
+    .map((c) => ({
+      table_name: tableName,
+      record_id: recordId,
+      field_name: c.field,
+      old_value: formatAuditValue(c.oldValue),
+      new_value: formatAuditValue(c.newValue),
+      edited_by: editedBy,
+    }))
+  if (!rows.length) return
+  const { error } = await client.from('warp_yarn_audit_log').insert(rows)
+  if (error) {
+    console.error('warp audit log failed:', error.message)
+  }
+}
+
+function validateFilledPipeInput(input: FilledPipeEntryInput, usedMeter = 0): void {
+  if (!input.yarn_quality.trim()) throw new Error('Yarn quality required')
+  if (!(Number(input.meter) > 0)) throw new Error('Meter must be greater than 0')
+  if (!(Number(input.multiplier) > 0)) throw new Error('Multiplier must be greater than 0')
+  if (Number(input.weight_kg) < 0) throw new Error('Weight cannot be negative')
+  if (Number(input.rate_per_kg) < 0) throw new Error('Rate cannot be negative')
+  if (input.entry_type === 'Receive from Warper' && !input.warper_name.trim()) {
+    throw new Error('Warper name required for Receive from Warper')
+  }
+  const total = calcTotalMeter(Number(input.meter), Number(input.multiplier))
+  if (usedMeter > total) {
+    throw new Error(
+      `Total meter (${formatNum(total)}) cannot be less than used meter (${formatNum(usedMeter)})`,
+    )
+  }
+}
+
+export async function updateFilledPipe(
+  client: SupabaseClient,
+  pipeId: string,
+  input: FilledPipeEntryInput,
+  userName: string,
+  existingPipe: WarpPipe,
+): Promise<WarpPipe> {
+  if (!pipeId) throw new Error('Record ID required for update')
+  if (existingPipe.status !== 'FILLED_GODOWN') {
+    throw new Error('Only godown filled pipes can be edited here')
+  }
+
+  const usedMeter = Number(existingPipe.used_meter) || 0
+  validateFilledPipeInput(input, usedMeter)
+
+  const fields = meterFields(Number(input.meter), Number(input.multiplier), usedMeter)
+  const location = composeGodownLocation(input.godown_name, input.rack, input.bay)
+  const amount = calcAmount(input.weight_kg, input.rate_per_kg)
+  const stockRemark = buildStockRemark(input.stock_label, input.remarks.trim())
+
+  const updatePayload: Record<string, unknown> = {
+    yarn_quality: input.yarn_quality.trim(),
+    yarn_specification: input.yarn_specification.trim() || null,
+    ...fields,
+    weight_kg: Number(input.weight_kg) || 0,
+    warper_name: input.warper_name.trim() || null,
+    machine_no: input.machine_no.trim() || null,
+    location,
+    remarks: stockRemark,
+    updated_at: new Date().toISOString(),
+  }
+
+  if ('original_weight_kg' in existingPipe) {
+    updatePayload.original_weight_kg = Number(input.weight_kg) || 0
+    updatePayload.balance_weight_kg = Math.max(
+      0,
+      Number(input.weight_kg) -
+        (Number(existingPipe.original_weight_kg ?? existingPipe.weight_kg) -
+          Number(existingPipe.balance_weight_kg ?? existingPipe.weight_kg)),
+    )
+  }
+  if ('rate_per_kg' in existingPipe) {
+    updatePayload.rate_per_kg = Number(input.rate_per_kg) || 0
+    updatePayload.amount = amount
+    updatePayload.rate_source = input.rate_source
+    updatePayload.rate_effective_from = input.rate_effective_from
+    updatePayload.rate_master_id = input.rate_master_id
+  }
+  if ('godown_name' in existingPipe) {
+    updatePayload.godown_name = input.godown_name.trim() || 'Godown A'
+    updatePayload.rack = input.rack.trim() || null
+    updatePayload.bay = input.bay.trim() || null
+    updatePayload.entry_date = input.entry_date || todayISO()
+    updatePayload.entry_type = input.entry_type
+  }
+  if ('updated_by' in existingPipe) {
+    updatePayload.updated_by = userName
+  }
+
+  const { data, error } = await client
+    .from('warp_pipes')
+    .update(updatePayload)
+    .eq('id', pipeId)
+    .select('*')
+    .single()
+  if (error) throw new Error('Unable to update this record. Please try again.')
+  const pipe = data as WarpPipe
+
+  await logWarpAudit(
+    client,
+    'warp_pipes',
+    pipeId,
+    [
+      { field: 'meter', oldValue: existingPipe.meter, newValue: pipe.meter },
+      { field: 'multiplier', oldValue: existingPipe.multiplier, newValue: pipe.multiplier },
+      { field: 'total_meter', oldValue: existingPipe.total_meter, newValue: pipe.total_meter },
+      { field: 'balance_meter', oldValue: existingPipe.balance_meter, newValue: pipe.balance_meter },
+      { field: 'yarn_quality', oldValue: existingPipe.yarn_quality, newValue: pipe.yarn_quality },
+      { field: 'weight_kg', oldValue: existingPipe.weight_kg, newValue: pipe.weight_kg },
+      { field: 'rate_per_kg', oldValue: existingPipe.rate_per_kg, newValue: pipe.rate_per_kg },
+      { field: 'godown_name', oldValue: existingPipe.godown_name, newValue: pipe.godown_name },
+      { field: 'location', oldValue: existingPipe.location, newValue: pipe.location },
+      { field: 'remarks', oldValue: existingPipe.remarks, newValue: pipe.remarks },
+    ],
+    userName,
+  )
+
+  await insertTxn(client, {
+    txn_date: todayISO(),
+    pipe_id: pipe.id,
+    pipe_no: pipe.pipe_no,
+    txn_type: 'Adjustment',
+    from_location: existingPipe.location,
+    to_location: location,
+    quality: pipe.yarn_quality,
+    kg: pipe.weight_kg,
+    meter: pipe.meter,
+    multiplier: pipe.multiplier,
+    total_meter: pipe.total_meter,
+    balance_meter: pipe.balance_meter,
+    machine_no: pipe.machine_no,
+    warper_name: pipe.warper_name,
+    user_name: userName,
+    reference: 'Edit',
+    status: input.stock_label || 'Filled',
+    remarks: `Edited by ${userName}`,
+    ...('rate_per_kg' in existingPipe
+      ? {
+          rate_per_kg: pipe.rate_per_kg ?? 0,
+          amount: pipe.amount ?? 0,
+          rate_source: pipe.rate_source ?? null,
+          rate_effective_from: pipe.rate_effective_from ?? null,
+        }
+      : {}),
+    ...('updated_by' in existingPipe ? { updated_by: userName } : {}),
+  })
+
+  return pipe
+}
+
+export type EmptyPipeEditInput = {
+  serial_no: string
+  location: string
+  status: string
+  remarks: string
+}
+
+export async function updateEmptyPipe(
+  client: SupabaseClient,
+  pipeId: string,
+  input: EmptyPipeEditInput,
+  userName: string,
+  existingPipe: WarpPipe,
+): Promise<WarpPipe> {
+  if (!pipeId) throw new Error('Record ID required for update')
+  const allowed = ['EMPTY', 'DAMAGED', 'UNDER_REPAIR', 'ISSUED']
+  if (!allowed.includes(existingPipe.status)) {
+    throw new Error('Only empty/damaged/issued pipes can be edited here')
+  }
+  if (!input.location.trim()) throw new Error('Location required')
+
+  const updatePayload: Record<string, unknown> = {
+    serial_no: input.serial_no.trim() || existingPipe.pipe_no,
+    location: input.location.trim(),
+    status: input.status || 'EMPTY',
+    remarks: input.remarks.trim() || null,
+    updated_at: new Date().toISOString(),
+  }
+  if ('updated_by' in existingPipe) {
+    updatePayload.updated_by = userName
+  }
+
+  const { data, error } = await client
+    .from('warp_pipes')
+    .update(updatePayload)
+    .eq('id', pipeId)
+    .select('*')
+    .single()
+  if (error) throw new Error('Unable to update this record. Please try again.')
+  const pipe = data as WarpPipe
+
+  await logWarpAudit(
+    client,
+    'warp_pipes',
+    pipeId,
+    [
+      { field: 'location', oldValue: existingPipe.location, newValue: pipe.location },
+      { field: 'status', oldValue: existingPipe.status, newValue: pipe.status },
+      { field: 'remarks', oldValue: existingPipe.remarks, newValue: pipe.remarks },
+    ],
+    userName,
+  )
+
+  await insertTxn(client, {
+    txn_date: todayISO(),
+    pipe_id: pipe.id,
+    pipe_no: pipe.pipe_no,
+    txn_type: 'Adjustment',
+    from_location: existingPipe.location,
+    to_location: pipe.location,
+    quality: null,
+    kg: 0,
+    meter: 0,
+    multiplier: DEFAULT_MULTIPLIER,
+    total_meter: 0,
+    balance_meter: 0,
+    machine_no: null,
+    warper_name: null,
+    user_name: userName,
+    reference: 'Edit',
+    status: pipe.status,
+    remarks: `Empty pipe edited by ${userName}`,
+    ...('updated_by' in existingPipe ? { updated_by: userName } : {}),
+  })
+
+  return pipe
+}
+
+export type WarpPurchaseEditInput = {
+  purchase_date: string
+  supplier: string
+  invoice_no: string
+  yarn_quality: string
+  yarn_specification: string
+  quantity_kg: number
+  rate: number
+  gst_pct: number
+  destination: string
+  remarks: string
+}
+
+export async function updateWarpPurchase(
+  client: SupabaseClient,
+  purchaseId: string,
+  input: WarpPurchaseEditInput,
+  userName: string,
+  existing: WarpYarnPurchase,
+): Promise<WarpYarnPurchase> {
+  if (!purchaseId) throw new Error('Record ID required for update')
+  if (!input.supplier.trim()) throw new Error('Supplier required')
+  if (!input.yarn_quality.trim()) throw new Error('Yarn quality required')
+  if (!(Number(input.quantity_kg) > 0)) throw new Error('Quantity must be greater than 0')
+  if (Number(input.rate) < 0) throw new Error('Rate cannot be negative')
+
+  const amount = Number(input.quantity_kg) * Number(input.rate)
+  const total = amount * (1 + (Number(input.gst_pct) || 0) / 100)
+
+  const updatePayload = {
+    purchase_date: input.purchase_date || todayISO(),
+    supplier: input.supplier.trim(),
+    invoice_no: input.invoice_no.trim() || null,
+    yarn_quality: input.yarn_quality.trim(),
+    yarn_specification: input.yarn_specification.trim() || null,
+    quantity_kg: Number(input.quantity_kg),
+    rate: Number(input.rate),
+    amount,
+    gst_pct: Number(input.gst_pct) || 0,
+    total_amount: total,
+    destination: input.destination.trim() || null,
+    remarks: input.remarks.trim() || null,
+  }
+
+  const { data, error } = await client
+    .from('warp_yarn_purchases')
+    .update(updatePayload)
+    .eq('id', purchaseId)
+    .select('*')
+    .single()
+  if (error) throw new Error('Unable to update this record. Please try again.')
+  const purchase = data as WarpYarnPurchase
+
+  await logWarpAudit(
+    client,
+    'warp_yarn_purchases',
+    purchaseId,
+    [
+      { field: 'supplier', oldValue: existing.supplier, newValue: purchase.supplier },
+      { field: 'quantity_kg', oldValue: existing.quantity_kg, newValue: purchase.quantity_kg },
+      { field: 'rate', oldValue: existing.rate, newValue: purchase.rate },
+      { field: 'total_amount', oldValue: existing.total_amount, newValue: purchase.total_amount },
+    ],
+    userName,
+  )
+
+  return purchase
+}
+
+export type WarperJobEditInput = {
+  warper_name: string
+  yarn_quality: string
+  sent_date: string
+  yarn_sent_kg: number
+  expected_meter: number
+  multiplier: number
+  challan_no: string
+  remarks: string
+}
+
+export async function updateWarperJob(
+  client: SupabaseClient,
+  jobId: string,
+  input: WarperJobEditInput,
+  userName: string,
+  existing: WarpWarperJob,
+): Promise<WarpWarperJob> {
+  if (!jobId) throw new Error('Record ID required for update')
+  if (existing.status !== 'SENT' && existing.status !== 'IN_PROCESS') {
+    throw new Error('Only pending warper jobs can be edited')
+  }
+  if (!input.warper_name.trim()) throw new Error('Warper name required')
+  if (!(Number(input.expected_meter) > 0)) throw new Error('Expected meter must be greater than 0')
+  if (Number(input.yarn_sent_kg) < 0) throw new Error('Yarn sent KG cannot be negative')
+
+  const multiplier = Number(input.multiplier) || DEFAULT_MULTIPLIER
+  const expectedTotal = calcTotalMeter(Number(input.expected_meter), multiplier)
+
+  const updatePayload = {
+    warper_name: input.warper_name.trim(),
+    yarn_quality: input.yarn_quality.trim() || null,
+    sent_date: input.sent_date || todayISO(),
+    yarn_sent_kg: Number(input.yarn_sent_kg),
+    expected_meter: Number(input.expected_meter),
+    multiplier,
+    expected_total_meter: expectedTotal,
+    challan_no: input.challan_no.trim() || null,
+    remarks: input.remarks.trim() || null,
+    updated_at: new Date().toISOString(),
+  }
+
+  const { data, error } = await client
+    .from('warp_warper_jobs')
+    .update(updatePayload)
+    .eq('id', jobId)
+    .select('*')
+    .single()
+  if (error) throw new Error('Unable to update this record. Please try again.')
+  const job = data as WarpWarperJob
+
+  // Sync linked pipe if at warper
+  if (existing.pipe_id) {
+    const pipeUpdate: Record<string, unknown> = {
+      warper_name: job.warper_name,
+      yarn_quality: job.yarn_quality,
+      location: `Warper · ${job.warper_name}`,
+      ...meterFields(job.expected_meter, multiplier, 0),
+      weight_kg: job.yarn_sent_kg,
+      updated_at: new Date().toISOString(),
+    }
+    const { data: linkedPipe } = await client.from('warp_pipes').select('*').eq('id', existing.pipe_id).maybeSingle()
+    if (linkedPipe && 'updated_by' in linkedPipe) {
+      pipeUpdate.updated_by = userName
+    }
+    await client.from('warp_pipes').update(pipeUpdate).eq('id', existing.pipe_id)
+  }
+
+  await logWarpAudit(
+    client,
+    'warp_warper_jobs',
+    jobId,
+    [
+      { field: 'warper_name', oldValue: existing.warper_name, newValue: job.warper_name },
+      { field: 'expected_meter', oldValue: existing.expected_meter, newValue: job.expected_meter },
+      { field: 'yarn_sent_kg', oldValue: existing.yarn_sent_kg, newValue: job.yarn_sent_kg },
+    ],
+    userName,
+  )
+
+  return job
+}
+
+export function canEditFilledPipe(pipe: WarpPipe): boolean {
+  return pipe.status === 'FILLED_GODOWN'
+}
+
+export function canEditEmptyPipe(pipe: WarpPipe): boolean {
+  return ['EMPTY', 'DAMAGED', 'UNDER_REPAIR', 'ISSUED'].includes(pipe.status)
+}
+
+export function canEditWarperJob(job: WarpWarperJob): boolean {
+  return job.status === 'SENT' || job.status === 'IN_PROCESS'
+}
+
 export { todayISO }

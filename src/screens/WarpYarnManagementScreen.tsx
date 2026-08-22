@@ -4,16 +4,22 @@
  */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { SubTabs } from '../components/SubTabs'
+import { EditFilledPipeModal } from '../components/warp/EditFilledPipeModal'
 import { WarpBeamStockEntry } from '../components/warp/WarpBeamStockEntry'
 import { FilledPipeGodownTab } from '../components/warp/FilledPipeGodownTab'
+import { WarpRecordActions } from '../components/warp/WarpRecordActions'
 import { useAuth } from '../lib/auth'
 import { createWarperGatePass, loadGatePasses, printGatePass, type WarpGatePass } from '../lib/warpBeamStock'
 import { MACHINES } from '../lib/database.types'
 import type { NavTarget } from '../lib/nav'
+import { applyEditDeleteOrQueue } from '../lib/pendingApprovals'
 import { supabase } from '../lib/supabase'
 import {
   DEFAULT_MULTIPLIER,
   calcTotalMeter,
+  canEditEmptyPipe,
+  canEditFilledPipe,
+  canEditWarperJob,
   canIssuePipe,
   composeGodownLocation,
   computeKpis,
@@ -30,11 +36,19 @@ import {
   statusBadgeClass,
   statusLabel,
   todayISO,
+  updateEmptyPipe,
+  updateFilledPipe,
+  updateWarpPurchase,
+  updateWarperJob,
+  type EmptyPipeEditInput,
+  type FilledPipeEntryInput,
   type WarpPipe,
+  type WarpPurchaseEditInput,
   type WarpWarperJob,
   type WarpYarnFilters,
   type WarpYarnPurchase,
   type WarpYarnTransaction,
+  type WarperJobEditInput,
 } from '../lib/warpYarn'
 
 type TabId = 'overview' | 'machines' | 'godown' | 'empty' | 'warper' | 'reports'
@@ -75,6 +89,7 @@ const REPORT_KINDS = [
   { id: 'kg-diff', label: 'KG Difference Report' },
   { id: 'history', label: 'Pipe Movement History' },
   { id: 'monthly', label: 'Monthly Warp Yarn Report' },
+  { id: 'purchases', label: 'Purchase Report' },
 ] as const
 
 type ReportKind = (typeof REPORT_KINDS)[number]['id']
@@ -84,7 +99,7 @@ export function WarpYarnManagementScreen({
   onNavigate,
   onTabChange,
 }: Props) {
-  const { profile } = useAuth()
+  const { profile, isCeo } = useAuth()
   const userName = profile?.full_name || profile?.roles?.role_name || 'User'
 
   const [tab, setTab] = useState<TabId>(initialTab)
@@ -98,6 +113,10 @@ export function WarpYarnManagementScreen({
   const [message, setMessage] = useState<string | null>(null)
   const [action, setAction] = useState<ActionId>(null)
   const [historyPipe, setHistoryPipe] = useState<WarpPipe | null>(null)
+  const [editFilledPipe, setEditFilledPipe] = useState<WarpPipe | null>(null)
+  const [editEmptyPipe, setEditEmptyPipe] = useState<WarpPipe | null>(null)
+  const [editPurchase, setEditPurchase] = useState<WarpYarnPurchase | null>(null)
+  const [editWarperJob, setEditWarperJob] = useState<WarpWarperJob | null>(null)
   const [reportKind, setReportKind] = useState<ReportKind>('current')
   const [tablesReady, setTablesReady] = useState(true)
   const [gatePasses, setGatePasses] = useState<WarpGatePass[]>([])
@@ -194,6 +213,22 @@ export function WarpYarnManagementScreen({
   function openHistory(pipe: WarpPipe) {
     setHistoryPipe(pipe)
     setAction('history')
+  }
+
+  function openEditFilled(pipe: WarpPipe) {
+    setEditFilledPipe(pipe)
+  }
+
+  function openEditEmpty(pipe: WarpPipe) {
+    setEditEmptyPipe(pipe)
+  }
+
+  function openEditPurchase(purchase: WarpYarnPurchase) {
+    setEditPurchase(purchase)
+  }
+
+  function openEditWarperJob(job: WarpWarperJob) {
+    setEditWarperJob(job)
   }
 
   function clearFilters() {
@@ -738,6 +773,106 @@ export function WarpYarnManagementScreen({
     })
   }
 
+  async function saveEditFilledPipe(input: FilledPipeEntryInput) {
+    if (!editFilledPipe) return
+    await withBusy(async () => {
+      const pipe = editFilledPipe
+      const result = await applyEditDeleteOrQueue({
+        isCeo,
+        createdAt: pipe.created_at,
+        tableName: 'warp_pipes',
+        recordId: pipe.id,
+        action: 'edit',
+        requestedBy: userName,
+        newData: input as unknown as Record<string, unknown>,
+        apply: async () => {
+          await updateFilledPipe(supabase, pipe.id, input, userName, pipe)
+        },
+      })
+      setEditFilledPipe(null)
+      setMessage(
+        result === 'applied'
+          ? `Pipe ${pipe.pipe_no} updated successfully.`
+          : `Edit queued for CEO approval · ${pipe.pipe_no}`,
+      )
+    })
+  }
+
+  async function saveEditEmptyPipe(input: EmptyPipeEditInput) {
+    if (!editEmptyPipe) return
+    await withBusy(async () => {
+      const pipe = editEmptyPipe
+      const result = await applyEditDeleteOrQueue({
+        isCeo,
+        createdAt: pipe.created_at,
+        tableName: 'warp_pipes',
+        recordId: pipe.id,
+        action: 'edit',
+        requestedBy: userName,
+        newData: input as unknown as Record<string, unknown>,
+        apply: async () => {
+          await updateEmptyPipe(supabase, pipe.id, input, userName, pipe)
+        },
+      })
+      setEditEmptyPipe(null)
+      setMessage(
+        result === 'applied'
+          ? `Pipe ${pipe.pipe_no} updated successfully.`
+          : `Edit queued for CEO approval · ${pipe.pipe_no}`,
+      )
+    })
+  }
+
+  async function saveEditPurchase(input: WarpPurchaseEditInput) {
+    if (!editPurchase) return
+    await withBusy(async () => {
+      const purchase = editPurchase
+      const result = await applyEditDeleteOrQueue({
+        isCeo,
+        createdAt: purchase.created_at,
+        tableName: 'warp_yarn_purchases',
+        recordId: purchase.id,
+        action: 'edit',
+        requestedBy: userName,
+        newData: input as unknown as Record<string, unknown>,
+        apply: async () => {
+          await updateWarpPurchase(supabase, purchase.id, input, userName, purchase)
+        },
+      })
+      setEditPurchase(null)
+      setMessage(
+        result === 'applied'
+          ? `Purchase updated successfully.`
+          : `Edit queued for CEO approval`,
+      )
+    })
+  }
+
+  async function saveEditWarperJob(input: WarperJobEditInput) {
+    if (!editWarperJob) return
+    await withBusy(async () => {
+      const job = editWarperJob
+      const result = await applyEditDeleteOrQueue({
+        isCeo,
+        createdAt: job.created_at,
+        tableName: 'warp_warper_jobs',
+        recordId: job.id,
+        action: 'edit',
+        requestedBy: userName,
+        newData: input as unknown as Record<string, unknown>,
+        apply: async () => {
+          await updateWarperJob(supabase, job.id, input, userName, job)
+        },
+      })
+      setEditWarperJob(null)
+      setMessage(
+        result === 'applied'
+          ? `Warper job ${job.pipe_no} updated successfully.`
+          : `Edit queued for CEO approval · ${job.pipe_no}`,
+      )
+    })
+  }
+
   /* ---------- Render helpers ---------- */
 
   function FilterBar({ showMachine = true, showWarper = true }: { showMachine?: boolean; showWarper?: boolean }) {
@@ -1011,6 +1146,7 @@ export function WarpYarnManagementScreen({
                     <th>Balance Meter</th>
                     <th>Weight KG</th>
                     <th>Status</th>
+                    <th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1034,6 +1170,18 @@ export function WarpYarnManagementScreen({
                           <span className="wym-badge">Idle</span>
                         )}
                       </td>
+                      <td>
+                        {pipe ? (
+                          <WarpRecordActions
+                            busy={busy}
+                            canEdit={canEditFilledPipe(pipe)}
+                            onView={() => openHistory(pipe)}
+                            onEdit={() => openEditFilled(pipe)}
+                          />
+                        ) : (
+                          '—'
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -1049,6 +1197,7 @@ export function WarpYarnManagementScreen({
           txns={txns}
           busy={busy}
           userName={userName}
+          isCeo={isCeo}
           onPipeClick={openHistory}
           onSaved={reload}
           onReceiveWarper={() => setAction('receive')}
@@ -1070,6 +1219,7 @@ export function WarpYarnManagementScreen({
                   <th>Status</th>
                   <th>Last Used</th>
                   <th>Remarks</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -1085,11 +1235,19 @@ export function WarpYarnManagementScreen({
                     </td>
                     <td>{p.last_used_at ? p.last_used_at.slice(0, 10) : '—'}</td>
                     <td>{p.remarks || '—'}</td>
+                    <td>
+                      <WarpRecordActions
+                        busy={busy}
+                        canEdit={canEditEmptyPipe(p)}
+                        onView={() => openHistory(p)}
+                        onEdit={() => openEditEmpty(p)}
+                      />
+                    </td>
                   </tr>
                 ))}
                 {!emptyPipes.length ? (
                   <tr>
-                    <td colSpan={6} className="text-muted">
+                    <td colSpan={7} className="text-muted">
                       No empty pipes
                     </td>
                   </tr>
@@ -1164,6 +1322,7 @@ export function WarpYarnManagementScreen({
                   <th>Meter Diff</th>
                   <th>KG Diff</th>
                   <th>Status</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -1189,11 +1348,22 @@ export function WarpYarnManagementScreen({
                     <td>
                       <span className={statusBadgeClass(j.status)}>{j.status}</span>
                     </td>
+                    <td>
+                      <WarpRecordActions
+                        busy={busy}
+                        canEdit={canEditWarperJob(j)}
+                        onView={() => {
+                          const pipe = pipes.find((p) => p.pipe_no === j.pipe_no)
+                          if (pipe) openHistory(pipe)
+                        }}
+                        onEdit={() => openEditWarperJob(j)}
+                      />
+                    </td>
                   </tr>
                 ))}
                 {!warperJobs.length ? (
                   <tr>
-                    <td colSpan={14} className="text-muted">
+                    <td colSpan={15} className="text-muted">
                       No warper / job-work records
                     </td>
                   </tr>
@@ -1225,7 +1395,12 @@ export function WarpYarnManagementScreen({
             txns={filteredTxns}
             jobs={jobs}
             purchases={purchases}
+            busy={busy}
             onPipe={openHistory}
+            onEditPipe={openEditFilled}
+            onEditEmpty={openEditEmpty}
+            onEditPurchase={openEditPurchase}
+            onEditWarperJob={openEditWarperJob}
           />
         </section>
       ) : null}
@@ -1274,10 +1449,48 @@ export function WarpYarnManagementScreen({
         <HistoryModal
           pipe={historyPipe}
           rows={historyRows}
+          canEdit={canEditFilledPipe(historyPipe) || canEditEmptyPipe(historyPipe)}
+          onEdit={() => {
+            setAction(null)
+            if (canEditFilledPipe(historyPipe)) openEditFilled(historyPipe)
+            else if (canEditEmptyPipe(historyPipe)) openEditEmpty(historyPipe)
+          }}
           onClose={() => {
             setAction(null)
             setHistoryPipe(null)
           }}
+        />
+      ) : null}
+      {editFilledPipe ? (
+        <EditFilledPipeModal
+          pipe={editFilledPipe}
+          busy={busy}
+          onClose={() => setEditFilledPipe(null)}
+          onSave={(input) => void saveEditFilledPipe(input)}
+        />
+      ) : null}
+      {editEmptyPipe ? (
+        <EditEmptyPipeModal
+          pipe={editEmptyPipe}
+          busy={busy}
+          onClose={() => setEditEmptyPipe(null)}
+          onSave={(input) => void saveEditEmptyPipe(input)}
+        />
+      ) : null}
+      {editPurchase ? (
+        <EditPurchaseModal
+          purchase={editPurchase}
+          busy={busy}
+          onClose={() => setEditPurchase(null)}
+          onSave={(input) => void saveEditPurchase(input)}
+        />
+      ) : null}
+      {editWarperJob ? (
+        <EditWarperJobModal
+          job={editWarperJob}
+          busy={busy}
+          onClose={() => setEditWarperJob(null)}
+          onSave={(input) => void saveEditWarperJob(input)}
         />
       ) : null}
     </div>
@@ -1309,14 +1522,24 @@ function ReportPanel({
   txns,
   jobs,
   purchases,
+  busy,
   onPipe,
+  onEditPipe,
+  onEditEmpty,
+  onEditPurchase,
+  onEditWarperJob,
 }: {
   kind: ReportKind
   pipes: WarpPipe[]
   txns: WarpYarnTransaction[]
   jobs: WarpWarperJob[]
   purchases: WarpYarnPurchase[]
+  busy?: boolean
   onPipe: (p: WarpPipe) => void
+  onEditPipe?: (p: WarpPipe) => void
+  onEditEmpty?: (p: WarpPipe) => void
+  onEditPurchase?: (p: WarpYarnPurchase) => void
+  onEditWarperJob?: (j: WarpWarperJob) => void
 }) {
   if (kind === 'current') {
     return (
@@ -1331,6 +1554,7 @@ function ReportPanel({
             <th>Used</th>
             <th>Balance</th>
             <th>KG</th>
+            <th>Action</th>
           </tr>
         </thead>
         <tbody>
@@ -1350,6 +1574,17 @@ function ReportPanel({
               <td className="num">{formatNum(p.used_meter)}</td>
               <td className="num">{formatNum(p.balance_meter)}</td>
               <td className="num">{formatNum(p.weight_kg, 2)}</td>
+              <td>
+                <WarpRecordActions
+                  busy={busy}
+                  canEdit={canEditFilledPipe(p) || canEditEmptyPipe(p)}
+                  onView={() => onPipe(p)}
+                  onEdit={() => {
+                    if (canEditFilledPipe(p) && onEditPipe) onEditPipe(p)
+                    else if (canEditEmptyPipe(p) && onEditEmpty) onEditEmpty(p)
+                  }}
+                />
+              </td>
             </tr>
           ))}
         </tbody>
@@ -1400,6 +1635,7 @@ function ReportPanel({
             <th>Total</th>
             <th>Balance</th>
             <th>KG</th>
+            <th>Action</th>
           </tr>
         </thead>
         <tbody>
@@ -1413,11 +1649,19 @@ function ReportPanel({
               <td className="num">{formatNum(p.total_meter)}</td>
               <td className="num">{formatNum(p.balance_meter)}</td>
               <td className="num">{formatNum(p.weight_kg, 2)}</td>
+              <td>
+                <WarpRecordActions
+                  busy={busy}
+                  canEdit={canEditFilledPipe(p)}
+                  onView={() => onPipe(p)}
+                  onEdit={() => onEditPipe?.(p)}
+                />
+              </td>
             </tr>
           ))}
           {!rows.length ? (
             <tr>
-              <td colSpan={6} className="text-muted">
+              <td colSpan={7} className="text-muted">
                 No filled godown stock
               </td>
             </tr>
@@ -1437,6 +1681,7 @@ function ReportPanel({
             <th>Location</th>
             <th>Status</th>
             <th>Last Used</th>
+            <th>Action</th>
           </tr>
         </thead>
         <tbody>
@@ -1449,6 +1694,14 @@ function ReportPanel({
                 <span className={statusBadgeClass(p.status)}>{statusLabel(p.status)}</span>
               </td>
               <td>{p.last_used_at ? p.last_used_at.slice(0, 10) : '—'}</td>
+              <td>
+                <WarpRecordActions
+                  busy={busy}
+                  canEdit={canEditEmptyPipe(p)}
+                  onView={() => onPipe(p)}
+                  onEdit={() => onEditEmpty?.(p)}
+                />
+              </td>
             </tr>
           ))}
         </tbody>
@@ -1467,6 +1720,7 @@ function ReportPanel({
             <th>KG Sent</th>
             <th>Expected Total</th>
             <th>Status</th>
+            <th>Action</th>
           </tr>
         </thead>
         <tbody>
@@ -1479,6 +1733,13 @@ function ReportPanel({
               <td className="num">{formatNum(j.expected_total_meter)}</td>
               <td>
                 <span className={statusBadgeClass(j.status)}>{j.status}</span>
+              </td>
+              <td>
+                <WarpRecordActions
+                  busy={busy}
+                  canEdit={canEditWarperJob(j)}
+                  onEdit={() => onEditWarperJob?.(j)}
+                />
               </td>
             </tr>
           ))}
@@ -1583,6 +1844,47 @@ function ReportPanel({
             <tr>
               <td colSpan={8} className="text-muted">
                 No differences recorded
+              </td>
+            </tr>
+          ) : null}
+        </tbody>
+      </TableCard>
+    )
+  }
+  if (kind === 'purchases') {
+    return (
+      <TableCard title="Purchase Warp Yarn Report">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Supplier</th>
+            <th>Invoice</th>
+            <th>Quality</th>
+            <th>Qty KG</th>
+            <th>Rate</th>
+            <th>Total</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {purchases.map((p) => (
+            <tr key={p.id}>
+              <td>{p.purchase_date}</td>
+              <td>{p.supplier}</td>
+              <td>{p.invoice_no || '—'}</td>
+              <td>{p.yarn_quality}</td>
+              <td className="num">{formatNum(p.quantity_kg, 2)}</td>
+              <td className="num">{formatNum(p.rate, 2)}</td>
+              <td className="num">{formatNum(p.total_amount, 2)}</td>
+              <td>
+                <WarpRecordActions busy={busy} onEdit={() => onEditPurchase?.(p)} />
+              </td>
+            </tr>
+          ))}
+          {!purchases.length ? (
+            <tr>
+              <td colSpan={8} className="text-muted">
+                No purchases recorded
               </td>
             </tr>
           ) : null}
@@ -2524,10 +2826,14 @@ function HistoryModal({
   pipe,
   rows,
   onClose,
+  onEdit,
+  canEdit = false,
 }: {
   pipe: WarpPipe
   rows: WarpYarnTransaction[]
   onClose: () => void
+  onEdit?: () => void
+  canEdit?: boolean
 }) {
   const sorted = [...rows].sort((a, b) => `${b.txn_date}${b.created_at}`.localeCompare(`${a.txn_date}${a.created_at}`))
   return (
@@ -2632,10 +2938,324 @@ function HistoryModal({
         </table>
       </div>
       <div className="wym-modal-actions">
+        {canEdit && onEdit ? (
+          <button type="button" className="btn-warp" onClick={onEdit}>
+            Edit
+          </button>
+        ) : null}
         <button type="button" className="btn-ghost" onClick={onClose}>
           Close
         </button>
       </div>
+    </Modal>
+  )
+}
+
+function EditEmptyPipeModal({
+  pipe,
+  busy,
+  onClose,
+  onSave,
+}: {
+  pipe: WarpPipe
+  busy: boolean
+  onClose: () => void
+  onSave: (input: EmptyPipeEditInput) => void
+}) {
+  const [form, setForm] = useState<EmptyPipeEditInput>({
+    serial_no: pipe.serial_no || pipe.pipe_no,
+    location: pipe.location,
+    status: pipe.status,
+    remarks: pipe.remarks || '',
+  })
+
+  return (
+    <Modal title={`Edit Empty Pipe · ${pipe.pipe_no}`} onClose={onClose}>
+      <form
+        className="form-stack"
+        onSubmit={(e) => {
+          e.preventDefault()
+          onSave(form)
+        }}
+      >
+        <div className="wym-form-grid">
+          <label className="field">
+            <span>Pipe No.</span>
+            <input readOnly value={pipe.pipe_no} className="fpg-readonly" />
+          </label>
+          <label className="field">
+            <span>Serial No.</span>
+            <input value={form.serial_no} onChange={(e) => setForm({ ...form, serial_no: e.target.value })} />
+          </label>
+          <label className="field">
+            <span>Location</span>
+            <input required value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+          </label>
+          <label className="field">
+            <span>Status</span>
+            <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+              <option value="EMPTY">Available</option>
+              <option value="ISSUED">Issued</option>
+              <option value="DAMAGED">Damaged</option>
+              <option value="UNDER_REPAIR">Under Repair</option>
+            </select>
+          </label>
+          <label className="field wym-span-2">
+            <span>Remarks</span>
+            <input value={form.remarks} onChange={(e) => setForm({ ...form, remarks: e.target.value })} />
+          </label>
+        </div>
+        <div className="wym-modal-actions">
+          <button type="button" className="btn-ghost" onClick={onClose} disabled={busy}>
+            Cancel
+          </button>
+          <button type="submit" className="btn-warp" disabled={busy}>
+            Save Changes
+          </button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+function EditPurchaseModal({
+  purchase,
+  busy,
+  onClose,
+  onSave,
+}: {
+  purchase: WarpYarnPurchase
+  busy: boolean
+  onClose: () => void
+  onSave: (input: WarpPurchaseEditInput) => void
+}) {
+  const [form, setForm] = useState<WarpPurchaseEditInput>({
+    purchase_date: purchase.purchase_date,
+    supplier: purchase.supplier,
+    invoice_no: purchase.invoice_no || '',
+    yarn_quality: purchase.yarn_quality,
+    yarn_specification: purchase.yarn_specification || '',
+    quantity_kg: Number(purchase.quantity_kg),
+    rate: Number(purchase.rate),
+    gst_pct: Number(purchase.gst_pct),
+    destination: purchase.destination || '',
+    remarks: purchase.remarks || '',
+  })
+  const amount = form.quantity_kg * form.rate
+  const total = amount * (1 + form.gst_pct / 100)
+
+  return (
+    <Modal title="Edit Purchase Warp Yarn" onClose={onClose}>
+      <form
+        className="form-stack"
+        onSubmit={(e) => {
+          e.preventDefault()
+          onSave(form)
+        }}
+      >
+        <div className="wym-form-grid">
+          <label className="field">
+            <span>Date</span>
+            <input
+              type="date"
+              required
+              value={form.purchase_date}
+              onChange={(e) => setForm({ ...form, purchase_date: e.target.value })}
+            />
+          </label>
+          <label className="field">
+            <span>Supplier</span>
+            <input required value={form.supplier} onChange={(e) => setForm({ ...form, supplier: e.target.value })} />
+          </label>
+          <label className="field">
+            <span>Invoice / Challan No.</span>
+            <input value={form.invoice_no} onChange={(e) => setForm({ ...form, invoice_no: e.target.value })} />
+          </label>
+          <label className="field">
+            <span>Yarn Quality</span>
+            <input
+              required
+              value={form.yarn_quality}
+              onChange={(e) => setForm({ ...form, yarn_quality: e.target.value })}
+            />
+          </label>
+          <label className="field">
+            <span>Yarn Specification</span>
+            <input
+              value={form.yarn_specification}
+              onChange={(e) => setForm({ ...form, yarn_specification: e.target.value })}
+            />
+          </label>
+          <label className="field">
+            <span>Quantity KG</span>
+            <input
+              type="number"
+              step="0.01"
+              required
+              value={form.quantity_kg}
+              onChange={(e) => setForm({ ...form, quantity_kg: Number(e.target.value) || 0 })}
+            />
+          </label>
+          <label className="field">
+            <span>Rate</span>
+            <input
+              type="number"
+              step="0.01"
+              required
+              value={form.rate}
+              onChange={(e) => setForm({ ...form, rate: Number(e.target.value) || 0 })}
+            />
+          </label>
+          <label className="field">
+            <span>GST %</span>
+            <input
+              type="number"
+              step="0.01"
+              value={form.gst_pct}
+              onChange={(e) => setForm({ ...form, gst_pct: Number(e.target.value) || 0 })}
+            />
+          </label>
+          <label className="field">
+            <span>Amount</span>
+            <input readOnly value={formatNum(amount, 2)} />
+          </label>
+          <label className="field">
+            <span>Total Amount</span>
+            <input readOnly value={formatNum(total, 2)} />
+          </label>
+          <label className="field">
+            <span>Destination / Warper</span>
+            <input value={form.destination} onChange={(e) => setForm({ ...form, destination: e.target.value })} />
+          </label>
+          <label className="field wym-span-2">
+            <span>Remarks</span>
+            <input value={form.remarks} onChange={(e) => setForm({ ...form, remarks: e.target.value })} />
+          </label>
+        </div>
+        <div className="wym-modal-actions">
+          <button type="button" className="btn-ghost" onClick={onClose} disabled={busy}>
+            Cancel
+          </button>
+          <button type="submit" className="btn-warp" disabled={busy}>
+            Save Changes
+          </button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+function EditWarperJobModal({
+  job,
+  busy,
+  onClose,
+  onSave,
+}: {
+  job: WarpWarperJob
+  busy: boolean
+  onClose: () => void
+  onSave: (input: WarperJobEditInput) => void
+}) {
+  const [form, setForm] = useState<WarperJobEditInput>({
+    warper_name: job.warper_name,
+    yarn_quality: job.yarn_quality || '',
+    sent_date: job.sent_date,
+    yarn_sent_kg: Number(job.yarn_sent_kg),
+    expected_meter: Number(job.expected_meter),
+    multiplier: Number(job.multiplier),
+    challan_no: job.challan_no || '',
+    remarks: job.remarks || '',
+  })
+  const expectedTotal = calcTotalMeter(form.expected_meter, form.multiplier)
+
+  return (
+    <Modal title={`Edit Warper Job · ${job.pipe_no}`} onClose={onClose}>
+      <form
+        className="form-stack"
+        onSubmit={(e) => {
+          e.preventDefault()
+          onSave(form)
+        }}
+      >
+        <div className="wym-form-grid">
+          <label className="field">
+            <span>Pipe No.</span>
+            <input readOnly value={job.pipe_no} className="fpg-readonly" />
+          </label>
+          <label className="field">
+            <span>Warper Name</span>
+            <input
+              required
+              value={form.warper_name}
+              onChange={(e) => setForm({ ...form, warper_name: e.target.value })}
+            />
+          </label>
+          <label className="field">
+            <span>Yarn Quality</span>
+            <input value={form.yarn_quality} onChange={(e) => setForm({ ...form, yarn_quality: e.target.value })} />
+          </label>
+          <label className="field">
+            <span>Sent Date</span>
+            <input
+              type="date"
+              required
+              value={form.sent_date}
+              onChange={(e) => setForm({ ...form, sent_date: e.target.value })}
+            />
+          </label>
+          <label className="field">
+            <span>Yarn Sent KG</span>
+            <input
+              type="number"
+              step="0.01"
+              required
+              value={form.yarn_sent_kg}
+              onChange={(e) => setForm({ ...form, yarn_sent_kg: Number(e.target.value) || 0 })}
+            />
+          </label>
+          <label className="field">
+            <span>Expected Meter</span>
+            <input
+              type="number"
+              step="0.01"
+              required
+              value={form.expected_meter}
+              onChange={(e) => setForm({ ...form, expected_meter: Number(e.target.value) || 0 })}
+            />
+          </label>
+          <label className="field">
+            <span>Multiplier</span>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              required
+              value={form.multiplier}
+              onChange={(e) => setForm({ ...form, multiplier: Number(e.target.value) || DEFAULT_MULTIPLIER })}
+            />
+          </label>
+          <label className="field">
+            <span>Expected Total Meter</span>
+            <input readOnly className="fpg-readonly" value={`${formatNum(expectedTotal)} MTR`} />
+          </label>
+          <label className="field">
+            <span>Challan No.</span>
+            <input value={form.challan_no} onChange={(e) => setForm({ ...form, challan_no: e.target.value })} />
+          </label>
+          <label className="field wym-span-2">
+            <span>Remarks</span>
+            <input value={form.remarks} onChange={(e) => setForm({ ...form, remarks: e.target.value })} />
+          </label>
+        </div>
+        <div className="wym-modal-actions">
+          <button type="button" className="btn-ghost" onClick={onClose} disabled={busy}>
+            Cancel
+          </button>
+          <button type="submit" className="btn-warp" disabled={busy}>
+            Save Changes
+          </button>
+        </div>
+      </form>
     </Modal>
   )
 }
