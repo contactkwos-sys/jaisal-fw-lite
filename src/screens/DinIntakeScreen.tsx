@@ -179,7 +179,7 @@ export function DinIntakeScreen({ onNavigate }: Props) {
     <div className="screen dto-screen">
       <header className="screen-header">
         <div>
-          <h1>DESI Intake</h1>
+          <h1>DESIGN Intake</h1>
           <p className="text-muted">Receive DIN by photo, upload, or Gmail — creates a unique DIN master record.</p>
         </div>
       </header>
@@ -280,7 +280,7 @@ export function DinIntakeScreen({ onNavigate }: Props) {
         <h2 className="section-title">DIN Master Record</h2>
         <div className="dto-form-grid">
           <label className="field">
-            <span>DESI No. (formerly DIN)</span>
+            <span>DESIGN No. (formerly DIN)</span>
             <input value={dinNumber} onChange={(e) => setDinNumber(e.target.value)} required />
           </label>
           <label className="field">

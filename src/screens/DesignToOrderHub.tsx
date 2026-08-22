@@ -61,7 +61,7 @@ export function DesignToOrderHub({ onNavigate }: Props) {
   const matchings = detail?.din_matchings?.slice().sort((a, b) => a.matching_no - b.matching_no) || []
 
   const quick = [
-    { id: 'intake', label: 'DESI Intake', onClick: () => onNavigate({ screen: 'dto-intake', module: 'design-to-order' }) },
+    { id: 'intake', label: 'DESIGN Intake', onClick: () => onNavigate({ screen: 'dto-intake', module: 'design-to-order' }) },
     {
       id: 'costing',
       label: 'Design-wise Costing',
@@ -115,7 +115,7 @@ export function DesignToOrderHub({ onNavigate }: Props) {
         <div>
           <h1>Design to Order</h1>
           <p className="text-muted">
-            DESI (formerly DIN) · Design-wise Costing · Sample · Customer Order · Dispatch tracking
+            DESIGN (formerly DIN) · Design-wise Costing · Sample · Customer Order · Dispatch tracking
           </p>
         </div>
         <div className="dto-header-actions">
@@ -163,14 +163,14 @@ export function DesignToOrderHub({ onNavigate }: Props) {
             />
           </div>
           {filtered.length === 0 ? (
-            <DtoEmpty>No DESI records yet. Start with DESI Intake.</DtoEmpty>
+            <DtoEmpty>No DESIGN records yet. Start with DESIGN Intake.</DtoEmpty>
           ) : (
             <div className="table-wrap">
               <table className="data-table dto-table">
                 <thead>
                   <tr>
                     <th>Date</th>
-                    <th>DESI No.</th>
+                    <th>DESIGN No.</th>
                     <th>Design</th>
                     <th>Party</th>
                     <th>Warp</th>

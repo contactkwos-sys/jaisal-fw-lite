@@ -56,6 +56,7 @@ export const COMMON_DESIGNATIONS = [
   'Quality Inspector',
   'Store',
   'Maintenance',
+  'Others',
   'Other',
 ] as const
 

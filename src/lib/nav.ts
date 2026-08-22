@@ -48,6 +48,7 @@ export type AppScreen =
   | 'security-inventory'
   | 'module-hub'
   | 'settings-hub'
+  | 'ceo-pin-management'
   | 'placeholder'
 
 export type MainModuleId =
@@ -118,20 +119,20 @@ export const MAIN_MODULES: MainModule[] = [
     screen: 'dto-hub',
     mobileNav: true,
     items: [
-      { id: 'din-intake', label: 'DESI Intake', screen: 'dto-intake', hint: 'DESI Inbox · Upload · Photo · Email' },
+      { id: 'din-intake', label: 'DESIGN Intake', screen: 'dto-intake', hint: 'DESIGN Inbox · Upload · Photo · Email' },
       {
         id: 'din-costing',
         label: 'Design-wise Costing',
         screen: 'design-wise-costing',
         hint: 'Canonical Design-wise Costing engine (CEO)',
       },
-      { id: 'sample-job', label: 'Sample Job Card', screen: 'dto-sample-job', hint: 'Issue sample cards from DESI' },
+      { id: 'sample-job', label: 'Sample Job Card', screen: 'dto-sample-job', hint: 'Issue sample cards from DESIGN' },
       { id: 'sample-tracking', label: 'Sample Tracking', screen: 'dto-tracking', hint: 'Produce · receive · approve matching' },
-      { id: 'order-booking', label: 'Customer Order', screen: 'dto-order-booking', hint: 'Customer fabric order from DESI' },
+      { id: 'order-booking', label: 'Customer Order', screen: 'dto-order-booking', hint: 'Customer fabric order from DESIGN' },
       { id: 'order-status', label: 'Order Status', screen: 'dto-order-status', hint: 'Pending & status tracking' },
       { id: 'sample-promotion', label: 'Customer Promotion', screen: 'dto-promotion', hint: 'Share approved matching' },
       { id: 'followup', label: 'Order Follow-up', screen: 'dto-followup', hint: 'Party follow-ups' },
-      { id: 'dto-reports', label: 'DESI Reports', screen: 'dto-reports', hint: 'Design to Order reports' },
+      { id: 'dto-reports', label: 'DESIGN Reports', screen: 'dto-reports', hint: 'Design to Order reports' },
     ],
   },
   {
@@ -339,6 +340,7 @@ export const MAIN_MODULES: MainModule[] = [
       { id: 'hr-attendance', label: 'Attendance', screen: 'attendance', hint: 'Daily attendance by date & shift' },
       { id: 'hr-leave', label: 'Leave / Holiday', screen: 'hr-payroll', sub: 'leave', hint: 'Leave entries & holidays' },
       { id: 'hr-rates', label: 'Salary Rate Master', screen: 'hr-payroll', sub: 'rates', hint: 'Monthly / daily / hourly rates' },
+      { id: 'hr-advance', label: 'Advance Salary', screen: 'hr-payroll', sub: 'advance', hint: 'Cash / cheque / bank advance entries' },
       { id: 'hr-payroll-run', label: 'Payroll', screen: 'hr-payroll', sub: 'payroll', hint: 'Calculate & approve payroll' },
       { id: 'hr-statutory', label: 'ESI / PF / PT', screen: 'hr-payroll', sub: 'statutory', hint: 'Toggle statutory deductions' },
       { id: 'hr-register', label: 'Salary Register', screen: 'hr-payroll', sub: 'register', hint: 'Monthly salary history' },
@@ -607,7 +609,8 @@ export const MAIN_MODULES: MainModule[] = [
         filter: 'preferences',
         hint: 'System preferences (placeholder)',
       },
-      { id: 'user-mgmt', label: 'User / PIN Management', screen: 'admin', sub: 'roles', hint: 'Users & roles' },
+      { id: 'ceo-pin-mgmt', label: 'CEO PIN Management', screen: 'ceo-pin-management', hint: 'Module PINs · departments · audit' },
+      { id: 'user-mgmt', label: 'Role Login PINs', screen: 'admin', sub: 'roles', hint: 'Role-based login PINs (legacy)' },
       { id: 'perm-mgmt', label: 'Permission Management', screen: 'admin', sub: 'permissions', hint: 'Module access by role' },
       {
         id: 'legacy-payroll',
@@ -652,14 +655,15 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   'item-master': 'Item Master',
   'orders-pending': 'Internal Pending',
   'dto-hub': 'Design to Order',
-  'dto-intake': 'DESI Intake',
+  'ceo-pin-management': 'CEO PIN Management',
+  'dto-intake': 'DESIGN Intake',
   'dto-sample-job': 'Sample Job Card',
   'dto-tracking': 'Sample Tracking',
   'dto-order-booking': 'Customer Order',
   'dto-order-status': 'Order Status',
   'dto-promotion': 'Customer Promotion',
   'dto-followup': 'Order Follow-up',
-  'dto-reports': 'DESI Reports',
+  'dto-reports': 'DESIGN Reports',
   'hr-payroll': 'HR & Payroll',
   'program-dispatch': 'Program & Dispatch',
   'machine-wise-production': 'Machine-wise Production',
@@ -735,6 +739,7 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
   if (screen === 'maintenance' || screen === 'maint-material') return 'maintenance'
   if (screen === 'parties' || screen === 'crm' || screen === 'item-master') return 'masters'
   if (screen === 'security') return 'security'
+  if (screen === 'ceo-pin-management') return 'settings'
   if (screen === 'admin') {
     if (sub === 'roles' || sub === 'permissions' || sub === 'payroll') return 'settings'
     return 'security'
@@ -763,6 +768,7 @@ export function titleFor(screen: AppScreen, sub?: string, moduleId?: MainModuleI
       employees: 'Employee Master',
       leave: 'Leave / Holiday',
       rates: 'Salary Rate Master',
+      advance: 'Advance Salary',
       payroll: 'Payroll',
       statutory: 'ESI / PF / PT',
       register: 'Salary Register',

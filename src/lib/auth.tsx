@@ -181,6 +181,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const logout = useCallback(async () => {
+    const { clearModuleUnlocks } = await import('./ceoPinManagement')
+    clearModuleUnlocks()
     await supabase.auth.signOut()
     setSession(null)
     setProfile(null)

@@ -270,11 +270,13 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
         let pin = ''
         const isCeoRole = role.role_name.toLowerCase() === 'ceo'
         if (isCeoRole) {
-          pin = '3060'
+          do {
+            pin = String(cryptoRand())
+          } while (used.has(pin))
         } else {
           do {
             pin = String(cryptoRand())
-          } while (used.has(pin) || pin === '3060')
+          } while (used.has(pin))
         }
         used.add(pin)
 
