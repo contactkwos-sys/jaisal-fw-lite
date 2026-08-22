@@ -208,7 +208,12 @@ export type CashBookInsertResult = {
 
 export async function insertCashBookEntry(payload: CashBookInsert): Promise<CashBookInsertResult> {
   const items = payload.items ?? []
-  const purpose = payload.purpose_notes?.trim() || itemsSummary(items)
+  const purpose =
+    payload.purpose_notes?.trim() ||
+    (payload.category === 'Deposit from Owner' ? '' : itemsSummary(items) || '')
+  if (payload.category === 'Deposit from Owner' && !purpose) {
+    throw new Error('Purpose is required for Deposit from Owner')
+  }
   const row = {
     entry_date: payload.entry_date,
     entry_type: payload.entry_type,
@@ -216,7 +221,7 @@ export async function insertCashBookEntry(payload: CashBookInsert): Promise<Cash
     contact_number: payload.contact_number?.trim() || null,
     category: payload.category,
     machine_number: resolveMachineNumber(payload),
-    purpose_notes: purpose,
+    purpose_notes: purpose || null,
     amount: payload.amount,
     entered_by: payload.entered_by,
   }
@@ -256,6 +261,12 @@ export async function insertCashBookEntry(payload: CashBookInsert): Promise<Cash
 
 function normalizeUpdate(payload: CashBookUpdate) {
   const items = payload.items ?? []
+  const purpose =
+    payload.purpose_notes?.trim() ||
+    (payload.category === 'Deposit from Owner' ? '' : itemsSummary(items) || '')
+  if (payload.category === 'Deposit from Owner' && !purpose) {
+    throw new Error('Purpose is required for Deposit from Owner')
+  }
   return {
     entry_date: payload.entry_date,
     entry_type: payload.entry_type,
@@ -263,13 +274,16 @@ function normalizeUpdate(payload: CashBookUpdate) {
     contact_number: payload.contact_number?.trim() || null,
     category: payload.category,
     machine_number: resolveMachineNumber(payload),
-    purpose_notes: payload.purpose_notes?.trim() || itemsSummary(items),
+    purpose_notes: purpose || null,
     amount: payload.amount,
     edited_by: payload.edited_by || null,
   }
 }
 
-/** Edit within 7 days applies immediately; older → pending_approvals. */
+/**
+ * Cash Book edit/delete: CEO only may apply immediately.
+ * All other roles always queue for CEO approval (no 7-day free window).
+ */
 export async function updateCashBookEntryOrQueue(args: {
   entry: CashBookEntry
   payload: CashBookUpdate
@@ -285,16 +299,22 @@ export async function updateCashBookEntryOrQueue(args: {
     recordId: args.entry.id,
     action: 'edit',
     requestedBy: args.requestedBy,
-    newData: data,
+    newData: { ...data, _items: items },
+    requireCeoApproval: true,
     apply: async () => {
-      const { error } = await supabase.from('cashbook_entries').update(data).eq('id', args.entry.id)
+      const stamp = {
+        ...data,
+        edit_approved_by: args.requestedBy,
+        edit_approved_at: new Date().toISOString(),
+      }
+      const { error } = await supabase.from('cashbook_entries').update(stamp).eq('id', args.entry.id)
       if (error) throw error
       await replaceEntryItems(args.entry.id, items)
     },
   })
 }
 
-/** Delete within 7 days applies immediately; older → pending_approvals. */
+/** Cash Book delete: CEO applies now; others always queue for CEO approval. */
 export async function deleteCashBookEntryOrQueue(args: {
   entry: CashBookEntry
   isCeo: boolean
@@ -308,7 +328,18 @@ export async function deleteCashBookEntryOrQueue(args: {
     action: 'delete',
     requestedBy: args.requestedBy,
     newData: null,
+    requireCeoApproval: true,
     apply: async () => {
+      const stamp = {
+        edited_by: args.requestedBy,
+        edit_approved_by: args.requestedBy,
+        edit_approved_at: new Date().toISOString(),
+      }
+      const { error: uErr } = await supabase
+        .from('cashbook_entries')
+        .update(stamp)
+        .eq('id', args.entry.id)
+      if (uErr) throw uErr
       const { error } = await supabase.from('cashbook_entries').delete().eq('id', args.entry.id)
       if (error) throw error
     },
@@ -401,8 +432,16 @@ export function buildLedgerBook(entries: CashBookEntry[]): {
 }
 
 export function entryItemsLabel(entry: CashBookEntry): string {
+  // Owner deposits are purpose-driven — prefer purpose_notes when present
+  if (entry.category === 'Deposit from Owner' && entry.purpose_notes?.trim()) {
+    return entry.purpose_notes.trim()
+  }
   if (entry.items?.length) {
     return entry.items.map((i) => i.item_name).join(', ')
   }
   return entry.purpose_notes?.trim() || '—'
+}
+
+export function isOwnerDepositCategory(category: CashBookCategory): boolean {
+  return category === 'Deposit from Owner'
 }

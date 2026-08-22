@@ -1,0 +1,395 @@
+/* Machine-wise Maintenance — JAISAL FW */
+
+.mwm-screen {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.mwm-eyebrow {
+  margin: 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.mwm-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.mwm-header h1 {
+  margin: 0.15rem 0 0;
+}
+
+.mwm-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.mwm-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.mwm-kpi {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.75rem 0.85rem;
+  box-shadow: var(--shadow-sm);
+  display: grid;
+  gap: 0.2rem;
+}
+
+.mwm-kpi span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.mwm-kpi strong {
+  font-size: 1.25rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--teal);
+}
+
+.mwm-kpi-warn strong { color: var(--warning); }
+.mwm-kpi-ok strong { color: var(--success); }
+
+.mwm-quick {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
+}
+
+.mwm-qa {
+  min-height: 2.75rem;
+  border: none;
+  border-radius: var(--radius);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  padding: 0.55rem 0.75rem;
+  cursor: pointer;
+}
+
+.mwm-qa-blue { background: var(--teal); }
+.mwm-qa-green { background: var(--success); }
+.mwm-qa-slate { background: #5b6b7c; }
+.mwm-qa-amber { background: var(--amber); }
+.mwm-qa-grey { background: #64748b; }
+
+.mwm-machine-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+
+.mwm-machine-card {
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.85rem;
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  display: grid;
+  gap: 0.65rem;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.mwm-machine-card:hover {
+  border-color: var(--teal);
+  transform: translateY(-1px);
+}
+
+.mwm-machine-card.status-breakdown {
+  border-left: 4px solid var(--danger);
+}
+.mwm-machine-card.status-under-maintenance {
+  border-left: 4px solid var(--info);
+}
+.mwm-machine-card.status-attention {
+  border-left: 4px solid var(--warning);
+}
+.mwm-machine-card.status-running {
+  border-left: 4px solid var(--success);
+}
+.mwm-machine-card.status-idle {
+  border-left: 4px solid var(--muted2);
+}
+
+.mwm-machine-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.mwm-machine-meta {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem 0.65rem;
+}
+
+.mwm-machine-meta dt {
+  font-size: 0.7rem;
+  color: var(--muted2);
+}
+
+.mwm-machine-meta dd {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.mwm-badge {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.12rem 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.mwm-badge-ok {
+  color: var(--success);
+  background: var(--success-soft);
+  border-color: color-mix(in srgb, var(--success) 30%, var(--line));
+}
+.mwm-badge-danger {
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-color: color-mix(in srgb, var(--danger) 30%, var(--line));
+}
+.mwm-badge-warn {
+  color: var(--warning);
+  background: var(--warning-soft);
+  border-color: color-mix(in srgb, var(--warning) 30%, var(--line));
+}
+.mwm-badge-info {
+  color: var(--info);
+  background: var(--info-soft);
+  border-color: color-mix(in srgb, var(--info) 30%, var(--line));
+}
+.mwm-badge-muted {
+  color: var(--muted);
+  background: var(--surface2);
+}
+
+.mwm-two-col {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.mwm-panel {
+  padding: 0.9rem;
+  border-radius: 8px;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.mwm-form-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.65rem;
+}
+
+.mwm-form-grid .field-span {
+  grid-column: 1 / -1;
+}
+
+.mwm-contact-chip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding: 0.75rem;
+  border-radius: var(--radius);
+  background: var(--teal-soft);
+  border: 1px solid var(--line);
+}
+
+.mwm-contact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.mwm-call,
+.mwm-wa {
+  min-height: 2.4rem;
+  min-width: 4.5rem;
+  border: none;
+  border-radius: var(--radius);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  padding: 0.4rem 0.7rem;
+  cursor: pointer;
+}
+
+.mwm-call { background: var(--teal); }
+.mwm-wa { background: var(--wa); }
+
+.mwm-timeline {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+}
+
+.mwm-tl {
+  min-height: 2.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface2);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mwm-tl.active {
+  background: var(--teal);
+  color: #fff;
+  border-color: var(--teal);
+}
+
+.mwm-part-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.4rem;
+  margin-bottom: 0.45rem;
+}
+
+.mwm-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  font-size: 0.85rem;
+}
+
+.mwm-table th,
+.mwm-table td {
+  border: 1px solid var(--line);
+  padding: 0.45rem 0.55rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.mwm-table th {
+  background: var(--surface2);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.mwm-row-overdue {
+  background: var(--danger-soft);
+}
+
+.mwm-filter-bar {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
+  padding: 0.75rem;
+  border-radius: 8px;
+  margin-bottom: 0.75rem;
+}
+
+.mwm-history-cards {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.75rem;
+}
+
+.mwm-print-header {
+  text-align: center;
+  margin-bottom: 0.75rem;
+}
+
+.mwm-print-header h2 {
+  margin: 0.35rem 0;
+  font-size: 1.1rem;
+}
+
+.linkish {
+  background: none;
+  border: none;
+  color: var(--teal);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+@media (min-width: 720px) {
+  .mwm-kpi-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .mwm-quick {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+  .mwm-machine-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .mwm-form-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .mwm-part-row {
+    grid-template-columns: 1.4fr 1fr 0.7fr 0.8fr 1.2fr;
+  }
+  .mwm-timeline {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+  .mwm-filter-bar {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1100px) {
+  .mwm-kpi-row {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  .mwm-machine-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .mwm-two-col {
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+    align-items: start;
+  }
+  .mwm-filter-bar {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+@media print {
+  .no-print,
+  .mwm-header-actions,
+  .sub-tabs,
+  .mwm-quick,
+  .mwm-timeline,
+  .mwm-contact-actions,
+  .share-actions {
+    display: none !important;
+  }
+
+  .mwm-screen,
+  .mwm-print-area {
+    background: #fff;
+  }
+
+  .mwm-table th,
+  .mwm-table td {
+    border-color: #999;
+  }
+}

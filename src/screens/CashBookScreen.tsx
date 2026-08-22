@@ -12,6 +12,7 @@ import {
   fetchCashBookItemMaster,
   formatCashBookError,
   insertCashBookEntry,
+  isOwnerDepositCategory,
   updateCashBookEntryOrQueue,
   type CashBookLineItemInput,
 } from '../lib/cashBook'
@@ -27,7 +28,6 @@ import {
 /** Floor machines (M1–M6) plus shared/general expenses. Machine Master is still a placeholder. */
 const CASHBOOK_MACHINE_OPTIONS = [...MACHINES, 'Others'] as const
 import { todayISO } from '../lib/mutate'
-import { isWithinEditWindow } from '../lib/pendingApprovals'
 
 type TabId = 'entry' | 'list' | 'ledger' | 'book'
 
@@ -45,6 +45,8 @@ type FormState = {
   contact_number: string
   category: CashBookCategory
   machine_number: string
+  /** Required for Deposit from Owner — why the owner deposited cash. */
+  purpose_notes: string
   amount: string
   amountManual: boolean
   items: FormItemRow[]
@@ -67,12 +69,15 @@ const emptyForm = (): FormState => ({
   contact_number: '',
   category: 'Other',
   machine_number: '',
+  purpose_notes: '',
   amount: '',
   amountManual: false,
   items: [newItemRow()],
 })
 
 function formFromEntry(row: CashBookEntry): FormState {
+  const ownerDeposit = isOwnerDepositCategory(row.category)
+  // Owner-deposit purpose is a free-text field — do not split it into fake line items
   const items =
     row.items?.length
       ? row.items.map((i) =>
@@ -82,7 +87,7 @@ function formFromEntry(row: CashBookEntry): FormState {
             freeText: i.item_name === 'Other',
           }),
         )
-      : row.purpose_notes
+      : !ownerDeposit && row.purpose_notes
         ? row.purpose_notes.split(',').map((name) =>
             newItemRow({
               item_name: name.trim(),
@@ -98,6 +103,7 @@ function formFromEntry(row: CashBookEntry): FormState {
     contact_number: row.contact_number || '',
     category: row.category,
     machine_number: row.machine_number || '',
+    purpose_notes: row.purpose_notes || '',
     amount: String(row.amount ?? ''),
     amountManual: true,
     items: items.length ? items : [newItemRow()],
@@ -284,6 +290,7 @@ export function CashBookScreen() {
   /** Machine Repair still requires a machine; all other debit expenses may optionally tag one. */
   const needsMachine = form.category === 'Machine Repair'
   const showMachineField = form.entry_type === 'debit' || needsMachine
+  const needsPurpose = isOwnerDepositCategory(form.category)
   const itemsTotal = useMemo(() => sumItemAmounts(form.items), [form.items])
 
   useEffect(() => {
@@ -313,6 +320,9 @@ export function CashBookScreen() {
     if (!form.category) return 'Category is required'
     if (needsMachine && !form.machine_number.trim()) {
       return 'Machine number is required for Machine Repair'
+    }
+    if (needsPurpose && !form.purpose_notes.trim()) {
+      return 'Purpose is required for Deposit from Owner'
     }
     const validItems = collectValidItems(form.items)
     const amount = Number(form.amount)
@@ -353,6 +363,8 @@ export function CashBookScreen() {
           ? form.machine_number.trim()
           : ''
 
+      const purposeNotes = form.purpose_notes.trim() || null
+
       if (editEntry) {
         const result = await updateCashBookEntryOrQueue({
           entry: editEntry,
@@ -365,6 +377,7 @@ export function CashBookScreen() {
             contact_number: form.contact_number,
             category: form.category,
             machine_number: machineNumber,
+            purpose_notes: purposeNotes,
             amount,
             edited_by: enteredBy,
             items,
@@ -379,7 +392,10 @@ export function CashBookScreen() {
             contact_number: form.contact_number.trim() || null,
             category: form.category,
             machine_number: machineNumber || null,
-            purpose_notes: items.map((i) => i.item_name).join(', ') || editEntry.purpose_notes,
+            purpose_notes:
+              purposeNotes ||
+              items.map((i) => i.item_name).join(', ') ||
+              editEntry.purpose_notes,
             amount,
             edited_by: enteredBy,
             items: items.map((i, idx) => ({
@@ -390,9 +406,9 @@ export function CashBookScreen() {
             })),
           }
           setRows((prev) => prev.map((r) => (r.id === editEntry.id ? updated : r)))
-          setMessage('Entry updated')
+          setMessage('Entry updated (CEO approved)')
         } else {
-          setMessage('Edit queued for CEO approval (record older than 7 days)')
+          setMessage('Edit sent for CEO approval — not applied yet')
         }
       } else {
         const { entry } = await insertCashBookEntry({
@@ -402,6 +418,7 @@ export function CashBookScreen() {
           contact_number: form.contact_number,
           category: form.category,
           machine_number: machineNumber,
+          purpose_notes: purposeNotes,
           amount,
           entered_by: enteredBy,
           items,
@@ -434,9 +451,9 @@ export function CashBookScreen() {
     setForm(formFromEntry(row))
     setTab('entry')
     setMessage(
-      isCeo || isWithinEditWindow(row.created_at)
-        ? 'Editing entry'
-        : 'This record is older than 7 days — save will queue CEO approval',
+      isCeo
+        ? 'Editing entry (CEO)'
+        : 'Editing entry — save will send a request for CEO approval (not applied until approved)',
     )
   }
 
@@ -445,12 +462,11 @@ export function CashBookScreen() {
       setError('Not signed in — please log in again.')
       return
     }
-    const needsApproval = !isCeo && !isWithinEditWindow(row.created_at)
     const label = row.party_name.trim() || entryItemsLabel(row)
     const ok = window.confirm(
-      needsApproval
-        ? `Record is older than 7 days. Send delete request to CEO for ${label}?`
-        : `Delete entry for ${label}?`,
+      isCeo
+        ? `Delete entry for ${label}? (CEO approval)`
+        : `Send delete request to CEO for ${label}? Entry will not be deleted until CEO approves.`,
     )
     if (!ok) return
     setBusy(true)
@@ -464,8 +480,8 @@ export function CashBookScreen() {
       })
       setMessage(
         result === 'applied'
-          ? 'Entry deleted'
-          : 'Delete queued for CEO approval (record older than 7 days)',
+          ? 'Entry deleted (CEO approved)'
+          : 'Delete sent for CEO approval — not deleted yet',
       )
       if (editEntry?.id === row.id) resetForm()
       await load()
@@ -488,7 +504,10 @@ export function CashBookScreen() {
     <div className="screen cashbook-screen">
       <header className="screen-header">
         <h1>Cash Book</h1>
-        <p className="text-muted">Credit / debit cash entries with itemized lines and ledger book</p>
+        <p className="text-muted">
+          Credit / debit cash entries with itemized lines and ledger book. Edit and delete require CEO
+          approval.
+        </p>
         <SubTabs
           value={tab}
           onChange={(id) => setTab(id as TabId)}
@@ -589,12 +608,19 @@ export function CashBookScreen() {
             <select
               value={form.category}
               disabled={busy}
-              onChange={(e) =>
+              onChange={(e) => {
+                const category = e.target.value as CashBookCategory
                 setForm((f) => ({
                   ...f,
-                  category: e.target.value as CashBookCategory,
+                  category,
+                  machine_number:
+                    category === 'Machine Repair' || f.entry_type === 'debit'
+                      ? f.machine_number
+                      : '',
+                  // Owner deposits are credits given for a stated purpose
+                  entry_type: isOwnerDepositCategory(category) ? 'credit' : f.entry_type,
                 }))
-              }
+              }}
             >
               {CASHBOOK_CATEGORIES.map((c) => (
                 <option key={c} value={c}>
@@ -629,6 +655,30 @@ export function CashBookScreen() {
               </select>
             </label>
           ) : null}
+
+          {needsPurpose ? (
+            <label className="field">
+              <span>Purpose of owner deposit</span>
+              <input
+                value={form.purpose_notes}
+                onChange={(e) => setForm((f) => ({ ...f, purpose_notes: e.target.value }))}
+                placeholder="Why this deposit was given (required)"
+                required
+              />
+              <span className="text-muted2">
+                Owner-side deposits must record the purpose they were given for.
+              </span>
+            </label>
+          ) : (
+            <label className="field">
+              <span>Purpose / notes (optional)</span>
+              <input
+                value={form.purpose_notes}
+                onChange={(e) => setForm((f) => ({ ...f, purpose_notes: e.target.value }))}
+                placeholder="Optional notes"
+              />
+            </label>
+          )}
 
           <div className="field cashbook-items-field">
             <span>Items</span>
@@ -745,10 +795,13 @@ export function CashBookScreen() {
                   {(row.party_name || 'General').trim()} · {row.category}
                   {row.machine_number ? ` · ${row.machine_number}` : ''}
                 </div>
-                <div className="text-muted2">{entryItemsLabel(row)}</div>
+                <div className="text-muted2">
+                  {isOwnerDepositCategory(row.category) ? 'Purpose: ' : ''}
+                  {entryItemsLabel(row)}
+                </div>
                 <div className="text-muted2">
                   {row.entry_date} · {row.entered_by}
-                  {!isWithinEditWindow(row.created_at) ? ' · needs approval to edit' : ''}
+                  {!isCeo ? ' · edit/delete needs CEO approval' : ''}
                 </div>
               </div>
               <div className="icon-actions">

@@ -11,7 +11,7 @@ export function SampleJobCardPrint({ card, className = '' }: Props) {
     <article className={`sample-print-card ${className}`.trim()} id="sample-print-card">
       <header className="sample-print-header">
         <div>
-          <div className="sample-print-company">Jaisal FashionWeave Industries</div>
+          <div className="sample-print-company">JAISAL FW – Fashionweave Industries</div>
           <h2 className="sample-print-title">Sample Job Card</h2>
         </div>
         <div className="sample-print-din">{card.din_number}</div>

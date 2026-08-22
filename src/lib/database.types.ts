@@ -21,6 +21,19 @@ export type Worker = {
   department: string | null
   is_active: boolean
   role_id?: string | null
+  employee_code?: string | null
+  designation?: string | null
+  shift?: string | null
+  pay_type?: string | null
+  bank_name?: string | null
+  bank_account_no?: string | null
+  bank_ifsc?: string | null
+  bank_branch?: string | null
+  phone?: string | null
+  joining_date?: string | null
+  esi_applicable?: boolean | null
+  pf_applicable?: boolean | null
+  pt_applicable?: boolean | null
 }
 
 export type Attendance = {
@@ -33,6 +46,134 @@ export type Attendance = {
   out_time: string | null
   status: string | null
   created_at: string
+  shift?: string | null
+  remarks?: string | null
+  total_hours?: number | null
+  payable_day?: number | null
+  updated_at?: string | null
+}
+
+export type SalaryRate = {
+  id: string
+  worker_id: string
+  pay_type: string
+  monthly_rate: number
+  daily_rate: number
+  hourly_rate: number
+  ot_rate: number
+  effective_from: string
+  status: string
+  approved: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type PayrollRun = {
+  id: string
+  payroll_month: string
+  from_date: string
+  to_date: string
+  status: string
+  esi_on: boolean
+  pf_on: boolean
+  pt_on: boolean
+  other_deduction_on: boolean
+  working_days: number
+  notes: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type PayrollEntry = {
+  id: string
+  payroll_run_id: string
+  worker_id: string
+  employee_code: string | null
+  employee_name: string | null
+  designation: string | null
+  department: string | null
+  pay_type: string | null
+  working_days: number
+  present_days: number
+  leave_days: number
+  payable_days: number
+  basic_salary: number
+  allowances: number
+  ot_amount: number
+  gross_salary: number
+  esi_amount: number
+  pf_amount: number
+  pt_amount: number
+  other_deduction: number
+  advance: number
+  total_deduction: number
+  net_payable: number
+  status: string
+  esi_on: boolean | null
+  pf_on: boolean | null
+  pt_on: boolean | null
+  other_deduction_on: boolean | null
+  bank_name: string | null
+  bank_account_no: string | null
+  bank_ifsc: string | null
+  bank_branch: string | null
+  payment_date: string | null
+  selected_for_letter: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type Holiday = {
+  id: string
+  holiday_date: string
+  title: string
+  is_paid: boolean
+  created_at: string
+}
+
+export type LeaveEntry = {
+  id: string
+  worker_id: string
+  leave_date: string
+  leave_type: string
+  remarks: string | null
+  created_at: string
+}
+
+export type BankSalaryLetter = {
+  id: string
+  payroll_run_id: string
+  letter_no: string | null
+  letter_date: string
+  salary_month: string
+  total_employees: number
+  total_amount: number
+  amount_in_words: string | null
+  status: string
+  created_by: string | null
+  created_at: string
+}
+
+export type BankSalaryLetterItem = {
+  id: string
+  letter_id: string
+  payroll_entry_id: string | null
+  sno: number
+  employee_code: string | null
+  employee_name: string
+  designation: string | null
+  bank_name: string | null
+  bank_account_no: string | null
+  bank_ifsc: string | null
+  net_salary: number
+}
+
+export type PayrollJob = {
+  id: string
+  job_name: string
+  job_code: string | null
+  is_active: boolean
 }
 
 export type BeamPipeStock = {
@@ -50,6 +191,52 @@ export type WeftYarnStock = {
   colour_name: string | null
   stock_kg: number
   updated_at: string
+  quality?: string | null
+  yarn_specification?: string | null
+  unit?: string | null
+  opening_stock?: number | null
+  rate_per_kg?: number | null
+  reorder_level?: number | null
+  min_stock?: number | null
+  max_stock?: number | null
+  lot_number?: string | null
+  location?: string | null
+  gst_pct?: number | null
+  hsn_code?: string | null
+  remarks?: string | null
+  is_active?: boolean | null
+}
+
+export type YarnStockLedger = {
+  id: string
+  yarn_id: string
+  txn_date: string
+  txn_no: string | null
+  txn_type: string
+  reference: string | null
+  inward_kg: number
+  outward_kg: number
+  balance_kg: number
+  rate: number
+  value_amount: number
+  lot_number: string | null
+  location: string | null
+  gst_pct: number
+  invoice_no: string | null
+  remarks: string | null
+  created_by: string | null
+  created_by_name: string | null
+  created_at: string
+}
+
+export type PinChangeAudit = {
+  id: string
+  role_id: string | null
+  role_name: string
+  action: string
+  changed_by: string | null
+  changed_by_name: string | null
+  created_at: string
 }
 
 export type Design = {
@@ -271,6 +458,11 @@ export type OrderBook = {
   payment_days: number | null
   discount_pct: number | null
   created_at: string
+  order_no?: string | null
+  delivery_date?: string | null
+  remarks?: string | null
+  party_code?: string | null
+  status?: string | null
 }
 
 export type OrderBookItem = {
@@ -282,6 +474,10 @@ export type OrderBookItem = {
   rate: number
   amount: number
   settled: boolean
+  quality?: string | null
+  total_pcs?: number | null
+  delivery_date?: string | null
+  status?: string | null
 }
 
 export type Program = {
@@ -291,6 +487,21 @@ export type Program = {
   status: string
   dispatched_meter: number
   created_at: string
+  program_no?: string | null
+  marka?: string | null
+  party_name?: string | null
+  design_no?: string | null
+  colour?: string | null
+  quality?: string | null
+  total_pcs?: number | null
+  total_pick?: number | null
+  total_meter?: number | null
+  required_meter?: number | null
+  planned_date?: string | null
+  priority?: string | null
+  job_card_no?: string | null
+  din_number?: string | null
+  matching_no?: number | null
 }
 
 export type ProgramPetty = {
@@ -323,6 +534,64 @@ export type PartyMaster = {
   id: string
   party_name: string
   created_at: string
+  marka?: string | null
+  party_code?: string | null
+  gstin?: string | null
+  billing_address?: string | null
+  shipping_address?: string | null
+}
+
+export type CheckingLot = {
+  id: string
+  lot_no: string
+  program_id: string | null
+  marka: string | null
+  meter_in: number
+  checked_meter: number
+  damage_meter: number
+  final_meter: number
+  checker_name: string | null
+  entry_date: string
+  shift: string | null
+  remarks: string | null
+  status: string
+  challan_id: string | null
+  created_at: string
+}
+
+export type LotDamage = {
+  id: string
+  lot_id: string
+  damage_type: string
+  damage_operator: string | null
+  damage_meter: number
+  remarks: string | null
+  created_at: string
+}
+
+export type GstInvoice = {
+  id: string
+  invoice_no: string
+  invoice_date: string
+  challan_id: string | null
+  party: string
+  gstin: string | null
+  billing_address: string | null
+  shipping_address: string | null
+  design_no: string | null
+  quality: string | null
+  colour: string | null
+  marka: string | null
+  quantity: number
+  rate: number
+  taxable_value: number
+  gst_pct: number
+  cgst: number
+  sgst: number
+  igst: number
+  grand_total: number
+  is_inter_state: boolean
+  created_at: string
 }
 
 export type MaintenanceRequest = {
@@ -336,6 +605,26 @@ export type MaintenanceRequest = {
   status: string
   cost: number
   created_at: string
+  // Machine-wise Maintenance (planned entry fields from #58)
+  entry_date?: string | null
+  maintenance_type?: string | null
+  work_details?: string | null
+  parts_used?: string | null
+  next_maintenance_date?: string | null
+  remarks?: string | null
+  technician?: string | null
+  // Breakdown flow timestamps (additive; dedicated machine_breakdowns is preferred)
+  fault_type?: string | null
+  contact_name?: string | null
+  contact_phone?: string | null
+  opened_at?: string | null
+  call_done_at?: string | null
+  arrived_at?: string | null
+  work_started_at?: string | null
+  resolved_at?: string | null
+  parts_changed?: string | null
+  payment_amount?: number | null
+  payment_notes?: string | null
 }
 
 export type RepairingTracker = {
@@ -357,6 +646,15 @@ export type FoldingEntry = {
   meter_folded: number
   rolls: number
   created_at: string
+  program_id?: string | null
+  lot_no?: string | null
+  marka?: string | null
+  meter_in?: number | null
+  damage_meter?: number | null
+  final_meter?: number | null
+  checker_name?: string | null
+  shift?: string | null
+  remarks?: string | null
 }
 
 export type Challan = {
@@ -371,6 +669,12 @@ export type Challan = {
   created_at: string
   program_id: string | null
   job_card_id: string | null
+  marka?: string | null
+  design_no?: string | null
+  quality?: string | null
+  colour?: string | null
+  status?: string | null
+  lot_ids?: string[] | null
 }
 
 export type Gatepass = {
@@ -385,6 +689,14 @@ export type Gatepass = {
   signed_by_driver: string | null
   signed_by_received: string | null
   created_at: string
+  party?: string | null
+  marka?: string | null
+  total_meter?: number | null
+  lots_count?: number | null
+  transporter_name?: string | null
+  driver_name?: string | null
+  gp_time?: string | null
+  remarks?: string | null
 }
 
 export type PayrollRate = {
@@ -466,6 +778,17 @@ export type WarpBeamPipe = {
   entered_by: string
   created_at: string
 }
+
+/** Re-export pipe lifecycle types from warpYarn module */
+export type {
+  WarpPipe,
+  WarpYarnTransaction,
+  WarpYarnPurchase,
+  WarpWarperJob,
+  WarpPipeStatus,
+  WarpTxnType,
+  WarperJobStatus,
+} from './warpYarn'
 
 export type YarnInward = {
   id: string
@@ -555,6 +878,146 @@ export type PendingApprovalRow = {
   status: 'pending' | 'approved' | 'rejected'
   resolved_by: string | null
   resolved_at: string | null
+}
+
+/** Design Wise Costing header (design_costing) */
+export type DesignCosting = {
+  id: string
+  din_number: string
+  quality_name: string | null
+  costing_date: string
+  diary_image_url: string | null
+  design_length_mtr: number | null
+  pic_conversion_rate: number
+  /** Calculated: total_pic × pic_conversion_rate */
+  conversion_charge: number
+  mu_percent: number
+  gst_percent: number
+  /** GST ₹ amount (after MU × GST %) — stored separately from final cost */
+  gst_amount: number | null
+  total_pic: number | null
+  total_warp_weight_kg: number | null
+  total_weft_weight_kg: number | null
+  total_warp_amount: number | null
+  total_weft_amount: number | null
+  total_weight_kg: number | null
+  total_yarn_amount: number | null
+  yarn_cost_per_mtr: number | null
+  subtotal_per_mtr: number | null
+  after_mu_per_mtr: number | null
+  final_cost_per_mtr: number | null
+  status: 'draft' | 'final'
+  created_by: string | null
+  updated_by: string | null
+  created_at: string
+  updated_at: string | null
+}
+
+export type DesignCostingWarp = {
+  id: string
+  costing_id: string
+  sr_no: number
+  yarn_name: string | null
+  denier: number | null
+  tar_ends: number | null
+  length_mtr: number | null
+  weight_kg: number | null
+  rate_per_kg: number | null
+  amount: number | null
+  rate_source: string | null
+  rate_master_id: string | null
+}
+
+export type DesignCostingWeft = {
+  id: string
+  costing_id: string
+  sr_no: number
+  weft_name: string | null
+  denier: number | null
+  pic: number | null
+  width: number | null
+  length_mtr: number | null
+  weight_kg: number | null
+  rate_per_kg: number | null
+  amount: number | null
+  rate_source: string | null
+  rate_master_id: string | null
+}
+
+export type RateMasterConfig = {
+  id: string
+  default_gst_percent: number
+  default_freight_per_kg: number
+  updated_by: string | null
+  updated_at: string | null
+}
+
+export type RateMaster = {
+  id: string
+  category: 'warp' | 'weft'
+  item_name: string
+  denier: string | null
+  supplier_name: string | null
+  basic_rate: number
+  gst_percent: number
+  gst_amount: number
+  freight_per_kg: number
+  effective_rate: number
+  effective_from: string
+  is_active: boolean
+  created_by: string | null
+  updated_by: string | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+/** Machine-wise weft yarn issue header */
+export type MachineWeftIssue = {
+  id: string
+  issue_no: string
+  issue_date: string
+  shift: string | null
+  machine_no: string
+  program_id: string | null
+  program_no: string | null
+  job_card_no: string | null
+  din_number: string
+  din_id: string | null
+  design_name: string | null
+  party_name: string | null
+  marka: string | null
+  matching_no: number | null
+  program_meter: number
+  total_required_kg: number
+  total_issued_kg: number
+  issued_by: string | null
+  received_by: string | null
+  remarks: string | null
+  status: string
+  allow_over_issue: boolean
+  created_by: string | null
+  created_at: string
+}
+
+export type MachineWeftIssueItem = {
+  id: string
+  issue_id: string
+  matching_no: number
+  matching_id: string | null
+  colour_name: string
+  role_label: string
+  is_main_ground: boolean
+  colour_hex: string | null
+  required_kg: number
+  issued_kg: number
+  balance_kg: number
+  yarn_stock_id: string | null
+  costing_weft_id: string | null
+  denier: number | null
+  pic: number | null
+  width: number | null
+  sr_no: number
+  created_at: string
 }
 
 /** assumed: 6 looms labelled M1–M6 */

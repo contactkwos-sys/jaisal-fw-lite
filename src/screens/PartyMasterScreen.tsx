@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../lib/auth'
 import type { PartyMaster } from '../lib/database.types'
+import { suggestMarka } from '../lib/marka'
 import { applyOrQueue } from '../lib/mutate'
 import { supabase } from '../lib/supabase'
 
@@ -9,8 +10,10 @@ export function PartyMasterScreen() {
   const [parties, setParties] = useState<PartyMaster[]>([])
   const [bulkText, setBulkText] = useState('')
   const [singleName, setSingleName] = useState('')
+  const [singleMarka, setSingleMarka] = useState('')
   const [editId, setEditId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
+  const [editMarka, setEditMarka] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -66,20 +69,24 @@ export function PartyMasterScreen() {
     setError(null)
     setMessage(null)
     try {
+      const marka = (singleMarka.trim() || suggestMarka(name)).toUpperCase()
       const result = await applyOrQueue({
         isCeo,
         userId: profile.id,
         tableName: 'party_master',
         action: 'insert',
         recordId: null,
-        payload: { party_name: name },
+        payload: { party_name: name, marka },
         apply: async () => {
-          const { error: insErr } = await supabase.from('party_master').insert({ party_name: name })
+          const { error: insErr } = await supabase
+            .from('party_master')
+            .insert({ party_name: name, marka })
           if (insErr) throw insErr
         },
       })
-      setMessage(result === 'applied' ? 'Party added' : 'Sent to approval queue')
+      setMessage(result === 'applied' ? `Party added · Marka ${marka}` : 'Sent to approval queue')
       setSingleName('')
+      setSingleMarka('')
       await load()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Add failed')
@@ -95,12 +102,12 @@ export function PartyMasterScreen() {
     setMessage(null)
     try {
       const seen = new Set<string>()
-      const toInsert: string[] = []
+      const toInsert: { party_name: string; marka: string }[] = []
       for (const line of bulkLines) {
         const key = line.toLowerCase()
         if (existingLower.has(key) || seen.has(key)) continue
         seen.add(key)
-        toInsert.push(line)
+        toInsert.push({ party_name: line, marka: suggestMarka(line) })
       }
       const result = await applyOrQueue({
         isCeo,
@@ -110,15 +117,13 @@ export function PartyMasterScreen() {
         recordId: null,
         payload: { parties: toInsert },
         apply: async () => {
-          const { error: insErr } = await supabase
-            .from('party_master')
-            .insert(toInsert.map((party_name) => ({ party_name })))
+          const { error: insErr } = await supabase.from('party_master').insert(toInsert)
           if (insErr) throw insErr
         },
       })
       setMessage(
         result === 'applied'
-          ? `Added ${toInsert.length} parties`
+          ? `Added ${toInsert.length} parties with Marka`
           : 'Sent to approval queue',
       )
       setBulkText('')
@@ -138,17 +143,18 @@ export function PartyMasterScreen() {
     setError(null)
     setMessage(null)
     try {
+      const marka = (editMarka.trim() || suggestMarka(name)).toUpperCase()
       const result = await applyOrQueue({
         isCeo,
         userId: profile.id,
         tableName: 'party_master',
         action: 'update',
         recordId: row.id,
-        payload: { party_name: name },
+        payload: { party_name: name, marka },
         apply: async () => {
           const { error: uErr } = await supabase
             .from('party_master')
-            .update({ party_name: name })
+            .update({ party_name: name, marka })
             .eq('id', row.id)
           if (uErr) throw uErr
         },
@@ -195,7 +201,7 @@ export function PartyMasterScreen() {
     <div className="screen">
       <header className="screen-header">
         <h1>Party Master</h1>
-        <p className="text-muted">Bulk paste names — feeds Order Book autocomplete</p>
+        <p className="text-muted">Party + automatic Marka — flows into Program → Dispatch → Invoice</p>
       </header>
 
       <section className="form-stack surface card-row">
@@ -206,7 +212,7 @@ export function PartyMasterScreen() {
             rows={8}
             value={bulkText}
             onChange={(e) => setBulkText(e.target.value)}
-            placeholder={'Party A\nParty B\nParty C'}
+            placeholder={'Samrat Velvet\nMahalaxmi Textiles\nShree Salasar'}
           />
         </label>
         <button
@@ -226,12 +232,22 @@ export function PartyMasterScreen() {
 
       <section className="form-stack" style={{ marginTop: '1rem' }}>
         <h2 className="section-title">+ Add Single Party</h2>
-        <div className="add-role-row">
+        <div className="add-role-row" style={{ flexWrap: 'wrap' }}>
           <input
             value={singleName}
-            onChange={(e) => setSingleName(e.target.value)}
+            onChange={(e) => {
+              setSingleName(e.target.value)
+              if (!singleMarka) setSingleMarka(suggestMarka(e.target.value))
+            }}
             placeholder="Party name"
             aria-label="Single party name"
+          />
+          <input
+            value={singleMarka}
+            onChange={(e) => setSingleMarka(e.target.value.toUpperCase())}
+            placeholder="Marka (auto)"
+            aria-label="Party Marka"
+            style={{ maxWidth: '8rem' }}
           />
           <button type="button" disabled={busy || !singleName.trim()} onClick={() => void addSingle()}>
             Add
@@ -244,8 +260,14 @@ export function PartyMasterScreen() {
         {parties.map((p) => (
           <article key={p.id} className="card-row surface row-top">
             {editId === p.id ? (
-              <div className="add-role-row" style={{ flex: 1 }}>
+              <div className="add-role-row" style={{ flex: 1, flexWrap: 'wrap' }}>
                 <input value={editName} onChange={(e) => setEditName(e.target.value)} />
+                <input
+                  value={editMarka}
+                  onChange={(e) => setEditMarka(e.target.value.toUpperCase())}
+                  placeholder="Marka"
+                  style={{ maxWidth: '8rem' }}
+                />
                 <button type="button" disabled={busy} onClick={() => void saveEdit(p)}>
                   Save
                 </button>
@@ -255,7 +277,12 @@ export function PartyMasterScreen() {
               </div>
             ) : (
               <>
-                <strong>{p.party_name}</strong>
+                <div>
+                  <strong>{p.party_name}</strong>
+                  <span className="text-muted" style={{ marginLeft: '0.5rem' }}>
+                    Marka: <strong className="pd-marka">{p.marka || suggestMarka(p.party_name)}</strong>
+                  </span>
+                </div>
                 <div className="icon-actions">
                   <button
                     type="button"
@@ -264,6 +291,7 @@ export function PartyMasterScreen() {
                     onClick={() => {
                       setEditId(p.id)
                       setEditName(p.party_name)
+                      setEditMarka(p.marka || suggestMarka(p.party_name))
                     }}
                   >
                     Edit

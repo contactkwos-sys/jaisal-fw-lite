@@ -9,6 +9,7 @@ import {
 import type { Session, User } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 import type { AppUser, Role } from './database.types'
+import { clearModuleUnlocks } from './ceoPinManagement'
 
 type Profile = AppUser & { roles: Role | null }
 
@@ -16,6 +17,8 @@ type AuthState = {
   session: Session | null
   profile: Profile | null
   loading: boolean
+  /** Stable role used for nav permissions (DB → metadata → name). */
+  roleName: string
   isCeo: boolean
   isManager: boolean
   loginWithPin: (role: Role, pin: string) => Promise<void>
@@ -179,27 +182,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const logout = useCallback(async () => {
+    clearModuleUnlocks()
     await supabase.auth.signOut()
     setSession(null)
     setProfile(null)
   }, [])
 
+  const meta = (session?.user?.user_metadata || {}) as {
+    role_name?: string
+    full_name?: string
+  }
   const roleName =
     profile?.roles?.role_name ||
-    (session?.user?.user_metadata as { role_name?: string } | undefined)?.role_name ||
+    meta.role_name ||
+    profile?.full_name ||
+    meta.full_name ||
     ''
+  const roleNorm = roleName.trim().toLowerCase()
   const isCeo =
-    roleName === 'CEO' ||
+    roleNorm === 'ceo' ||
+    roleNorm === 'md' ||
+    roleNorm === 'managing director' ||
+    roleNorm === 'owner' ||
     profile?.full_name === 'CEO' ||
-    (session?.user?.user_metadata as { full_name?: string } | undefined)?.full_name === 'CEO'
+    meta.full_name === 'CEO'
   const isManager =
-    roleName === 'Manager' ||
+    roleNorm === 'manager' ||
     profile?.full_name === 'Manager' ||
-    (session?.user?.user_metadata as { full_name?: string } | undefined)?.full_name === 'Manager'
+    meta.full_name === 'Manager'
 
   return (
     <AuthContext.Provider
-      value={{ session, profile, loading, isCeo, isManager, loginWithPin, logout, refreshProfile }}
+      value={{
+        session,
+        profile,
+        loading,
+        roleName: roleName || (isCeo ? 'CEO' : 'User'),
+        isCeo,
+        isManager,
+        loginWithPin,
+        logout,
+        refreshProfile,
+      }}
     >
       {children}
     </AuthContext.Provider>

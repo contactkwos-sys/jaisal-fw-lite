@@ -2,13 +2,17 @@
 
 Lightweight factory floor app (Phases 1–8) on Vite + React + Supabase.
 
-**Live:** https://jaisal-fw-lite.netlify.app
+**Live (GitHub Pages):** https://contactkwos-sys.github.io/jaisal-fw-lite/
+
+**Netlify (paused — usage limit):** https://jaisal-fw-lite.netlify.app — restore by upgrading the Netlify plan or waiting for the billing cycle reset, then redeploy from the Netlify dashboard.
 
 ## Theme
 
 Design tokens: [`styles/theme.css`](styles/theme.css) (imported via [`styles/base.css`](styles/base.css)). Premium light industrial palette: deep teal primary, mint selected states, amber accent, white cards on light grey. Headings use Outfit; body uses DM Sans; numeric fields use IBM Plex Mono.
 
-Navigation is capped at **9 main modules** (Dashboard, Production, Inventory, Orders, Reports, Maintenance, Masters, Security, Settings). Existing screens are grouped as sub-items / module hubs. Role-based module access is configured under Security → Permissions (defaults by role; CEO can override).
+Navigation is capped at **main modules** (Dashboard, Program & Dispatch, Inventory, Cash Book, Orders & Pending, Reports, Maintenance, Masters, Security, Settings). Existing screens are grouped as sub-items / module hubs. Role-based module access is configured under Security → Permissions (defaults by role; CEO can override).
+
+**Program & Dispatch** consolidates order → machine program → production entry → folding/checking lots → challan → gate pass → GST invoice. Migration: `supabase/migrations/20260821140000_program_dispatch_module.sql` (mirrored as `public/migration-program-dispatch.sql`).
 
 ## Setup
 

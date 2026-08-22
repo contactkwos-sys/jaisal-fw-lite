@@ -11,7 +11,7 @@ export function shareWhatsAppBusiness(text: string) {
 }
 
 /** Native share sheet when available (WhatsApp / WhatsApp Business picker). */
-export async function shareNativeOrWhatsApp(text: string, title = 'Jaisal FW'): Promise<void> {
+export async function shareNativeOrWhatsApp(text: string, title = 'JAISAL FW'): Promise<void> {
   if (navigator.share) {
     try {
       await navigator.share({ title, text })
@@ -40,7 +40,7 @@ export function printSummary(title: string, bodyHtml: string) {
 </style></head><body>
 <h1>${escapeHtml(title)}</h1>
 ${bodyHtml}
-<p class="muted">Jaisal FW Lite · ${new Date().toLocaleString()}</p>
+<p class="muted">JAISAL FW – Fashionweave Industries · ${new Date().toLocaleString()}</p>
 <script>window.onload=()=>{window.print()}</script>
 </body></html>`)
   w.document.close()

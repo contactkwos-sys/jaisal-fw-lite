@@ -1,51 +1,78 @@
 /**
- * JAISAL FW — premium textile mill design tokens
- * Light industrial SaaS: teal primary, mint selected, amber accent
+ * JAISAL FW — Fashionweave Industries design tokens
+ * Light industrial: brand blue primary, white cards, cool grey canvas
  */
 :root {
   /* Surfaces */
-  --bg: #f3f5f6;
+  --bg: #f5f7fa;
   --surface: #ffffff;
-  --surface2: #eef1f3;
-  --line: #dde3e6;
+  --surface2: #eef2f6;
+  --line: #d9e1ea;
 
-  /* Brand — deep industrial teal (primary) */
-  --teal: #0d6b6e;
-  --teal-deep: #0a5558;
-  --teal-soft: #e4f3f3;
-  --mint: #3fa88a;
-  --mint-soft: #e6f6f0;
+  /* Brand — JAISAL FW Blue */
+  --teal: #1769c2;
+  --teal-deep: #1254a0;
+  --teal-soft: #e8f1fb;
+  --mint: #1769c2;
+  --mint-soft: #e8f1fb;
 
   /* Accents */
-  --amber: #c49a3c;
-  --amber-soft: #f7f0de;
-  --purple-soft: #efeaf8;
-  --orange-soft: #f8eee6;
-  --blue-soft: #e8f0f8;
+  --amber: #d97706;
+  --amber-soft: #fff7ed;
+  --purple-soft: #eef2f6;
+  --orange-soft: #fff7ed;
+  --blue-soft: #e8f1fb;
 
-  /* Legacy aliases (existing screens use these names) */
+  /* Inventory / module hub pastel tones */
+  --hub-purple: #5b6b7c;
+  --hub-purple-soft: #eef2f6;
+  --hub-green: #16a34a;
+  --hub-green-soft: #ecfdf3;
+  --hub-orange: #d97706;
+  --hub-orange-soft: #fff7ed;
+  --hub-blue: #1769c2;
+  --hub-blue-soft: #e8f1fb;
+  --hub-pink: #dc2626;
+  --hub-pink-soft: #fef2f2;
+  --hub-teal: #0f766e;
+  --hub-teal-soft: #ecfdf8;
+  --hub-amber: #d97706;
+  --hub-amber-soft: #fff7ed;
+  --hub-slate: #5a6b7d;
+  --hub-slate-soft: #eef1f4;
+  --hub-violet: #5b6b7c;
+  --hub-violet-soft: #eef2f6;
+  --sidebar-bg: #f8fafc;
+
+  /* Legacy aliases */
   --warp: var(--teal);
   --warp-soft: var(--teal-soft);
   --weft: var(--amber);
   --weft-soft: var(--amber-soft);
-  --greige: #6e7874;
-  --sage: var(--mint);
+  --greige: #64748b;
+  --sage: #16a34a;
 
   /* Text */
-  --text: #1a2332;
-  --muted: #5a6577;
-  --muted2: #8a94a3;
+  --text: #1e293b;
+  --muted: #64748b;
+  --muted2: #94a3b8;
 
   /* Status */
-  --danger: #c45a4a;
-  --danger-soft: #f8eae7;
+  --success: #16a34a;
+  --success-soft: #ecfdf3;
+  --warning: #d97706;
+  --warning-soft: #fff7ed;
+  --danger: #dc2626;
+  --danger-soft: #fef2f2;
+  --info: #1769c2;
+  --info-soft: #e8f1fb;
   --wa: #25a366;
 
-  /* Elevation */
-  --shadow-sm: 0 1px 2px rgba(26, 35, 50, 0.04), 0 1px 3px rgba(26, 35, 50, 0.06);
-  --shadow-md: 0 2px 8px rgba(26, 35, 50, 0.06), 0 1px 2px rgba(26, 35, 50, 0.04);
-  --radius: 10px;
-  --radius-sm: 8px;
-  --sidebar-w: 15.5rem;
+  /* Elevation — subtle, professional */
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 2px 6px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --radius: 6px;
+  --radius-sm: 4px;
+  --sidebar-w: 16.5rem;
   --sidebar-collapsed: 4.25rem;
 }
