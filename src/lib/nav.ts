@@ -366,20 +366,36 @@ export const MAIN_MODULES: MainModule[] = [
     screen: 'module-hub',
     hasHub: true,
     items: [
-      { id: 'overview', label: 'Machine Overview', screen: 'maintenance', sub: 'overview', hint: 'M1–M6 status board' },
+      { id: 'overview', label: 'Dashboard', screen: 'maintenance', sub: 'overview', hint: 'M1–M6 status board' },
+      { id: 'machine-master', label: 'Machine Master', screen: 'maintenance', sub: 'overview', hint: 'Machine 1–6 overview (M1–M6)' },
       { id: 'breakdown', label: 'Breakdown Entry', screen: 'maintenance', sub: 'breakdown', hint: 'OPEN → CALL → ARRIVED → RESOLVED' },
-      { id: 'complaints', label: 'Complaint Register', screen: 'maintenance', sub: 'complaints', hint: 'Machine complaints' },
-      { id: 'maint-entry', label: 'Maintenance Entry', screen: 'maintenance', sub: 'entry', hint: 'Planned / general maintenance' },
-      { id: 'maint-schedule', label: 'Maintenance Schedule', screen: 'maintenance', sub: 'schedule', hint: 'Calendar & due dates' },
-      { id: 'service-history', label: 'Service History', screen: 'maintenance', sub: 'history', hint: 'Auto history from entries' },
-      { id: 'spare-parts', label: 'Spare Parts', screen: 'maintenance', sub: 'spares', hint: 'Stock & low-stock alerts' },
-      { id: 'contacts', label: 'Contacts Directory', screen: 'maintenance', sub: 'contacts', hint: 'Technicians & contractors' },
+      { id: 'complaints', label: 'Maintenance Request', screen: 'maintenance', sub: 'complaints', hint: 'Machine complaints & requests' },
+      { id: 'maint-entry', label: 'Maintenance Order', screen: 'maintenance', sub: 'entry', hint: 'Planned / general maintenance' },
+      { id: 'maint-schedule', label: 'Preventive Maintenance', screen: 'maintenance', sub: 'schedule', hint: 'Calendar & due dates' },
+      { id: 'pending-work', label: 'Pending Work', screen: 'maintenance', sub: 'breakdown', hint: 'Open breakdowns & pending jobs' },
+      { id: 'service-history', label: 'Completed / History', screen: 'maintenance', sub: 'history', hint: 'Service history from entries' },
+      { id: 'spare-parts', label: 'Spare Parts Requirement', screen: 'maintenance', sub: 'spares', hint: 'Stock & low-stock alerts' },
       {
         id: 'maint-material',
-        label: 'Repair / Material Out · In',
+        label: 'Maintenance Store Requirement',
         screen: 'maint-material',
-        hint: 'Canonical material + auto gate pass',
+        hint: 'Material out / in + auto gate pass',
       },
+      {
+        id: 'maint-material-order',
+        label: 'Maintenance Material Order',
+        screen: 'order-entry',
+        sub: 'material',
+        hint: 'Order spare parts & maintenance material',
+      },
+      {
+        id: 'maint-repair-order',
+        label: 'Maintenance Repair Order',
+        screen: 'order-entry',
+        sub: 'repair',
+        hint: 'Order repair / service for machines',
+      },
+      { id: 'contacts', label: 'Technician / Engineer', screen: 'maintenance', sub: 'contacts', hint: 'Technicians & contractors' },
       {
         id: 'si-repair-link',
         label: 'Security Repair Gate',
@@ -419,33 +435,60 @@ export const MAIN_MODULES: MainModule[] = [
     hasHub: true,
     items: [
       {
-        id: 'order-entry',
-        label: 'Order Entry',
+        id: 'customer-order-entry',
+        label: 'Customer Order Entry',
+        screen: 'dto-order-booking',
+        hint: 'Book customer fabric order from approved DESIGN',
+      },
+      {
+        id: 'order-book',
+        label: 'Customer Order Book',
+        screen: 'orders',
+        sub: 'entry',
+        hint: 'View & manage customer order book lines',
+      },
+      {
+        id: 'order-status',
+        label: 'Order Status',
+        screen: 'dto-order-status',
+        hint: 'Pending & live customer order status',
+      },
+      {
+        id: 'customer-delivery',
+        label: 'Customer Delivery',
+        screen: 'orders',
+        sub: 'report',
+        hint: 'Party delivery report & follow-up',
+      },
+      {
+        id: 'customer-reports',
+        label: 'Customer Order Reports',
+        screen: 'dto-reports',
+        hint: 'Design to Order & customer order reports',
+      },
+      {
+        id: 'order-adjustment',
+        label: 'Order Adjustment',
+        screen: 'orders',
+        sub: 'report',
+        hint: 'Carry forward · write-off · program adjustment',
+      },
+      { id: 'parties', label: 'Party / Customer', screen: 'parties', hint: 'Customer & party master' },
+      { id: 'design-job', label: 'Design Master', screen: 'design', hint: 'Design register' },
+      { id: 'design-catalog', label: 'Design Catalog', screen: 'design-catalog', hint: 'Design DNA catalog' },
+      { id: 'broadcast', label: 'Design Broadcast', screen: 'broadcast', hint: 'Post & share new designs' },
+      {
+        id: 'yarn-supply-orders',
+        label: 'Yarn Supply Orders',
         screen: 'order-entry',
         sub: 'warp',
-        hint: 'Warp · Weft · Material · Repair orders + WhatsApp',
+        hint: 'Warp & weft yarn supply orders (not customer fabric)',
       },
       {
         id: 'orders-pending',
         label: 'Internal Pending',
         screen: 'orders-pending',
-        hint: 'Internal store / repair / factory pending list (not customer fabric orders)',
-      },
-      {
-        id: 'order-book',
-        label: 'Order Book (Report / Adjust)',
-        screen: 'orders',
-        sub: 'entry',
-        hint: 'View / adjust customer order book · party delivery',
-      },
-      { id: 'design-job', label: 'Design Master', screen: 'design', hint: 'Design register' },
-      { id: 'design-catalog', label: 'Design Catalog', screen: 'design-catalog', hint: 'Design DNA catalog' },
-      { id: 'broadcast', label: 'Design Broadcast', screen: 'broadcast', hint: 'Post & share new designs' },
-      {
-        id: 'sample-register',
-        label: 'Sample Register (Archive)',
-        screen: 'sample-register',
-        hint: 'Archive / report of sample cards',
+        hint: 'Internal factory pending list (not customer fabric orders)',
       },
     ],
   },
@@ -760,7 +803,6 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
   if (screen === 'cash-book') return 'cash-book'
   if (
     screen === 'orders' ||
-    screen === 'order-entry' ||
     screen === 'orders-pending' ||
     screen === 'programs' ||
     screen === 'design' ||
@@ -769,6 +811,10 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
     screen === 'broadcast' ||
     screen === 'sample-register'
   ) {
+    return 'orders'
+  }
+  if (screen === 'order-entry') {
+    if (sub === 'material' || sub === 'repair') return 'maintenance'
     return 'orders'
   }
   if (screen === 'daily-pending-work') return 'daily-pending-work'

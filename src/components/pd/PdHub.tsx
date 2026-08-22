@@ -14,6 +14,7 @@ import {
   type TrackingTotals,
 } from '../../lib/programDispatch'
 import { useAuth } from '../../lib/auth'
+import { handleUserError } from '../../lib/userError'
 import { supabase } from '../../lib/supabase'
 import type { PdSub } from '../../screens/ProgramDispatchScreen'
 
@@ -114,7 +115,7 @@ export function PdHub({ onGo }: Props) {
   }, [])
 
   useEffect(() => {
-    void refresh().catch((e: Error) => setError(e.message))
+    void refresh().catch((e: unknown) => setError(handleUserError('PdHub', e, 'Unable to load program data. Please try again.')))
   }, [refresh])
 
   async function createProgram(machineOverride?: string) {
@@ -183,7 +184,7 @@ export function PdHub({ onGo }: Props) {
       setRequiredMeter('')
       await refresh()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Program save failed')
+      setError(handleUserError('PdHub.createProgram', e, 'Program save failed. Please try again.'))
     } finally {
       setBusy(false)
     }

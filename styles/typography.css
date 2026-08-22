@@ -1,0 +1,127 @@
+/* Industrial ERP typography — readable on iPad and desktop without oversizing */
+
+:root {
+  --fs-page-title: 1.875rem; /* 30px */
+  --fs-section-title: 1.25rem; /* 20px */
+  --fs-card-title: 1.125rem; /* 18px */
+  --fs-body: 1rem; /* 16px */
+  --fs-table: 0.9375rem; /* 15px */
+  --fs-label: 0.9375rem; /* 15px */
+  --fs-input: 1rem; /* 16px */
+  --fs-sidebar: 1rem; /* 16px */
+  --fs-sidebar-sub: 0.9375rem; /* 15px */
+  --fs-button: 1rem; /* 16px */
+  --fs-kpi-value: 1.375rem; /* 22px */
+  --fs-kpi-value-lg: 1.625rem; /* 26px */
+  --fs-meta: 0.875rem; /* 14px */
+}
+
+@media (min-width: 900px) {
+  :root {
+    --fs-page-title: 2rem; /* 32px */
+    --fs-section-title: 1.375rem; /* 22px */
+    --fs-card-title: 1.25rem; /* 20px */
+  }
+}
+
+.content-page-title,
+.screen-header h1 {
+  font-size: var(--fs-page-title);
+  line-height: 1.25;
+}
+
+.section-title,
+.hub-section-title {
+  font-size: var(--fs-section-title);
+  line-height: 1.3;
+}
+
+.hub-card-label,
+.module-hub-production .hub-card-label {
+  font-size: var(--fs-card-title);
+}
+
+body {
+  font-size: var(--fs-body);
+}
+
+.side-nav-item {
+  font-size: var(--fs-sidebar);
+}
+
+.side-sub-item {
+  font-size: var(--fs-sidebar-sub);
+}
+
+.field,
+.field label,
+.field span {
+  font-size: var(--fs-label);
+}
+
+.field input,
+.field select,
+.field textarea,
+.form-stack input,
+.form-stack select,
+.form-stack textarea,
+.add-role-row select,
+.add-role-row input,
+.cashbook-form textarea {
+  font-size: var(--fs-input);
+}
+
+button,
+.btn,
+.sub-tab,
+.seg,
+.chip {
+  font-size: var(--fs-button);
+}
+
+.dash-table,
+.data-table,
+.table-wrap table,
+.party-report-table table,
+.hr-payroll-table,
+.order-entry-table,
+.pd-table {
+  font-size: var(--fs-table);
+}
+
+.kpi-card strong {
+  font-size: var(--fs-kpi-value);
+}
+
+.kpi-total,
+.profit-panel .num,
+.hub-overview-value {
+  font-size: var(--fs-kpi-value-lg);
+}
+
+.content-meta,
+.sidebar-brand-sub,
+.hub-card-hint,
+.text-muted {
+  font-size: var(--fs-meta);
+}
+
+/* Prevent clipping in dense tables */
+.table-wrap,
+.dash-table-wrap,
+.data-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+
+.table-wrap table,
+.data-table-wrap table {
+  min-width: 0;
+}
+
+/* Ensure main content scrolls fully */
+.app-main {
+  overflow-y: auto;
+  min-height: 0;
+}

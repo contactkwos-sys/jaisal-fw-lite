@@ -41,26 +41,31 @@ import {
 } from '../lib/orderEntry'
 import { shareWhatsApp, shareWhatsAppBusiness } from '../lib/share'
 import { supabase } from '../lib/supabase'
+import { handleUserError } from '../lib/userError'
 
 type TabId = 'warp' | 'weft' | 'material' | 'repair' | 'list' | 'history' | 'delivery' | 'reports'
+
+export type OrderEntryScope = 'yarn' | 'maintenance' | 'all'
 
 type Props = {
   initialTab?: TabId
   onTabChange?: (tab: TabId) => void
+  /** Restrict tabs: yarn = warp/weft only; maintenance = material/repair only */
+  scope?: OrderEntryScope
 }
 
-const TABS: Array<{ id: TabId; label: string }> = [
-  { id: 'warp', label: 'Warp Yarn' },
-  { id: 'weft', label: 'Weft Yarn' },
-  { id: 'material', label: 'Maint. Material' },
-  { id: 'repair', label: 'Repair / Service' },
-  { id: 'list', label: 'Order List' },
-  { id: 'history', label: 'Order History' },
-  { id: 'delivery', label: 'Delivery & Follow-up' },
-  { id: 'reports', label: 'Reports' },
+const ALL_TABS: Array<{ id: TabId; label: string; scope: OrderEntryScope[] }> = [
+  { id: 'warp', label: 'Warp Yarn', scope: ['yarn', 'all'] },
+  { id: 'weft', label: 'Weft Yarn', scope: ['yarn', 'all'] },
+  { id: 'material', label: 'Maint. Material', scope: ['maintenance', 'all'] },
+  { id: 'repair', label: 'Repair / Service', scope: ['maintenance', 'all'] },
+  { id: 'list', label: 'Order List', scope: ['yarn', 'maintenance', 'all'] },
+  { id: 'history', label: 'Order History', scope: ['yarn', 'maintenance', 'all'] },
+  { id: 'delivery', label: 'Delivery & Follow-up', scope: ['yarn', 'maintenance', 'all'] },
+  { id: 'reports', label: 'Reports', scope: ['yarn', 'maintenance', 'all'] },
 ]
 
-export function OrderEntryScreen({ initialTab = 'warp', onTabChange }: Props) {
+export function OrderEntryScreen({ initialTab = 'warp', onTabChange, scope = 'all' }: Props) {
   const { profile } = useAuth()
   const userName = profile?.full_name || profile?.roles?.role_name || 'User'
 
@@ -111,9 +116,19 @@ export function OrderEntryScreen({ initialTab = 'warp', onTabChange }: Props) {
 
   const [listFilter, setListFilter] = useState({ type: '', status: '', search: '', dateFrom: '', dateTo: '' })
 
+  const TABS = ALL_TABS.filter((t) => t.scope.includes(scope))
+
   useEffect(() => {
     if (initialTab) setTab(initialTab)
   }, [initialTab])
+
+  useEffect(() => {
+    if (!TABS.some((t) => t.id === tab)) {
+      const fallback = TABS[0]?.id ?? 'warp'
+      setTab(fallback)
+      onTabChange?.(fallback)
+    }
+  }, [scope, tab, TABS, onTabChange])
 
   function selectTab(t: TabId) {
     setTab(t)
@@ -146,11 +161,12 @@ export function OrderEntryScreen({ initialTab = 'warp', onTabChange }: Props) {
         setWeftColours(cols)
       }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Load failed'
-      if (/relation .* does not exist/i.test(msg)) {
+      if (/relation .* does not exist/i.test(String(e))) {
         setTablesReady(false)
         setError('Order Entry tables not applied. Run public/migration-order-entry-module.sql in Supabase.')
-      } else setError(msg)
+      } else {
+        setError(handleUserError('OrderEntry.load', e, 'Unable to load orders. Please try again.'))
+      }
     }
   }, [supplierId])
 
@@ -286,7 +302,7 @@ export function OrderEntryScreen({ initialTab = 'warp', onTabChange }: Props) {
       const hist = await loadOrderHistory(supabase, order.id)
       setOrderHistory(hist)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed')
+      setError(handleUserError('OrderEntry.save', e, 'Save failed. Please try again.'))
     } finally {
       setBusy(false)
     }
@@ -386,8 +402,15 @@ export function OrderEntryScreen({ initialTab = 'warp', onTabChange }: Props) {
     void loadOrderHistory(supabase, o.id).then(setOrderHistory)
   }
 
+  const scopedOrders = useMemo(() => {
+    if (scope === 'yarn') return orders.filter((o) => o.order_type === 'warp' || o.order_type === 'weft')
+    if (scope === 'maintenance')
+      return orders.filter((o) => o.order_type === 'maint_material' || o.order_type === 'maint_repair')
+    return orders
+  }, [orders, scope])
+
   const filteredOrders = useMemo(() => {
-    return orders.filter((o) => {
+    return scopedOrders.filter((o) => {
       if (listFilter.type && o.order_type !== listFilter.type) return false
       if (listFilter.status && o.status !== listFilter.status) return false
       if (listFilter.dateFrom && o.order_date < listFilter.dateFrom) return false
@@ -398,11 +421,12 @@ export function OrderEntryScreen({ initialTab = 'warp', onTabChange }: Props) {
       }
       return true
     })
-  }, [orders, listFilter])
+  }, [scopedOrders, listFilter])
 
   const pendingDeliveries = useMemo(
-    () => orders.filter((o) => ['Sent', 'Confirmed', 'Follow-up Required'].includes(o.status) && o.delivery_date),
-    [orders],
+    () =>
+      scopedOrders.filter((o) => ['Sent', 'Confirmed', 'Follow-up Required'].includes(o.status) && o.delivery_date),
+    [scopedOrders],
   )
 
   const supplierOptions = suppliers.map((s) => s.supplier_name)
@@ -410,13 +434,19 @@ export function OrderEntryScreen({ initialTab = 'warp', onTabChange }: Props) {
   const warpItemOptions = warpItems.map((i) => i.item_name)
   const maintItemOptions = maintItems.map((i) => i.item_name)
 
+  const allowedOrderTypes = useMemo(() => {
+    if (scope === 'yarn') return ORDER_TYPES.filter((t) => t === 'warp' || t === 'weft')
+    if (scope === 'maintenance') return ORDER_TYPES.filter((t) => t === 'maint_material' || t === 'maint_repair')
+    return ORDER_TYPES
+  }, [scope])
+
   function renderOrderForm() {
     const isRepair = orderType === 'maint_repair'
     return (
       <div className="oe-form-layout">
         <div className="oe-main">
           <div className="oe-quick-actions surface">
-            {ORDER_TYPES.map((t) => (
+            {allowedOrderTypes.map((t) => (
               <button
                 key={t}
                 type="button"
@@ -886,14 +916,19 @@ export function OrderEntryScreen({ initialTab = 'warp', onTabChange }: Props) {
           <h3 className="section-title">Order Reports</h3>
           <div className="oe-report-grid">
             {[
-              { label: 'All Orders', count: orders.length },
-              { label: 'Warp Orders', count: orders.filter((o) => o.order_type === 'warp').length },
-              { label: 'Weft Orders', count: orders.filter((o) => o.order_type === 'weft').length },
-              { label: 'Material Orders', count: orders.filter((o) => o.order_type === 'maint_material').length },
-              { label: 'Repair Orders', count: orders.filter((o) => o.order_type === 'maint_repair').length },
-              { label: 'Pending', count: orders.filter((o) => ['Sent', 'Waiting for Reply', 'Follow-up Required'].includes(o.status)).length },
-              { label: 'Confirmed', count: orders.filter((o) => o.status === 'Confirmed').length },
-              { label: 'Completed', count: orders.filter((o) => o.status === 'Completed').length },
+              { label: 'All Orders', count: scopedOrders.length },
+              { label: 'Warp Orders', count: scopedOrders.filter((o) => o.order_type === 'warp').length },
+              { label: 'Weft Orders', count: scopedOrders.filter((o) => o.order_type === 'weft').length },
+              { label: 'Material Orders', count: scopedOrders.filter((o) => o.order_type === 'maint_material').length },
+              { label: 'Repair Orders', count: scopedOrders.filter((o) => o.order_type === 'maint_repair').length },
+              {
+                label: 'Pending',
+                count: scopedOrders.filter((o) =>
+                  ['Sent', 'Waiting for Reply', 'Follow-up Required'].includes(o.status),
+                ).length,
+              },
+              { label: 'Confirmed', count: scopedOrders.filter((o) => o.status === 'Confirmed').length },
+              { label: 'Completed', count: scopedOrders.filter((o) => o.status === 'Completed').length },
             ].map((r) => (
               <article key={r.label} className="oe-report-card surface">
                 <span>{r.label}</span>

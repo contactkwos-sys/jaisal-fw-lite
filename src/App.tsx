@@ -234,7 +234,14 @@ function AuthenticatedApp() {
       {tab === 'loan-tracker' ? <LoanTrackerScreen /> : null}
       {tab === 'geb-readings' ? <GebReadingScreen /> : null}
       {tab === 'order-entry' ? (
-        <OrderEntryScreen initialTab={(sub as 'warp' | 'weft' | 'material' | 'repair' | 'list' | 'history' | 'delivery' | 'reports') || 'warp'} />
+        <OrderEntryScreen
+          initialTab={(sub as 'warp' | 'weft' | 'material' | 'repair' | 'list' | 'history' | 'delivery' | 'reports') || 'warp'}
+          scope={
+            sub === 'material' || sub === 'repair' || activeModule === 'maintenance'
+              ? 'maintenance'
+              : 'yarn'
+          }
+        />
       ) : null}
       {tab === 'daily-pending-work' ? (
         <DailyPendingWorkScreen initialTab={(sub as 'today' | 'all' | 'carry' | 'reports') || 'today'} />

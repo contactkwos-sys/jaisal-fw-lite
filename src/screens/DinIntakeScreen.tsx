@@ -21,6 +21,7 @@ import {
 import { todayISO } from '../lib/mutate'
 import type { NavTarget } from '../lib/nav'
 import { supabase } from '../lib/supabase'
+import { handleUserError } from '../lib/userError'
 
 type Props = { onNavigate: (t: NavTarget) => void }
 
@@ -82,7 +83,9 @@ export function DinIntakeScreen({ onNavigate }: Props) {
   }, [refreshGmail])
 
   useEffect(() => {
-    void refresh().catch((e: Error) => setError(e.message))
+    void refresh().catch((e: unknown) =>
+      setError(handleUserError('DinIntake', e, 'Unable to load design intake. Please try again.')),
+    )
   }, [refresh])
 
   useEffect(() => {

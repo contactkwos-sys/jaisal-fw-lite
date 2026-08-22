@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import '../styles/base.css'
+import '../styles/typography.css'
 import './styles/app.css'
 import './styles/yarn-stock.css'
 import './styles/warp-yarn.css'
