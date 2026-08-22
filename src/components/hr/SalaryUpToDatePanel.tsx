@@ -11,7 +11,6 @@ import {
   todayISO,
   type SalaryLedgerRow,
 } from '../../lib/hrPayroll'
-import { fetchSalaryAdvances } from '../../lib/ceoPinManagement'
 import { printReport } from '../../lib/printDocs'
 import { downloadTextFile } from '../../lib/crmCustomers'
 import { supabase } from '../../lib/supabase'
@@ -24,12 +23,15 @@ type Props = {
   onOpenWorker?: (workerId: string) => void
 }
 
+const PAID_STATUSES = ['Payment Processed', 'Included in Bank Salary Letter'] as const
+
 export function SalaryUpToDatePanel({ workers, salaryRates, roles, payrollRates, onOpenWorker }: Props) {
   const [asOfDate, setAsOfDate] = useState(() => todayISO())
   const [search, setSearch] = useState('')
   const [rows, setRows] = useState<SalaryLedgerRow[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [loadedOnce, setLoadedOnce] = useState(false)
 
   const fromDate = useMemo(() => monthStartISO(asOfDate.slice(0, 7)), [asOfDate])
   const activeWorkers = useMemo(() => workers.filter((w) => w.is_active), [workers])
@@ -45,24 +47,38 @@ export function SalaryUpToDatePanel({ workers, salaryRates, roles, payrollRates,
         .lte('date', asOfDate)
       if (aErr) throw aErr
 
-      const { data: paidEntries } = await supabase
+      let paidEntries: Array<{ worker_id: string; net_payable: number; status?: string }> = []
+      const { data: paid, error: pErr } = await supabase
         .from('payroll_entries')
         .select('worker_id, net_payable, status')
-        .in('status', ['Payment Processed', 'Included in Bank Salary Letter'])
-
-      const paidByWorker = new Map<string, number>()
-      for (const e of paidEntries ?? []) {
-        const wid = String((e as { worker_id: string }).worker_id)
-        paidByWorker.set(
-          wid,
-          (paidByWorker.get(wid) || 0) + Number((e as { net_payable: number }).net_payable || 0),
-        )
+        .in('status', [...PAID_STATUSES])
+      if (!pErr) {
+        paidEntries = (paid ?? []) as typeof paidEntries
+      } else if (!/does not exist|schema cache|PGRST/i.test(pErr.message)) {
+        throw pErr
       }
 
-      const advAll = await fetchSalaryAdvances()
+      const paidByWorker = new Map<string, number>()
+      for (const e of paidEntries) {
+        const wid = String(e.worker_id)
+        paidByWorker.set(wid, (paidByWorker.get(wid) || 0) + Number(e.net_payable || 0))
+      }
+
+      let advRows: Array<{ worker_id: string; amount: number; advance_date: string }> = []
+      const { data: adv, error: advErr } = await supabase
+        .from('salary_advance_transactions')
+        .select('worker_id, amount, advance_date')
+        .eq('is_voided', false)
+        .gte('advance_date', fromDate)
+        .lte('advance_date', asOfDate)
+      if (!advErr) {
+        advRows = (adv ?? []) as typeof advRows
+      } else if (!/does not exist|schema cache|PGRST/i.test(advErr.message)) {
+        throw advErr
+      }
+
       const advanceByWorker = new Map<string, number>()
-      for (const a of advAll) {
-        if (a.advance_date < fromDate || a.advance_date > asOfDate) continue
+      for (const a of advRows) {
         advanceByWorker.set(a.worker_id, (advanceByWorker.get(a.worker_id) || 0) + Number(a.amount))
       }
 
@@ -73,31 +89,41 @@ export function SalaryUpToDatePanel({ workers, salaryRates, roles, payrollRates,
         attByWorker.set(a.worker_id, list)
       }
 
-      const ledger = activeWorkers.map((worker) => {
-        const rate = pickLatestSalaryRate(salaryRates, worker.id, asOfDate)
-        return buildSalaryLedgerRow(
-          worker,
-          attByWorker.get(worker.id) || [],
-          rate,
-          advanceByWorker.get(worker.id) || 0,
-          paidByWorker.get(worker.id) || 0,
-          fromDate,
-          asOfDate,
-          roles,
-          payrollRates as never,
-        )
-      })
+      const ledger: SalaryLedgerRow[] = []
+      for (const worker of activeWorkers) {
+        try {
+          const rate = pickLatestSalaryRate(salaryRates, worker.id, asOfDate)
+          ledger.push(
+            buildSalaryLedgerRow(
+              worker,
+              attByWorker.get(worker.id) || [],
+              rate,
+              advanceByWorker.get(worker.id) || 0,
+              paidByWorker.get(worker.id) || 0,
+              fromDate,
+              asOfDate,
+              roles,
+              payrollRates as never,
+            ),
+          )
+        } catch (rowErr) {
+          console.warn('Salary Up To Date row skipped:', worker.full_name, rowErr)
+        }
+      }
       setRows(ledger)
+      setLoadedOnce(true)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Load failed')
+      setRows([])
     } finally {
       setBusy(false)
     }
   }, [asOfDate, fromDate, activeWorkers, salaryRates, roles, payrollRates])
 
   useEffect(() => {
+    if (!workers.length) return
     void load()
-  }, [load])
+  }, [load, workers.length])
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -161,6 +187,9 @@ export function SalaryUpToDatePanel({ workers, salaryRates, roles, payrollRates,
       <p className="text-muted">
         Current salary status for every employee based on attendance entered up to the selected date (month-to-date).
       </p>
+
+      {error ? <p className="form-error text-danger">{error}</p> : null}
+
       <div className="hr-toolbar">
         <label className="field">
           <span className="text-muted">As of Date</span>
@@ -171,10 +200,14 @@ export function SalaryUpToDatePanel({ workers, salaryRates, roles, payrollRates,
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Employee…" />
         </label>
         <button type="button" className="primary-save" disabled={busy} onClick={() => void load()}>
-          Calculate
+          {busy ? 'Calculating…' : 'Calculate'}
         </button>
-        <button type="button" className="btn-ghost" onClick={printTable}>Print</button>
-        <button type="button" className="btn-ghost" onClick={exportCsv}>CSV</button>
+        <button type="button" className="btn-ghost" disabled={!visible.length} onClick={printTable}>
+          Print
+        </button>
+        <button type="button" className="btn-ghost" disabled={!visible.length} onClick={exportCsv}>
+          CSV
+        </button>
       </div>
 
       <div className="hr-kpi-grid">
@@ -216,6 +249,22 @@ export function SalaryUpToDatePanel({ workers, salaryRates, roles, payrollRates,
             </tr>
           </thead>
           <tbody>
+            {busy && !visible.length ? (
+              <tr>
+                <td colSpan={13} className="text-muted">
+                  Calculating salary up to {asOfDate}…
+                </td>
+              </tr>
+            ) : null}
+            {!busy && loadedOnce && visible.length === 0 ? (
+              <tr>
+                <td colSpan={13} className="text-muted">
+                  {activeWorkers.length === 0
+                    ? 'No active employees — add employees in Employee Master first.'
+                    : 'No rows match the current search.'}
+                </td>
+              </tr>
+            ) : null}
             {visible.map((r) => (
               <tr key={r.worker.id}>
                 <td className="num">{r.worker.employee_code || '—'}</td>
@@ -242,7 +291,6 @@ export function SalaryUpToDatePanel({ workers, salaryRates, roles, payrollRates,
           </tbody>
         </table>
       </div>
-      {error ? <p className="form-error text-danger">{error}</p> : null}
     </div>
   )
 }

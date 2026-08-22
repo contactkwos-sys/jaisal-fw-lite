@@ -106,4 +106,24 @@ assert(statusToCode('Half Day') === 'HD')
 assert(nextCode('P') === 'A')
 assert(nextCode('') === 'A')
 
+// pickLatestSalaryRate — active/approved only
+function pickLatestSalaryRate(rates, workerId, toDate) {
+  return (
+    rates
+      .filter(
+        (r) =>
+          r.worker_id === workerId &&
+          r.effective_from <= toDate &&
+          (r.status || 'Active') === 'Active' &&
+          r.approved !== false,
+      )
+      .sort((a, b) => b.effective_from.localeCompare(a.effective_from))[0] ?? null
+  )
+}
+const rates = [
+  { worker_id: 'w1', effective_from: '2026-08-01', status: 'Inactive', approved: true, daily_rate: 100 },
+  { worker_id: 'w1', effective_from: '2026-08-10', status: 'Active', approved: true, daily_rate: 500 },
+]
+assert(pickLatestSalaryRate(rates, 'w1', '2026-08-22')?.daily_rate === 500)
+
 console.log('hr-payroll-helpers-smoke: PASS')

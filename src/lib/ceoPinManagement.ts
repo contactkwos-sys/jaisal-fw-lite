@@ -328,16 +328,23 @@ export function buildPinShareMessage(args: {
 }
 
 export async function fetchSalaryAdvances(workerId?: string): Promise<SalaryAdvanceRow[]> {
-  let q = supabase
-    .from('salary_advance_transactions')
-    .select('*, workers(full_name, employee_code)')
-    .eq('is_voided', false)
-    .order('advance_date', { ascending: false })
-    .limit(500)
-  if (workerId) q = q.eq('worker_id', workerId)
-  const { data, error } = await q
-  if (error) throw error
-  return (data as SalaryAdvanceRow[]) ?? []
+  const buildQuery = (columns: string) => {
+    let q = supabase
+      .from('salary_advance_transactions')
+      .select(columns)
+      .eq('is_voided', false)
+      .order('advance_date', { ascending: false })
+      .limit(500)
+    if (workerId) q = q.eq('worker_id', workerId)
+    return q
+  }
+
+  const { data, error } = await buildQuery('*, workers(full_name, employee_code)')
+  if (!error) return (data as unknown as SalaryAdvanceRow[]) ?? []
+
+  const { data: plain, error: plainErr } = await buildQuery('*')
+  if (plainErr) throw plainErr
+  return (plain as unknown as SalaryAdvanceRow[]) ?? []
 }
 
 export async function sumSalaryAdvancesForWorker(

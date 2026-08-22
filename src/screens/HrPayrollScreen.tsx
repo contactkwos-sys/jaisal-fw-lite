@@ -701,7 +701,7 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
     void (async () => {
       try {
         setError(null)
-        if (sub === 'dashboard' || sub === 'salary-status') {
+        if (sub === 'dashboard' || sub === 'salary-status' || sub === 'reports') {
           await loadSalaryRates()
           if (sub === 'dashboard') await loadDashboard()
         }
