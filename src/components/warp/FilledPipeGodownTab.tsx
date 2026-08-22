@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { MACHINES } from '../../lib/database.types'
 import { fetchAllRates, lookupRate, WARP_CATALOGUE, type RateMasterRow } from '../../lib/rateMaster'
 import { supabase } from '../../lib/supabase'
+import { applyEditDeleteOrQueue } from '../../lib/pendingApprovals'
 import {
   DEFAULT_MULTIPLIER,
   FILLED_PIPE_ENTRY_TYPES,
@@ -21,18 +22,23 @@ import {
   saveFilledPipeEntry,
   statusBadgeClass,
   todayISO,
+  updateFilledPipe,
+  canEditFilledPipe,
   type FilledPipeEntryInput,
   type FilledPipeEntryType,
   type WarpPipe,
   type WarpYarnFilters,
   type WarpYarnTransaction,
 } from '../../lib/warpYarn'
+import { EditFilledPipeModal } from './EditFilledPipeModal'
+import { WarpRecordActions } from './WarpRecordActions'
 
 type Props = {
   pipes: WarpPipe[]
   txns: WarpYarnTransaction[]
   busy: boolean
   userName: string
+  isCeo: boolean
   onPipeClick: (pipe: WarpPipe) => void
   onSaved: () => Promise<void>
   onReceiveWarper: () => void
@@ -69,6 +75,7 @@ export function FilledPipeGodownTab({
   txns,
   busy,
   userName,
+  isCeo,
   onPipeClick,
   onSaved,
   onReceiveWarper,
@@ -81,6 +88,8 @@ export function FilledPipeGodownTab({
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [searchFilters, setSearchFilters] = useState<WarpYarnFilters>(emptyWarpFilters())
+  const [editPipe, setEditPipe] = useState<WarpPipe | null>(null)
+  const [saving, setSaving] = useState(false)
 
   const godownStock = useMemo(
     () =>
@@ -176,6 +185,38 @@ export function FilledPipeGodownTab({
       else resetForm()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed')
+    }
+  }
+
+  async function handleEditSave(input: FilledPipeEntryInput) {
+    if (!editPipe) return
+    setSaving(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const result = await applyEditDeleteOrQueue({
+        isCeo,
+        createdAt: editPipe.created_at,
+        tableName: 'warp_pipes',
+        recordId: editPipe.id,
+        action: 'edit',
+        requestedBy: userName,
+        newData: input as unknown as Record<string, unknown>,
+        apply: async () => {
+          await updateFilledPipe(supabase, editPipe.id, input, userName, editPipe)
+        },
+      })
+      await onSaved()
+      setEditPipe(null)
+      setMessage(
+        result === 'applied'
+          ? `Pipe ${editPipe.pipe_no} updated successfully.`
+          : `Edit queued for CEO approval · ${editPipe.pipe_no}`,
+      )
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unable to update this record. Please try again.')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -519,9 +560,12 @@ export function FilledPipeGodownTab({
                     </td>
                     <td>{lastTxn ? `${lastTxn.txn_date} · ${lastTxn.txn_type}` : '—'}</td>
                     <td>
-                      <button type="button" className="btn-ghost btn-sm" onClick={() => onPipeClick(p)}>
-                        Detail
-                      </button>
+                      <WarpRecordActions
+                        busy={busy || saving}
+                        canEdit={canEditFilledPipe(p)}
+                        onView={() => onPipeClick(p)}
+                        onEdit={() => setEditPipe(p)}
+                      />
                     </td>
                   </tr>
                 )
@@ -675,6 +719,15 @@ export function FilledPipeGodownTab({
           </div>
         ) : null}
       </article>
+
+      {editPipe ? (
+        <EditFilledPipeModal
+          pipe={editPipe}
+          busy={busy || saving}
+          onClose={() => setEditPipe(null)}
+          onSave={(input) => void handleEditSave(input)}
+        />
+      ) : null}
     </section>
   )
 }

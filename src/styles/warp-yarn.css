@@ -1057,3 +1057,39 @@
 .text-success {
   color: var(--success);
 }
+
+/* Record action buttons — touch-friendly for iPad */
+.wym-record-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.35rem;
+  align-items: center;
+  min-width: max-content;
+}
+
+.wym-action-btn {
+  min-height: 2.25rem;
+  min-width: 3.5rem;
+  padding: 0.35rem 0.65rem;
+  white-space: nowrap;
+  touch-action: manipulation;
+}
+
+.wym-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.wym-table th:last-child,
+.wym-table td:last-child {
+  position: sticky;
+  right: 0;
+  background: var(--surface, #fff);
+  box-shadow: -2px 0 4px rgba(0, 0, 0, 0.06);
+  z-index: 1;
+}
+
+.fpg-stock-table th:last-child,
+.fpg-stock-table td:last-child {
+  min-width: 7.5rem;
+}
