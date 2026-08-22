@@ -1846,11 +1846,11 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
                   <th>Designation</th>
                   <th>Department</th>
                   <th>Shift</th>
-                  <th>Pay Type</th>
-                  <th>Bank</th>
-                  <th>ESI</th>
-                  <th>PF</th>
-                  <th>PT</th>
+                  <th className="hr-emp-secondary">Pay Type</th>
+                  <th className="hr-emp-secondary">Bank</th>
+                  <th className="hr-emp-secondary">ESI</th>
+                  <th className="hr-emp-secondary">PF</th>
+                  <th className="hr-emp-secondary">PT</th>
                   <th>Active</th>
                   <th className="hr-emp-actions">Actions</th>
                 </tr>
@@ -1863,11 +1863,11 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
                     <td className="hr-emp-desig">{w.designation || '—'}</td>
                     <td className="hr-emp-dept">{w.department || '—'}</td>
                     <td className="hr-emp-shift">{w.shift || '—'}</td>
-                    <td>{w.pay_type || '—'}</td>
-                    <td className="num">{maskAccountNumber(w.bank_account_no)}</td>
-                    <td>{w.esi_applicable ? 'Y' : '—'}</td>
-                    <td>{w.pf_applicable ? 'Y' : '—'}</td>
-                    <td>{w.pt_applicable ? 'Y' : '—'}</td>
+                    <td className="hr-emp-secondary">{w.pay_type || '—'}</td>
+                    <td className="hr-emp-secondary num">{maskAccountNumber(w.bank_account_no)}</td>
+                    <td className="hr-emp-secondary">{w.esi_applicable ? 'Y' : '—'}</td>
+                    <td className="hr-emp-secondary">{w.pf_applicable ? 'Y' : '—'}</td>
+                    <td className="hr-emp-secondary">{w.pt_applicable ? 'Y' : '—'}</td>
                     <td>
                       <span className={w.is_active ? 'hr-badge hr-badge-ok' : 'hr-badge hr-badge-danger'}>
                         {w.is_active ? 'Yes' : 'No'}

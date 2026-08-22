@@ -250,7 +250,8 @@
   grid-template-columns: minmax(10rem, 1.4fr) repeat(auto-fit, minmax(8.5rem, 1fr));
   gap: 0.65rem;
   align-items: end;
-  width: 100%;
+  min-width: 0;
+  flex: 1 1 36rem;
 }
 
 .hr-emp-filters .field {
@@ -277,8 +278,19 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.65rem;
-  align-items: center;
+  align-items: end;
   justify-content: space-between;
+}
+
+.hr-emp-toolbar-row .hr-emp-filters {
+  flex: 1 1 36rem;
+}
+
+.hr-emp-toolbar-row > .primary-save {
+  flex: 0 0 auto;
+  min-height: 2.75rem;
+  padding: 0.65rem 1.15rem;
+  white-space: nowrap;
 }
 
 .hr-emp-count {
@@ -470,7 +482,7 @@
   }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1199px) {
   .hr-emp-filters {
     grid-template-columns: 1fr 1fr;
   }
@@ -479,13 +491,45 @@
     grid-column: 1 / -1;
   }
 
+  .hr-emp-toolbar-row > .primary-save {
+    width: 100%;
+  }
+
+  /* Priority columns when content is iPad-narrow; secondary via Edit / desktop */
   .hr-emp-table {
-    min-width: 980px;
+    min-width: 0;
+    width: 100%;
     font-size: 0.9rem;
   }
 
   .hr-emp-table th {
     font-size: 0.9rem;
+  }
+
+  .hr-emp-table .hr-emp-secondary {
+    display: none;
+  }
+
+  .hr-emp-table .hr-emp-name,
+  .hr-emp-table .hr-emp-desig,
+  .hr-emp-table .hr-emp-dept {
+    max-width: 12rem;
+    min-width: 5.5rem;
+  }
+
+  .hr-emp-table .hr-emp-actions {
+    position: static;
+    box-shadow: none;
+  }
+}
+
+@media (min-width: 1200px) {
+  .hr-emp-table {
+    min-width: 1100px;
+  }
+
+  .hr-emp-toolbar-row > .primary-save {
+    margin-bottom: 0.1rem;
   }
 }
 
