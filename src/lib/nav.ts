@@ -341,6 +341,7 @@ export const MAIN_MODULES: MainModule[] = [
       { id: 'hr-leave', label: 'Leave / Holiday', screen: 'hr-payroll', sub: 'leave', hint: 'Leave entries & holidays' },
       { id: 'hr-rates', label: 'Salary Rate Master', screen: 'hr-payroll', sub: 'rates', hint: 'Monthly / daily / hourly rates' },
       { id: 'hr-advance', label: 'Advance Salary', screen: 'hr-payroll', sub: 'advance', hint: 'Cash / cheque / bank advance entries' },
+      { id: 'hr-salary-status', label: 'Salary Up To Date', screen: 'hr-payroll', sub: 'salary-status', hint: 'Live salary liability as of any date' },
       { id: 'hr-payroll-run', label: 'Payroll', screen: 'hr-payroll', sub: 'payroll', hint: 'Calculate & approve payroll' },
       { id: 'hr-statutory', label: 'ESI / PF / PT', screen: 'hr-payroll', sub: 'statutory', hint: 'Toggle statutory deductions' },
       { id: 'hr-register', label: 'Salary Register', screen: 'hr-payroll', sub: 'register', hint: 'Monthly salary history' },
@@ -775,6 +776,7 @@ export function titleFor(screen: AppScreen, sub?: string, moduleId?: MainModuleI
       payment: 'Salary Payment',
       'bank-letter': 'Bank Salary Letter',
       reports: 'HR & Payroll Reports',
+      'salary-status': 'Salary Up To Date',
     }
     return labels[sub || 'dashboard'] || 'HR & Payroll'
   }

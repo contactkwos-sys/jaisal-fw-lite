@@ -4,6 +4,8 @@
  */
 
 import { computeAttendanceStatus } from './attendanceStatus'
+import { summarizeAttendanceRows } from './attendanceMatrix'
+import type { Attendance, PayrollEntry, PayrollRun, PayrollRate, Role, SalaryRate, Worker } from './database.types'
 
 export const PAYROLL_STATUSES = [
   'Draft',
@@ -401,4 +403,196 @@ export function calculateEmployeePayroll(input: CalcInput): CalcResult {
 export function isPresentStatus(status: string | null | undefined): boolean {
   const s = (status || '').trim()
   return s === 'Present' || s === 'On Break' || s === 'Completed' || s === 'Half Day'
+}
+
+export function pickLatestSalaryRate(rates: SalaryRate[], workerId: string, toDate: string): SalaryRate | null {
+  return (
+    rates
+      .filter((r) => r.worker_id === workerId && r.effective_from <= toDate)
+      .sort((a, b) => b.effective_from.localeCompare(a.effective_from))[0] ?? null
+  )
+}
+
+export function fallbackDailyRate(worker: Worker, roles: Role[], payrollRates: PayrollRate[]): number {
+  const roleId = worker.role_id || roles.find((r) => r.role_name === worker.department)?.id
+  if (!roleId) return 0
+  return Number(payrollRates.find((r) => r.role_id === roleId)?.rate_per_day ?? 0)
+}
+
+/** Shared attendance → payroll entry builder (single source for Payroll + Reports + Salary Up To Date). */
+export function buildPayrollEntryFromAttendance(
+  worker: Worker,
+  attRows: Attendance[],
+  rate: SalaryRate | null,
+  run: Pick<PayrollRun, 'id' | 'working_days' | 'esi_on' | 'pf_on' | 'pt_on' | 'other_deduction_on'>,
+  advanceAmount = 0,
+  roles: Role[] = [],
+  payrollRates: PayrollRate[] = [],
+): Omit<PayrollEntry, 'id' | 'created_at' | 'updated_at'> {
+  let presentDays = 0
+  let leaveDays = 0
+  let payableDays = 0
+  for (const a of attRows) {
+    const st = a.status || 'Absent'
+    if (isPresentStatus(st)) presentDays++
+    if (st === 'Leave') leaveDays++
+    payableDays += Number(a.payable_day ?? payableDayFromAttendance(st, Number(a.total_hours) || 0))
+  }
+  payableDays = Math.round(payableDays * 100) / 100
+
+  const payType = rate?.pay_type || worker.pay_type || 'Daily'
+  let monthlyRate = Number(rate?.monthly_rate) || 0
+  let dailyRate = Number(rate?.daily_rate) || 0
+  let hourlyRate = Number(rate?.hourly_rate) || 0
+  const otRate = Number(rate?.ot_rate) || 0
+  if (!dailyRate && monthlyRate) dailyRate = dailyFromMonthly(monthlyRate)
+  if (!dailyRate) dailyRate = fallbackDailyRate(worker, roles, payrollRates)
+
+  const esiOn = run.esi_on && worker.esi_applicable !== false
+  const pfOn = run.pf_on && worker.pf_applicable !== false
+  const ptOn = run.pt_on && worker.pt_applicable !== false
+  const otherOn = run.other_deduction_on
+
+  const calc = calculateEmployeePayroll({
+    payType,
+    monthlyRate,
+    dailyRate,
+    hourlyRate,
+    otRate,
+    presentDays,
+    payableDays,
+    workingDays: Number(run.working_days) || DEFAULT_MONTHLY_DIVISOR,
+    esiOn,
+    pfOn,
+    ptOn,
+    otherOn,
+    advance: advanceAmount,
+  })
+
+  return {
+    payroll_run_id: run.id,
+    worker_id: worker.id,
+    employee_code: worker.employee_code ?? null,
+    employee_name: worker.full_name,
+    designation: worker.designation ?? null,
+    department: worker.department ?? null,
+    pay_type: payType,
+    working_days: Number(run.working_days) || DEFAULT_MONTHLY_DIVISOR,
+    present_days: presentDays,
+    leave_days: leaveDays,
+    payable_days: payableDays,
+    basic_salary: calc.basic,
+    allowances: calc.allowances,
+    ot_amount: calc.ot,
+    gross_salary: calc.gross,
+    esi_amount: calc.esi,
+    pf_amount: calc.pf,
+    pt_amount: calc.pt,
+    other_deduction: calc.other,
+    advance: calc.advance,
+    total_deduction: calc.totalDeduction,
+    net_payable: calc.net,
+    status: 'Payroll Calculated',
+    esi_on: esiOn,
+    pf_on: pfOn,
+    pt_on: ptOn,
+    other_deduction_on: otherOn,
+    bank_name: worker.bank_name ?? null,
+    bank_account_no: worker.bank_account_no ?? null,
+    bank_ifsc: worker.bank_ifsc ?? null,
+    bank_branch: worker.bank_branch ?? null,
+    payment_date: null,
+    selected_for_letter: false,
+  }
+}
+
+export type SalaryLedgerRow = {
+  worker: Worker
+  rate: SalaryRate | null
+  summary: {
+    present: number
+    absent: number
+    halfDay: number
+    leave: number
+    weeklyOff: number
+    holiday: number
+    paidDays: number
+    workingDays: number
+  }
+  earnedSalary: number
+  advancePaid: number
+  otherDeduction: number
+  statutoryDeduction: number
+  netPayable: number
+  paidAmount: number
+  balanceSalary: number
+  salaryRateLabel: string
+}
+
+export function buildSalaryLedgerRow(
+  worker: Worker,
+  attRows: Attendance[],
+  rate: SalaryRate | null,
+  advanceAmount: number,
+  paidAmount: number,
+  fromDate: string,
+  toDate: string,
+  roles: Role[] = [],
+  payrollRates: PayrollRate[] = [],
+  workingDays = DEFAULT_MONTHLY_DIVISOR,
+): SalaryLedgerRow {
+  const pseudoRun: Pick<PayrollRun, 'id' | 'working_days' | 'esi_on' | 'pf_on' | 'pt_on' | 'other_deduction_on'> = {
+    id: 'ledger',
+    working_days: workingDays,
+    esi_on: true,
+    pf_on: true,
+    pt_on: true,
+    other_deduction_on: true,
+  }
+  const entry = buildPayrollEntryFromAttendance(worker, attRows, rate, pseudoRun, advanceAmount, roles, payrollRates)
+  const attSummary = summarizeAttendanceRows(attRows)
+  const summary = {
+    present: attSummary.present,
+    absent: attSummary.absent,
+    halfDay: attSummary.halfDay,
+    leave: attSummary.leave,
+    weeklyOff: attSummary.weeklyOff,
+    holiday: attSummary.holiday,
+    paidDays: attSummary.paidDays,
+    workingDays: datesInRangeCount(fromDate, toDate),
+  }
+  const statutoryDeduction =
+    Number(entry.esi_amount) + Number(entry.pf_amount) + Number(entry.pt_amount) + Number(entry.other_deduction)
+  const payType = rate?.pay_type || worker.pay_type || 'Daily'
+  let rateLabel = '—'
+  if (payType === 'Monthly') rateLabel = formatINR(Number(rate?.monthly_rate) || 0) + '/mo'
+  else if (payType === 'Hourly') rateLabel = formatINRExact(Number(rate?.hourly_rate) || 0) + '/hr'
+  else rateLabel = formatINRExact(Number(rate?.daily_rate) || fallbackDailyRate(worker, roles, payrollRates)) + '/day'
+
+  return {
+    worker,
+    rate,
+    summary,
+    earnedSalary: Number(entry.gross_salary),
+    advancePaid: advanceAmount,
+    otherDeduction: Number(entry.other_deduction),
+    statutoryDeduction,
+    netPayable: Number(entry.net_payable),
+    paidAmount,
+    balanceSalary: Math.round((Number(entry.net_payable) - paidAmount) * 100) / 100,
+    salaryRateLabel: rateLabel,
+  }
+}
+
+function datesInRangeCount(from: string, to: string): number {
+  if (!from || !to || from > to) return 0
+  const start = new Date(`${from}T12:00:00`)
+  const end = new Date(`${to}T12:00:00`)
+  let n = 0
+  const cur = new Date(start)
+  while (cur <= end) {
+    n++
+    cur.setDate(cur.getDate() + 1)
+  }
+  return n
 }

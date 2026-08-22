@@ -48,8 +48,11 @@ import {
   fetchSalaryAdvances,
   type SalaryAdvanceRow,
 } from '../lib/ceoPinManagement'
+import { HrPayrollReportsPanel } from '../components/hr/HrPayrollReportsPanel'
+import { SalaryUpToDatePanel } from '../components/hr/SalaryUpToDatePanel'
 import { listPayrollJobs } from '../lib/payrollJobs'
 import { supabase } from '../lib/supabase'
+import { buildPayrollEntryFromAttendance, pickLatestSalaryRate } from '../lib/hrPayroll'
 
 type Sub =
   | 'dashboard'
@@ -63,6 +66,7 @@ type Sub =
   | 'payment'
   | 'bank-letter'
   | 'reports'
+  | 'salary-status'
 
 type Props = {
   initialSub?: string
@@ -125,6 +129,12 @@ type DashboardKpis = {
   onLeave: number
   payrollReady: number
   paymentDone: number
+  monthPresentDays: number
+  monthPaidDays: number
+  salaryEarnedMtd: number
+  advanceMtd: number
+  salaryPaidMtd: number
+  salaryOutstanding: number
 }
 
 const SUBS: Array<{ id: Sub; label: string }> = [
@@ -139,6 +149,7 @@ const SUBS: Array<{ id: Sub; label: string }> = [
   { id: 'payment', label: 'Payment' },
   { id: 'bank-letter', label: 'Bank Letter' },
   { id: 'reports', label: 'Reports' },
+  { id: 'salary-status', label: 'Salary Up To Date' },
 ]
 
 const MIGRATION_HINT = 'Run public/migration-hr-payroll-module.sql in Supabase SQL editor, then refresh.'
@@ -242,11 +253,7 @@ function rateLabelForPayType(payType: string): string {
 }
 
 function pickLatestRate(rates: SalaryRate[], workerId: string, toDate: string): SalaryRate | null {
-  return (
-    rates
-      .filter((r) => r.worker_id === workerId && r.effective_from <= toDate)
-      .sort((a, b) => b.effective_from.localeCompare(a.effective_from))[0] ?? null
-  )
+  return pickLatestSalaryRate(rates, workerId, toDate)
 }
 
 function fallbackDailyRate(worker: Worker, roles: Role[], payrollRates: PayrollRate[]): number {
@@ -268,6 +275,7 @@ function titleForSub(sub: Sub): string {
     payment: 'Salary Payment',
     'bank-letter': 'Bank Salary Letter',
     reports: 'HR & Payroll Reports',
+    'salary-status': 'Salary Up To Date',
   }
   return labels[sub]
 }
@@ -308,7 +316,7 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
   const [advanceWorkerId, setAdvanceWorkerId] = useState('')
   const [advanceDate, setAdvanceDate] = useState(() => todayISO())
   const [advanceAmount, setAdvanceAmount] = useState('')
-  const [advanceMode, setAdvanceMode] = useState<'Cash' | 'Cheque' | 'Bank Transfer'>('Cash')
+  const [advanceMode, setAdvanceMode] = useState<'Cash' | 'Cheque' | 'Bank Transfer' | 'Other'>('Cash')
   const [advanceRef, setAdvanceRef] = useState('')
   const [advanceBank, setAdvanceBank] = useState('')
   const [advanceRemarks, setAdvanceRemarks] = useState('')
@@ -320,6 +328,12 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
     onLeave: 0,
     payrollReady: 0,
     paymentDone: 0,
+    monthPresentDays: 0,
+    monthPaidDays: 0,
+    salaryEarnedMtd: 0,
+    advanceMtd: 0,
+    salaryPaidMtd: 0,
+    salaryOutstanding: 0,
   })
 
   const [workerForm, setWorkerForm] = useState<WorkerForm>(emptyWorkerForm())
@@ -356,10 +370,6 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
   const [regDept, setRegDept] = useState('')
   const [regStatus, setRegStatus] = useState('')
 
-  const [reportKind, setReportKind] = useState<
-    'attendance' | 'payroll' | 'statutory' | 'payment' | 'letters' | 'history'
-  >('attendance')
-  const [reportMonth, setReportMonth] = useState(() => new Date().toISOString().slice(0, 7))
   const [historyWorkerId, setHistoryWorkerId] = useState('')
 
   const bounds = useMemo(() => monthBounds(payrollMonth), [payrollMonth])
@@ -514,6 +524,7 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
 
   const loadDashboard = useCallback(async () => {
     const today = todayISO()
+    const monthFrom = monthBounds(today.slice(0, 7)).from
     const active = workers.filter((w) => w.is_active)
     const { data: att, error: aErr } = await supabase.from('attendance').select('*').eq('date', today)
     if (aErr) throw aErr
@@ -529,6 +540,69 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
       else if (isPresentStatus(st)) present++
       else absent++
     }
+
+    const { data: monthAtt, error: maErr } = await supabase
+      .from('attendance')
+      .select('*')
+      .gte('date', monthFrom)
+      .lte('date', today)
+    if (maErr) throw maErr
+    let monthPresentDays = 0
+    let monthPaidDays = 0
+    for (const a of (monthAtt as Attendance[]) ?? []) {
+      const st = a.status || 'Absent'
+      if (isPresentStatus(st)) monthPresentDays++
+      monthPaidDays += Number(a.payable_day ?? payableDayFromAttendance(st, Number(a.total_hours) || 0))
+    }
+    monthPaidDays = Math.round(monthPaidDays * 100) / 100
+
+    const { data: advMtd, error: advErr } = await supabase
+      .from('salary_advance_transactions')
+      .select('amount')
+      .eq('is_voided', false)
+      .gte('advance_date', monthFrom)
+      .lte('advance_date', today)
+    if (advErr) throw advErr
+    const advanceMtd = (advMtd ?? []).reduce((s, r) => s + Number((r as { amount: number }).amount || 0), 0)
+
+    let salaryEarnedMtd = 0
+    let salaryPaidMtd = 0
+    const attByWorkerMonth = new Map<string, Attendance[]>()
+    for (const a of (monthAtt as Attendance[]) ?? []) {
+      const list = attByWorkerMonth.get(a.worker_id) || []
+      list.push(a)
+      attByWorkerMonth.set(a.worker_id, list)
+    }
+    for (const w of active) {
+      const rate = pickLatestRate(salaryRates, w.id, today)
+      const pseudoRun: PayrollRun = {
+        id: 'dash',
+        payroll_month: today.slice(0, 7),
+        from_date: monthFrom,
+        to_date: today,
+        status: 'Draft',
+        esi_on: true,
+        pf_on: true,
+        pt_on: true,
+        other_deduction_on: true,
+        working_days: DEFAULT_MONTHLY_DIVISOR,
+        notes: null,
+        created_by: null,
+        created_at: '',
+        updated_at: '',
+      }
+      const entry = buildPayrollEntryFromAttendance(
+        w,
+        attByWorkerMonth.get(w.id) || [],
+        rate,
+        pseudoRun,
+        0,
+        roles,
+        payrollRates,
+      )
+      salaryEarnedMtd += Number(entry.gross_salary)
+    }
+
     const { data: ready, error: rErr } = await supabase
       .from('payroll_entries')
       .select('id')
@@ -536,9 +610,11 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
     if (rErr) throw rErr
     const { data: done, error: dErr } = await supabase
       .from('payroll_entries')
-      .select('id')
-      .eq('status', 'Payment Processed')
+      .select('net_payable')
+      .in('status', ['Payment Processed', 'Included in Bank Salary Letter'])
     if (dErr) throw dErr
+    salaryPaidMtd = (done ?? []).reduce((s, r) => s + Number((r as { net_payable: number }).net_payable || 0), 0)
+
     setKpis({
       totalEmployees: active.length,
       presentToday: present,
@@ -546,8 +622,14 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
       onLeave,
       payrollReady: ready?.length ?? 0,
       paymentDone: done?.length ?? 0,
+      monthPresentDays,
+      monthPaidDays,
+      salaryEarnedMtd: Math.round(salaryEarnedMtd * 100) / 100,
+      advanceMtd,
+      salaryPaidMtd: Math.round(salaryPaidMtd * 100) / 100,
+      salaryOutstanding: Math.round((salaryEarnedMtd - advanceMtd - salaryPaidMtd) * 100) / 100,
     })
-  }, [workers])
+  }, [workers, salaryRates, roles, payrollRates])
 
   const loadHolidaysLeave = useCallback(async () => {
     const [{ data: h }, { data: l }] = await Promise.all([
@@ -619,7 +701,10 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
     void (async () => {
       try {
         setError(null)
-        if (sub === 'dashboard') await loadDashboard()
+        if (sub === 'dashboard' || sub === 'salary-status') {
+          await loadSalaryRates()
+          if (sub === 'dashboard') await loadDashboard()
+        }
         if (sub === 'employees' || sub === 'rates') await loadSalaryRates()
         if (sub === 'employees') {
           try {
@@ -972,81 +1057,7 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
     run: PayrollRun,
     advanceAmount = 0,
   ): Omit<PayrollEntry, 'id' | 'created_at' | 'updated_at'> {
-    let presentDays = 0
-    let leaveDays = 0
-    let payableDays = 0
-    for (const a of attRows) {
-      const st = a.status || 'Absent'
-      if (isPresentStatus(st)) presentDays++
-      if (st === 'Leave') leaveDays++
-      payableDays += Number(a.payable_day ?? payableDayFromAttendance(st, Number(a.total_hours) || 0))
-    }
-    payableDays = Math.round(payableDays * 100) / 100
-
-    const payType = rate?.pay_type || worker.pay_type || 'Daily'
-    let monthlyRate = Number(rate?.monthly_rate) || 0
-    let dailyRate = Number(rate?.daily_rate) || 0
-    let hourlyRate = Number(rate?.hourly_rate) || 0
-    const otRate = Number(rate?.ot_rate) || 0
-    if (!dailyRate && monthlyRate) dailyRate = dailyFromMonthly(monthlyRate)
-    if (!dailyRate) dailyRate = fallbackDailyRate(worker, roles, payrollRates)
-
-    const esiOn = run.esi_on && worker.esi_applicable !== false
-    const pfOn = run.pf_on && worker.pf_applicable !== false
-    const ptOn = run.pt_on && worker.pt_applicable !== false
-    const otherOn = run.other_deduction_on
-
-    const calc = calculateEmployeePayroll({
-      payType,
-      monthlyRate,
-      dailyRate,
-      hourlyRate,
-      otRate,
-      presentDays,
-      payableDays,
-      workingDays: Number(run.working_days) || DEFAULT_MONTHLY_DIVISOR,
-      esiOn,
-      pfOn,
-      ptOn,
-      otherOn,
-      advance: advanceAmount,
-    })
-
-    return {
-      payroll_run_id: run.id,
-      worker_id: worker.id,
-      employee_code: worker.employee_code ?? null,
-      employee_name: worker.full_name,
-      designation: worker.designation ?? null,
-      department: worker.department ?? null,
-      pay_type: payType,
-      working_days: Number(run.working_days) || DEFAULT_MONTHLY_DIVISOR,
-      present_days: presentDays,
-      leave_days: leaveDays,
-      payable_days: payableDays,
-      basic_salary: calc.basic,
-      allowances: calc.allowances,
-      ot_amount: calc.ot,
-      gross_salary: calc.gross,
-      esi_amount: calc.esi,
-      pf_amount: calc.pf,
-      pt_amount: calc.pt,
-      other_deduction: calc.other,
-      advance: calc.advance,
-      total_deduction: calc.totalDeduction,
-      net_payable: calc.net,
-      status: 'Payroll Calculated',
-      esi_on: esiOn,
-      pf_on: pfOn,
-      pt_on: ptOn,
-      other_deduction_on: otherOn,
-      bank_name: worker.bank_name ?? null,
-      bank_account_no: worker.bank_account_no ?? null,
-      bank_ifsc: worker.bank_ifsc ?? null,
-      bank_branch: worker.bank_branch ?? null,
-      payment_date: null,
-      selected_for_letter: false,
-    }
+    return buildPayrollEntryFromAttendance(worker, attRows, rate, run, advanceAmount, roles, payrollRates)
   }
 
   async function calculatePayroll() {
@@ -1368,40 +1379,6 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
 
   const activeLetter = letters.find((l) => l.id === viewLetterId) ?? letters[0] ?? null
 
-  const reportAttendance = useMemo(() => {
-    const { from, to } = monthBounds(reportMonth)
-    return { from, to }
-  }, [reportMonth])
-
-  const [reportAttRows, setReportAttRows] = useState<Attendance[]>([])
-  useEffect(() => {
-    if (sub !== 'reports' || reportKind !== 'attendance') return
-    void (async () => {
-      const { data } = await supabase
-        .from('attendance')
-        .select('*')
-        .gte('date', reportAttendance.from)
-        .lte('date', reportAttendance.to)
-      setReportAttRows((data as Attendance[]) ?? [])
-    })()
-  }, [sub, reportKind, reportAttendance])
-
-  const attSummary = useMemo(() => {
-    const byWorker = new Map<string, { present: number; absent: number; leave: number }>()
-    for (const a of reportAttRows) {
-      const cur = byWorker.get(a.worker_id) || { present: 0, absent: 0, leave: 0 }
-      const st = a.status || 'Absent'
-      if (st === 'Leave') cur.leave++
-      else if (isPresentStatus(st)) cur.present++
-      else cur.absent++
-      byWorker.set(a.worker_id, cur)
-    }
-    return activeWorkers.map((w) => ({
-      worker: w,
-      ...(byWorker.get(w.id) || { present: 0, absent: 0, leave: 0 }),
-    }))
-  }, [reportAttRows, activeWorkers])
-
   if (migrationMissing) {
     return (
       <div className="screen">
@@ -1447,28 +1424,39 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
             </div>
             <div className="hr-kpi surface">
               <div className="hr-kpi-value num">{kpis.presentToday}</div>
-              <div className="hr-kpi-label">Present Today</div>
+              <div className="hr-kpi-label">Attendance Today</div>
             </div>
             <div className="hr-kpi surface">
               <div className="hr-kpi-value num">{kpis.absentToday}</div>
               <div className="hr-kpi-label">Absent Today</div>
             </div>
             <div className="hr-kpi surface">
-              <div className="hr-kpi-value num">{kpis.onLeave}</div>
-              <div className="hr-kpi-label">On Leave</div>
+              <div className="hr-kpi-value num">{kpis.monthPaidDays}</div>
+              <div className="hr-kpi-label">Month Paid Days</div>
             </div>
             <div className="hr-kpi surface">
-              <div className="hr-kpi-value num">{kpis.payrollReady}</div>
-              <div className="hr-kpi-label">Payroll Ready</div>
+              <div className="hr-kpi-value num">{formatINR(kpis.salaryEarnedMtd)}</div>
+              <div className="hr-kpi-label">Salary Earned (MTD)</div>
             </div>
             <div className="hr-kpi surface">
-              <div className="hr-kpi-value num">{kpis.paymentDone}</div>
-              <div className="hr-kpi-label">Payment Done</div>
+              <div className="hr-kpi-value num">{formatINR(kpis.advanceMtd)}</div>
+              <div className="hr-kpi-label">Advance (MTD)</div>
+            </div>
+            <div className="hr-kpi surface">
+              <div className="hr-kpi-value num">{formatINR(kpis.salaryPaidMtd)}</div>
+              <div className="hr-kpi-label">Salary Paid</div>
+            </div>
+            <div className="hr-kpi surface danger">
+              <div className="hr-kpi-value num">{formatINR(kpis.salaryOutstanding)}</div>
+              <div className="hr-kpi-label">Salary Outstanding</div>
             </div>
           </div>
           <div className="hr-quick-actions share-actions">
             <button type="button" className="btn-ghost" onClick={() => quickNav('attendance')}>
-              Attendance
+              Attendance Matrix
+            </button>
+            <button type="button" className="btn-ghost" onClick={() => goNav('salary-status')}>
+              Salary Up To Date
             </button>
             <button type="button" className="btn-ghost" onClick={() => goNav('employees')}>
               Employees
@@ -2193,11 +2181,12 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
               <span className="text-muted">Payment mode</span>
               <select
                 value={advanceMode}
-                onChange={(e) => setAdvanceMode(e.target.value as 'Cash' | 'Cheque' | 'Bank Transfer')}
+                onChange={(e) => setAdvanceMode(e.target.value as 'Cash' | 'Cheque' | 'Bank Transfer' | 'Other')}
               >
                 <option value="Cash">Cash</option>
                 <option value="Cheque">Cheque</option>
                 <option value="Bank Transfer">Bank Transfer</option>
+                <option value="Other">Other</option>
               </select>
             </label>
             {advanceMode === 'Cheque' ? (
@@ -2756,114 +2745,28 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
         </div>
       ) : null}
 
+      {sub === 'salary-status' ? (
+        <SalaryUpToDatePanel
+          workers={workers}
+          salaryRates={salaryRates}
+          roles={roles}
+          payrollRates={payrollRates}
+          onOpenWorker={(id) => {
+            setHistoryWorkerId(id)
+            goNav('reports')
+          }}
+        />
+      ) : null}
+
       {sub === 'reports' ? (
-        <div className="form-stack">
-          <div className="hr-quick-actions share-actions">
-            {(
-              [
-                ['attendance', 'Attendance Summary'],
-                ['payroll', 'Payroll Summary'],
-                ['statutory', 'ESI / PF / PT'],
-                ['payment', 'Payment Report'],
-                ['letters', 'Bank Letter History'],
-                ['history', 'Salary History'],
-              ] as const
-            ).map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                className={reportKind === id ? 'primary-save' : 'btn-ghost'}
-                onClick={() => setReportKind(id)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <label className="field">
-            <span className="text-muted">Month</span>
-            <input type="month" value={reportMonth} onChange={(e) => setReportMonth(e.target.value)} />
-          </label>
-
-          {reportKind === 'attendance' ? (
-            <div className="hr-table-wrap">
-              <table className="hr-table">
-                <thead>
-                  <tr>
-                    <th>Employee</th>
-                    <th>Present</th>
-                    <th>Absent</th>
-                    <th>Leave</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {attSummary.map((row) => (
-                    <tr key={row.worker.id}>
-                      <td>{row.worker.full_name}</td>
-                      <td className="num">{row.present}</td>
-                      <td className="num">{row.absent}</td>
-                      <td className="num">{row.leave}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : null}
-
-          {reportKind === 'payroll' || reportKind === 'statutory' || reportKind === 'payment' ? (
-            <ReportPayrollBlock kind={reportKind} month={reportMonth} workers={workers} />
-          ) : null}
-
-          {reportKind === 'letters' ? (
-            <div className="hr-table-wrap">
-              <table className="hr-table">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Month</th>
-                    <th>Employees</th>
-                    <th>Amount</th>
-                    <th>Status</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {letters.map((l) => (
-                    <tr key={l.id}>
-                      <td>{l.letter_date}</td>
-                      <td>{l.salary_month}</td>
-                      <td className="num">{l.total_employees}</td>
-                      <td className="num">{formatINRExact(l.total_amount)}</td>
-                      <td>
-                        <span className={statusBadgeClass(l.status)}>{l.status}</span>
-                      </td>
-                      <td>
-                        <button
-                          type="button"
-                          className="btn-ghost"
-                          onClick={() => {
-                            setViewLetterId(l.id)
-                            goNav('bank-letter', l.id)
-                          }}
-                        >
-                          Open
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : null}
-
-          {reportKind === 'history' ? (
-            <SalaryHistoryBlock
-              month={reportMonth}
-              workerId={historyWorkerId}
-              onWorkerChange={setHistoryWorkerId}
-              workers={activeWorkers}
-            />
-          ) : null}
-        </div>
+        <HrPayrollReportsPanel
+          workers={workers}
+          salaryRates={salaryRates}
+          roles={roles}
+          payrollRates={payrollRates}
+          initialWorkerId={historyWorkerId}
+          onOpenWorkerHistory={(id) => setHistoryWorkerId(id)}
+        />
       ) : null}
 
       {detailEntry ? (
@@ -2947,205 +2850,6 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
 
       {error ? <p className="form-error text-danger">{error}</p> : null}
       {message ? <p className="form-ok text-sage">{message}</p> : null}
-    </div>
-  )
-}
-
-function ReportPayrollBlock({
-  kind,
-  month,
-  workers,
-}: {
-  kind: 'payroll' | 'statutory' | 'payment'
-  month: string
-  workers: Worker[]
-}) {
-  const [rows, setRows] = useState<PayrollEntry[]>([])
-  useEffect(() => {
-    void (async () => {
-      const { data: run } = await supabase.from('payroll_runs').select('id').eq('payroll_month', month).maybeSingle()
-      if (!run?.id) {
-        setRows([])
-        return
-      }
-      let q = supabase.from('payroll_entries').select('*').eq('payroll_run_id', run.id)
-      if (kind === 'payment') q = q.eq('status', 'Ready for Salary Payment')
-      const { data } = await q.order('employee_name')
-      setRows((data as PayrollEntry[]) ?? [])
-    })()
-  }, [kind, month])
-
-  const totals = useMemo(
-    () =>
-      rows.reduce(
-        (acc, e) => ({
-          gross: acc.gross + Number(e.gross_salary),
-          esi: acc.esi + Number(e.esi_amount),
-          pf: acc.pf + Number(e.pf_amount),
-          pt: acc.pt + Number(e.pt_amount),
-          net: acc.net + Number(e.net_payable),
-        }),
-        { gross: 0, esi: 0, pf: 0, pt: 0, net: 0 },
-      ),
-    [rows],
-  )
-
-  if (!rows.length) return <p className="text-muted">No payroll data for {month}</p>
-
-  if (kind === 'statutory') {
-    return (
-      <div className="form-stack">
-        <div className="hr-kpi-grid">
-          <div className="hr-kpi surface">
-            <div className="hr-kpi-value num">{formatINR(totals.esi)}</div>
-            <div className="hr-kpi-label">Total ESI</div>
-          </div>
-          <div className="hr-kpi surface">
-            <div className="hr-kpi-value num">{formatINR(totals.pf)}</div>
-            <div className="hr-kpi-label">Total PF</div>
-          </div>
-          <div className="hr-kpi surface">
-            <div className="hr-kpi-value num">{formatINR(totals.pt)}</div>
-            <div className="hr-kpi-label">Total PT</div>
-          </div>
-        </div>
-        <div className="hr-table-wrap">
-          <table className="hr-table">
-            <thead>
-              <tr>
-                <th>Employee</th>
-                <th>ESI</th>
-                <th>PF</th>
-                <th>PT</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((e) => (
-                <tr key={e.id}>
-                  <td>{e.employee_name}</td>
-                  <td className="num">{formatINRExact(e.esi_amount)}</td>
-                  <td className="num">{formatINRExact(e.pf_amount)}</td>
-                  <td className="num">{formatINRExact(e.pt_amount)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="hr-table-wrap">
-      <table className="hr-table">
-        <thead>
-          <tr>
-            <th>Employee</th>
-            <th>Dept</th>
-            <th>Gross</th>
-            <th>Net</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((e) => (
-            <tr key={e.id}>
-              <td>{e.employee_name}</td>
-              <td>{e.department || workers.find((w) => w.id === e.worker_id)?.department || '—'}</td>
-              <td className="num">{formatINRExact(e.gross_salary)}</td>
-              <td className="num">{formatINRExact(e.net_payable)}</td>
-              <td>
-                <span className={statusBadgeClass(e.status)}>{e.status}</span>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-        <tfoot>
-          <tr>
-            <td colSpan={2}>
-              <strong>Totals</strong>
-            </td>
-            <td className="num">{formatINRExact(totals.gross)}</td>
-            <td className="num">{formatINRExact(totals.net)}</td>
-            <td />
-          </tr>
-        </tfoot>
-      </table>
-    </div>
-  )
-}
-
-function SalaryHistoryBlock({
-  month,
-  workerId,
-  onWorkerChange,
-  workers,
-}: {
-  month: string
-  workerId: string
-  onWorkerChange: (id: string) => void
-  workers: Worker[]
-}) {
-  const [rows, setRows] = useState<PayrollEntry[]>([])
-  useEffect(() => {
-    void (async () => {
-      if (!workerId) {
-        setRows([])
-        return
-      }
-      const { data } = await supabase
-        .from('payroll_entries')
-        .select('*, payroll_runs!inner(payroll_month)')
-        .eq('worker_id', workerId)
-        .eq('payroll_runs.payroll_month', month)
-        .order('created_at', { ascending: false })
-      setRows((data as PayrollEntry[]) ?? [])
-    })()
-  }, [workerId, month])
-
-  return (
-    <div className="form-stack">
-      <label className="field">
-        <span className="text-muted">Employee</span>
-        <select value={workerId} onChange={(e) => onWorkerChange(e.target.value)}>
-          <option value="">Select…</option>
-          {workers.map((w) => (
-            <option key={w.id} value={w.id}>
-              {w.full_name}
-            </option>
-          ))}
-        </select>
-      </label>
-      {!workerId ? <p className="text-muted">Select an employee</p> : null}
-      {workerId && !rows.length ? <p className="text-muted">No salary rows for this month</p> : null}
-      {rows.length ? (
-        <div className="hr-table-wrap">
-          <table className="hr-table">
-            <thead>
-              <tr>
-                <th>Payable</th>
-                <th>Gross</th>
-                <th>Deductions</th>
-                <th>Net</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((e) => (
-                <tr key={e.id}>
-                  <td className="num">{e.payable_days}</td>
-                  <td className="num">{formatINRExact(e.gross_salary)}</td>
-                  <td className="num">{formatINRExact(e.total_deduction)}</td>
-                  <td className="num">{formatINRExact(e.net_payable)}</td>
-                  <td>
-                    <span className={statusBadgeClass(e.status)}>{e.status}</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : null}
     </div>
   )
 }
