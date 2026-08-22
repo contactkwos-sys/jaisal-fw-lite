@@ -33,6 +33,88 @@ export type PayType = (typeof PAY_TYPES)[number]
 
 export const SHIFTS = ['Day', 'Night', 'General'] as const
 
+/** Employee Master pay types — includes Other for custom entry (payroll treats unknown as Daily). */
+export const EMPLOYEE_PAY_TYPES = ['Daily', 'Monthly', 'Hourly', 'Other'] as const
+
+/** Employee Master shifts — includes Other for custom entry. */
+export const EMPLOYEE_SHIFTS = ['Day', 'Night', 'General', 'Other'] as const
+
+/** Common factory designations for Employee Master dropdowns (merged with Job Master / existing workers). */
+export const COMMON_DESIGNATIONS = [
+  'Operator',
+  'Supervisor',
+  'Helper',
+  'Fitter',
+  'Electrician',
+  'Welder',
+  'Engineer',
+  'Manager',
+  'Accountant',
+  'Clerk',
+  'Security',
+  'Driver',
+  'Quality Inspector',
+  'Store',
+  'Maintenance',
+  'Other',
+] as const
+
+/** Common departments for Employee Master dropdowns (merged with existing worker departments). */
+export const COMMON_DEPARTMENTS = [
+  'Weaving',
+  'Warping',
+  'Production',
+  'Quality',
+  'Maintenance',
+  'Store',
+  'Security',
+  'Accounts',
+  'HR',
+  'Dispatch',
+  'Admin',
+  'Other',
+] as const
+
+/** Merge option lists case-insensitively; always keep a single trailing "Other". */
+export function mergeSelectOptions(...lists: Array<Iterable<string | null | undefined>>): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const list of lists) {
+    for (const raw of list) {
+      const name = (raw || '').trim()
+      if (!name) continue
+      if (name.toLowerCase() === 'other') continue
+      const key = name.toLowerCase()
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push(name)
+    }
+  }
+  out.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+  out.push('Other')
+  return out
+}
+
+/** Map a stored value onto a dropdown choice + optional custom "Other" text. */
+export function splitSelectChoice(
+  value: string | null | undefined,
+  options: string[],
+): { choice: string; other: string } {
+  const v = (value || '').trim()
+  if (!v) return { choice: '', other: '' }
+  const match = options.find((o) => o.toLowerCase() !== 'other' && o.toLowerCase() === v.toLowerCase())
+  if (match) return { choice: match, other: '' }
+  return { choice: 'Other', other: v }
+}
+
+/** Resolve dropdown choice (+ Other text) to the value stored on the worker. */
+export function resolveSelectValue(choice: string, other: string): string {
+  const c = (choice || '').trim()
+  if (!c) return ''
+  if (c.toLowerCase() === 'other') return (other || '').trim()
+  return c
+}
+
 /** Default working days used when deriving daily rate from monthly. */
 export const DEFAULT_MONTHLY_DIVISOR = 26
 
