@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ApprovalsWidget } from '../components/ApprovalsWidget'
+import { GmailAdminSection } from '../components/GmailAdminSection'
 import { ShareActions } from '../components/ShareActions'
 import { SubTabs } from '../components/SubTabs'
 import { useAuth } from '../lib/auth'
@@ -30,7 +31,7 @@ import {
 } from '../lib/systemRoles'
 import { supabase } from '../lib/supabase'
 
-type Sub = 'roles' | 'payroll' | 'approvals' | 'permissions'
+type Sub = 'roles' | 'payroll' | 'approvals' | 'permissions' | 'gmail'
 type Props = { initialSub?: Sub }
 
 type PayableRow = {
@@ -535,6 +536,7 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
           options={[
             { id: 'roles', label: 'Roles & PIN' },
             { id: 'permissions', label: 'Permissions' },
+            ...(isCeo ? [{ id: 'gmail', label: 'Gmail' }] : []),
             { id: 'payroll', label: 'Payroll' },
             ...(isCeo ? [{ id: 'approvals', label: 'Approvals' }] : []),
           ]}
@@ -787,6 +789,8 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
           {permMsg ? <p className="form-ok text-sage">{permMsg}</p> : null}
         </div>
       ) : null}
+
+      {sub === 'gmail' && isCeo ? <GmailAdminSection /> : null}
 
       {sub === 'payroll' ? (
         <div className="form-stack">
