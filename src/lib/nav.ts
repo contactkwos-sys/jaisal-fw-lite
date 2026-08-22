@@ -856,6 +856,7 @@ export function titleFor(screen: AppScreen, sub?: string, moduleId?: MainModuleI
   if (screen === 'admin' && sub === 'payroll') return 'Payroll Rates (LEGACY)'
   if (screen === 'admin' && sub === 'permissions') return 'Permission Management'
   if (screen === 'admin' && sub === 'approvals') return 'Approvals'
+  if (screen === 'admin' && sub === 'gmail') return 'Gmail Integration'
   if (screen === 'admin') return 'User / PIN Management'
   if (screen === 'costing' && sub === 'factory') return 'Daily Factory P&L'
   if (screen === 'costing' && sub === 'production') return 'Production-wise P&L'

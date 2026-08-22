@@ -54,6 +54,9 @@ export type DinRow = {
   source: string
   source_email: string | null
   source_email_from: string | null
+  gmail_message_id: string | null
+  gmail_attachment_id: string | null
+  gmail_import_id: string | null
   created_by: string | null
   created_at: string
   updated_at: string
@@ -233,6 +236,9 @@ export async function createDin(input: {
   source?: string
   source_email?: string
   source_email_from?: string
+  gmail_message_id?: string
+  gmail_attachment_id?: string
+  gmail_import_id?: string
   created_by?: string | null
   matchings?: DinMatchingDraft[]
 }): Promise<DinWithMatchings> {
@@ -252,6 +258,9 @@ export async function createDin(input: {
       source: input.source || 'upload',
       source_email: input.source_email || null,
       source_email_from: input.source_email_from || null,
+      gmail_message_id: input.gmail_message_id || null,
+      gmail_attachment_id: input.gmail_attachment_id || null,
+      gmail_import_id: input.gmail_import_id || null,
       matching_count: input.matchings?.length || 0,
       created_by: input.created_by || null,
     })

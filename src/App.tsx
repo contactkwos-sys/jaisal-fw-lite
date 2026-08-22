@@ -289,7 +289,7 @@ function AuthenticatedApp() {
         />
       ) : null}
       {tab === 'admin' ? (
-        <AdminScreen initialSub={(sub as 'roles' | 'payroll' | 'approvals' | 'permissions') || 'roles'} />
+        <AdminScreen initialSub={(sub as 'roles' | 'payroll' | 'approvals' | 'permissions' | 'gmail') || 'roles'} />
       ) : null}
       {tab === 'costing' ? (
         <CostingScreen
