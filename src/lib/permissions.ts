@@ -49,8 +49,21 @@ const CHECKER_SUBS: Partial<Record<MainModuleId, string[]>> = {
 
 /** Program Supervisor */
 const PROGRAM_SUPERVISOR_SUBS: Partial<Record<MainModuleId, string[]>> = {
-  orders: ['program-book', 'program-card', 'program-pending', 'order-book'],
+  orders: [
+    'program-book',
+    'program-card',
+    'program-pending',
+    'sample-program-card',
+    'design-costing',
+    'design-job',
+    'order-book',
+  ],
   production: ['job-card'],
+}
+
+/** Salesman */
+const SALESMAN_SUBS: Partial<Record<MainModuleId, string[]>> = {
+  orders: ['sample-program-card', 'photo-catalogue', 'sales-tracker', 'order-book', 'broadcast', 'design-catalog'],
 }
 
 /** Security role — gate + yarn OCR + GEB + CTR */
@@ -103,6 +116,7 @@ export function getDefaultPermissions(roleName: string): ModulePermission[] {
   const isMachineSupervisor = n === 'machine supervisor' || n.includes('machine supervisor')
   const isChecker = n === 'checker & dispatch' || n.includes('checker')
   const isProgramSupervisor = n === 'program supervisor' || n.includes('program supervisor')
+  const isSalesman = n === 'salesman' || n.includes('salesman')
 
   return modules.map((moduleId) => {
     let subIds: string[] | undefined
@@ -111,6 +125,7 @@ export function getDefaultPermissions(roleName: string): ModulePermission[] {
     if (isMachineSupervisor && MACHINE_SUPERVISOR_SUBS[moduleId]) subIds = MACHINE_SUPERVISOR_SUBS[moduleId]
     if (isChecker && CHECKER_SUBS[moduleId]) subIds = CHECKER_SUBS[moduleId]
     if (isProgramSupervisor && PROGRAM_SUPERVISOR_SUBS[moduleId]) subIds = PROGRAM_SUPERVISOR_SUBS[moduleId]
+    if (isSalesman && SALESMAN_SUBS[moduleId]) subIds = SALESMAN_SUBS[moduleId]
     // Manager: full access to every allowed module (no sub restriction)
     if (isManager) subIds = undefined
     return { moduleId, subIds }

@@ -35,6 +35,9 @@ export type AppScreen =
   | 'ctr-stock'
   | 'program-book'
   | 'lot-settings'
+  | 'sample-program-card'
+  | 'photo-catalogue'
+  | 'sales-tracker'
   | 'module-hub'
   | 'settings-hub'
   | 'placeholder'
@@ -147,6 +150,9 @@ export const MAIN_MODULES: MainModule[] = [
     mobileNav: true,
     items: [
       { id: 'orders-pending', label: 'Orders & Pending', screen: 'orders-pending', hint: 'Raise & track pending orders' },
+      { id: 'sample-program-card', label: 'Sample Program Card', screen: 'sample-program-card', hint: 'DIN → matching → job card' },
+      { id: 'photo-catalogue', label: 'Photo Catalogue', screen: 'photo-catalogue', hint: 'Cotton / Garment / Design gallery' },
+      { id: 'sales-tracker', label: 'Sales Tracker', screen: 'sales-tracker', hint: 'Visits & sales orders' },
       { id: 'order-book', label: 'Order Book', screen: 'orders', sub: 'entry', hint: 'Party orders' },
       { id: 'program-book', label: 'Program Book', screen: 'program-book', hint: 'Program Supervisor book' },
       { id: 'program-card', label: 'Program Card', screen: 'programs', sub: 'create', hint: 'Program + petty meters' },
@@ -282,6 +288,9 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   'ctr-stock': 'CTR Colour Stock',
   'program-book': 'Program Book',
   'lot-settings': 'Lot Number Settings',
+  'sample-program-card': 'Sample Program Card',
+  'photo-catalogue': 'Photo Catalogue',
+  'sales-tracker': 'Sales Tracker',
   'module-hub': 'Module',
   'settings-hub': 'Settings',
   placeholder: 'Coming Soon',
@@ -329,6 +338,9 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
     screen === 'orders-pending' ||
     screen === 'programs' ||
     screen === 'program-book' ||
+    screen === 'sample-program-card' ||
+    screen === 'photo-catalogue' ||
+    screen === 'sales-tracker' ||
     screen === 'design' ||
     screen === 'sample-job-card' ||
     screen === 'design-wise-costing' ||
