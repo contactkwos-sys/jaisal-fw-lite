@@ -30,6 +30,14 @@ export type AppScreen =
   | 'loan-tracker'
   | 'geb-readings'
   | 'orders-pending'
+  | 'machine-prod-report'
+  | 'checking'
+  | 'ctr-stock'
+  | 'program-book'
+  | 'lot-settings'
+  | 'sample-program-card'
+  | 'photo-catalogue'
+  | 'sales-tracker'
   | 'module-hub'
   | 'settings-hub'
   | 'placeholder'
@@ -98,6 +106,8 @@ export const MAIN_MODULES: MainModule[] = [
       { id: 'warp-issue', label: 'Warp Issue', screen: 'stock', sub: 'beam', hint: 'Warp beam stock & issue' },
       { id: 'weft-issue', label: 'Weft Issue', screen: 'purchase', sub: 'weft', hint: 'Weft yarn issue' },
       { id: 'prod-entry', label: 'Production Entry', screen: 'production', sub: 'entry', hint: 'Machine production meters' },
+      { id: 'machine-prod-report', label: 'Machine Production Report', screen: 'machine-prod-report', hint: 'Supervisor shift report' },
+      { id: 'checking', label: 'Checking & Dispatch', screen: 'checking', hint: 'OK / damage / lot checking' },
       { id: 'folding', label: 'Folding', screen: 'dispatch', sub: 'folding', hint: 'Folding entry' },
       { id: 'dispatch', label: 'Dispatch', screen: 'dispatch', sub: 'challan', hint: 'Challan & gate pass' },
       { id: 'machine-wise', label: 'Machine-wise Production', screen: 'production', sub: 'report', filter: 'machine', hint: 'By machine' },
@@ -116,6 +126,7 @@ export const MAIN_MODULES: MainModule[] = [
       { id: 'beam-stock', label: 'Warp Beam Stock', screen: 'stock', sub: 'beam', hint: 'Beam pipe stock' },
       { id: 'warp-beam-pipe', label: 'Warp Beam Pipe', screen: 'warp-beam-pipe', hint: 'Pipe out / in tracking' },
       { id: 'yarn-inward', label: 'Yarn Inward OCR', screen: 'yarn-inward', hint: 'Warp/Weft invoice OCR' },
+      { id: 'ctr-stock', label: 'CTR Colour Stock', screen: 'ctr-stock', hint: 'Colour/chemical stock & issue' },
       { id: 'greige-stock', label: 'Greige Stock', screen: 'production', sub: 'report', hint: 'Greige / production stock' },
       { id: 'consumables', label: 'Consumables', screen: 'purchase', sub: 'maint_in', hint: 'Maintenance inward' },
       { id: 'inward', label: 'Inward', screen: 'purchase', sub: 'general', hint: 'General purchase inward' },
@@ -139,7 +150,11 @@ export const MAIN_MODULES: MainModule[] = [
     mobileNav: true,
     items: [
       { id: 'orders-pending', label: 'Orders & Pending', screen: 'orders-pending', hint: 'Raise & track pending orders' },
+      { id: 'sample-program-card', label: 'Sample Program Card', screen: 'sample-program-card', hint: 'DIN → matching → job card' },
+      { id: 'photo-catalogue', label: 'Photo Catalogue', screen: 'photo-catalogue', hint: 'Cotton / Garment / Design gallery' },
+      { id: 'sales-tracker', label: 'Sales Tracker', screen: 'sales-tracker', hint: 'Visits & sales orders' },
       { id: 'order-book', label: 'Order Book', screen: 'orders', sub: 'entry', hint: 'Party orders' },
+      { id: 'program-book', label: 'Program Book', screen: 'program-book', hint: 'Program Supervisor book' },
       { id: 'program-card', label: 'Program Card', screen: 'programs', sub: 'create', hint: 'Program + petty meters' },
       { id: 'job-card', label: 'Job Card Issue', screen: 'production', sub: 'job', hint: 'Issue job cards' },
       { id: 'design-job', label: 'Design & Job Card', screen: 'design', hint: 'Design register' },
@@ -193,6 +208,7 @@ export const MAIN_MODULES: MainModule[] = [
     hasHub: true,
     items: [
       { id: 'party-master', label: 'Party Master', screen: 'parties', hint: 'Customers / parties' },
+      { id: 'lot-settings', label: 'Lot Number Settings', screen: 'lot-settings', hint: 'Checking lot start / next' },
       { id: 'item-master', label: 'Item Master', screen: 'design-catalog', hint: 'Design / item catalog' },
       { id: 'machine-master', label: 'Machine Master', screen: 'placeholder', filter: 'machine-master', hint: 'Machine list (M1–M6)' },
       { id: 'employee-master', label: 'Employee Master', screen: 'attendance', hint: 'Workers & attendance' },
@@ -215,6 +231,7 @@ export const MAIN_MODULES: MainModule[] = [
       { id: 'perm-mgmt', label: 'Permission Management', screen: 'admin', sub: 'permissions', hint: 'Module access by role' },
       { id: 'security-gate', label: 'Security Gate', screen: 'security', sub: 'inward', hint: 'Gate logs' },
       { id: 'yarn-inward-sec', label: 'Yarn Inward OCR', screen: 'yarn-inward', hint: 'Invoice scan (Security)' },
+      { id: 'ctr-stock-sec', label: 'CTR Colour Stock', screen: 'ctr-stock', hint: 'Colour stock (Security)' },
       { id: 'geb-sec', label: 'GEB Reading', screen: 'geb-readings', hint: 'Electricity meter entry' },
       { id: 'login-activity', label: 'Login Activity', screen: 'placeholder', filter: 'login-activity', hint: 'Recent sessions' },
       { id: 'payroll', label: 'Payroll', screen: 'admin', sub: 'payroll', hint: 'Rates & payables' },
@@ -266,6 +283,14 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   'loan-tracker': 'Loan Tracker',
   'geb-readings': 'GEB Electricity',
   'orders-pending': 'Orders & Pending',
+  'machine-prod-report': 'Machine Production Report',
+  checking: 'Checking & Dispatch',
+  'ctr-stock': 'CTR Colour Stock',
+  'program-book': 'Program Book',
+  'lot-settings': 'Lot Number Settings',
+  'sample-program-card': 'Sample Program Card',
+  'photo-catalogue': 'Photo Catalogue',
+  'sales-tracker': 'Sales Tracker',
   'module-hub': 'Module',
   'settings-hub': 'Settings',
   placeholder: 'Coming Soon',
@@ -295,8 +320,16 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
     }
   }
 
-  if (screen === 'production' || screen === 'dispatch') return 'production'
-  if (screen === 'stock' || screen === 'purchase' || screen === 'warp-beam-pipe' || screen === 'yarn-inward') {
+  if (screen === 'production' || screen === 'dispatch' || screen === 'machine-prod-report' || screen === 'checking') {
+    return 'production'
+  }
+  if (
+    screen === 'stock' ||
+    screen === 'purchase' ||
+    screen === 'warp-beam-pipe' ||
+    screen === 'yarn-inward' ||
+    screen === 'ctr-stock'
+  ) {
     return 'inventory'
   }
   if (screen === 'cash-book') return 'cash-book'
@@ -304,6 +337,10 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
     screen === 'orders' ||
     screen === 'orders-pending' ||
     screen === 'programs' ||
+    screen === 'program-book' ||
+    screen === 'sample-program-card' ||
+    screen === 'photo-catalogue' ||
+    screen === 'sales-tracker' ||
     screen === 'design' ||
     screen === 'sample-job-card' ||
     screen === 'design-wise-costing' ||
@@ -323,7 +360,7 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
     return 'reports'
   }
   if (screen === 'maintenance' || screen === 'maint-material') return 'maintenance'
-  if (screen === 'parties' || screen === 'crm') return 'masters'
+  if (screen === 'parties' || screen === 'crm' || screen === 'lot-settings') return 'masters'
   if (screen === 'admin' || screen === 'security') return 'security'
   if (screen === 'placeholder') {
     if (filter?.includes('shift') || filter === 'company' || filter === 'notifications' || filter === 'backup') {
@@ -378,7 +415,7 @@ export function isSubItemActive(item: SubItem, screen: AppScreen, sub?: string, 
   if (item.screen !== screen) return false
   if (item.sub && (sub || '') !== item.sub) {
     if (item.screen === 'dispatch' && item.sub === 'challan') {
-      return (sub || 'challan') === 'challan' || sub === 'gatepass'
+      return (sub || 'challan') === 'challan' || sub === 'gatepass' || sub === 'from-check'
     }
     return false
   }

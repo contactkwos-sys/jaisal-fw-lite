@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../lib/auth'
+import { getSetting, setSetting } from '../lib/appSettings'
+import { WASTAGE_PCT } from '../lib/designCosting'
 import { todayISO } from '../lib/mutate'
 import { supabase } from '../lib/supabase'
 import {
@@ -16,7 +18,18 @@ import {
   type WeftDraft,
 } from '../lib/designWiseCosting'
 
-type Props = { initialDin?: string }
+type Props = {
+  initialDin?: string
+  /** Compact embed for Sample Program Card workflow */
+  embedded?: boolean
+  onCostingSaved?: (info: {
+    din: string
+    designId: string | null
+    costPerMeter: number
+    sellRate: number
+    difference: number
+  }) => void
+}
 
 type DesignOpt = { id: string; dno: string; colour: string | null }
 
@@ -47,7 +60,7 @@ async function ocrDiaryImage(file: File): Promise<string> {
   }
 }
 
-export function DesignWiseCosting({ initialDin = '' }: Props) {
+export function DesignWiseCosting({ initialDin = '', embedded = false, onCostingSaved }: Props) {
   const { session, profile } = useAuth()
   const [dinNumber, setDinNumber] = useState(initialDin)
   const [costingDate, setCostingDate] = useState(todayISO())
@@ -60,6 +73,9 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
   const [conversion, setConversion] = useState('0')
   const [muPercent, setMuPercent] = useState('5')
   const [gstPercent, setGstPercent] = useState('5')
+  const [gstEnabled, setGstEnabled] = useState(true)
+  const [ratePerMeter, setRatePerMeter] = useState('0')
+  const [sellRate, setSellRate] = useState('')
   const [savedId, setSavedId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -79,13 +95,36 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
         .order('created_at', { ascending: false })
         .limit(100)
       setDesignOpts((data as DesignOpt[]) ?? [])
+      try {
+        const persisted = await getSetting('design_rate_per_meter', '0')
+        if (persisted) setRatePerMeter(persisted)
+      } catch {
+        /* ignore */
+      }
     })()
   }, [])
 
+  const effectiveGst = gstEnabled ? n(gstPercent) : 0
+
   const buildup = useMemo(
-    () => computeBuildup(warps, wefts, n(conversion), n(muPercent), n(gstPercent)),
-    [warps, wefts, conversion, muPercent, gstPercent],
+    () => computeBuildup(warps, wefts, n(conversion), n(muPercent), effectiveGst),
+    [warps, wefts, conversion, muPercent, effectiveGst],
   )
+
+  /** Factory register formula: yarn + 5% wastage + conversion (± GST). */
+  const formula = useMemo(() => {
+    const totalYarn = buildup.totalYarnAmount
+    const wastage = totalYarn * WASTAGE_PCT
+    const base = totalYarn + wastage + n(conversion)
+    const withGst = gstEnabled ? base * (1 + n(gstPercent) / 100) : base
+    const perMtr =
+      buildup.designLengthMtr > 0 ? withGst / buildup.designLengthMtr : withGst
+    return { totalYarn, wastage, base, withGst, perMtr }
+  }, [buildup.totalYarnAmount, buildup.designLengthMtr, conversion, gstEnabled, gstPercent])
+
+  const costPerMeter = formula.perMtr
+  const sell = n(sellRate)
+  const difference = sell - costPerMeter
 
   const loadExisting = useCallback(async (din: string) => {
     const trimmed = din.trim()
@@ -108,6 +147,9 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
     setConversion(String(header.conversion_charge ?? 0))
     setMuPercent(String(header.mu_percent ?? 5))
     setGstPercent(String(header.gst_percent ?? 5))
+    setGstEnabled(header.gst_enabled !== false)
+    if (header.rate_per_meter != null) setRatePerMeter(String(header.rate_per_meter))
+    if (header.sell_rate != null) setSellRate(String(header.sell_rate))
 
     const [{ data: warpRows }, { data: weftRows }] = await Promise.all([
       supabase.from('design_costing_warp').select('*').eq('costing_id', header.id).order('sr_no'),
@@ -203,8 +245,19 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
     setError(null)
     setMessage(null)
     try {
-      // Recompute server-bound payload from current inputs (source of truth for stored totals)
-      const totals = computeBuildup(warps, wefts, n(conversion), n(muPercent), n(gstPercent))
+      const totals = computeBuildup(warps, wefts, n(conversion), n(muPercent), effectiveGst)
+      const totalYarn = totals.totalYarnAmount
+      const wastage = totalYarn * WASTAGE_PCT
+      const formulaBase = totalYarn + wastage + n(conversion)
+      const formulaWithGst = gstEnabled ? formulaBase * (1 + n(gstPercent) / 100) : formulaBase
+      const formulaPerMtr =
+        totals.designLengthMtr > 0 ? formulaWithGst / totals.designLengthMtr : formulaWithGst
+      const sell = n(sellRate)
+      const diff = sell - formulaPerMtr
+
+      // Persist rate-per-meter until user changes it
+      await setSetting('design_rate_per_meter', String(n(ratePerMeter)))
+
       const header = {
         din_number: dinNumber.trim(),
         quality_name: qualityName.trim() || null,
@@ -212,13 +265,19 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
         diary_image_url: diaryUrl,
         conversion_charge: totals.conversionCharge,
         mu_percent: totals.muPercent,
-        gst_percent: totals.gstPercent,
+        gst_percent: n(gstPercent),
+        gst_enabled: gstEnabled,
+        rate_per_meter: n(ratePerMeter),
+        sell_rate: sell || null,
+        difference: sell ? diff : null,
+        wastage_amount: wastage,
+        formula_cost_per_mtr: formulaPerMtr,
         total_weight_kg: totals.totalWeightKg,
         total_yarn_amount: totals.totalYarnAmount,
         yarn_cost_per_mtr: totals.yarnCostPerMtr,
         subtotal_per_mtr: totals.subtotalPerMtr,
         after_mu_per_mtr: totals.afterMuPerMtr,
-        final_cost_per_mtr: totals.finalCostPerMtr,
+        final_cost_per_mtr: formulaPerMtr,
         created_by: session?.user?.id || null,
       }
 
@@ -268,20 +327,32 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
         if (fErr) throw fErr
       }
 
-      // Mirror final cost onto designs.cost_per_meter when DIN matches a Design Master row
-      await supabase
+      // Mirror final cost onto designs when DIN matches a Design Master row
+      const { data: designRow } = await supabase
         .from('designs')
         .update({
-          cost_per_meter: totals.finalCostPerMtr,
-          total_cost: totals.finalCostPerMtr,
+          cost_per_meter: formulaPerMtr,
+          total_cost: formulaPerMtr,
+          rate_per_meter: n(ratePerMeter),
+          sell_rate: sell || null,
+          gst_percent: n(gstPercent),
         })
         .eq('dno', dinNumber.trim())
+        .select('id')
+        .maybeSingle()
 
       setMessage(
         asDraftLabel
-          ? `Draft saved · Final ₹${fmtMoney(totals.finalCostPerMtr)}/mtr`
-          : `Costing saved to DIN ${dinNumber.trim()} · Final ₹${fmtMoney(totals.finalCostPerMtr)}/mtr`,
+          ? `Draft saved · Cost ₹${fmtMoney(formulaPerMtr)}/mtr`
+          : `Costing saved to DIN ${dinNumber.trim()} · Cost ₹${fmtMoney(formulaPerMtr)}/mtr`,
       )
+      onCostingSaved?.({
+        din: dinNumber.trim(),
+        designId: designRow?.id ?? null,
+        costPerMeter: formulaPerMtr,
+        sellRate: sell,
+        difference: diff,
+      })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed')
     } finally {
@@ -290,11 +361,15 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
   }
 
   return (
-    <div className="screen dwc-screen">
-      <header className="screen-header">
-        <h1>Design Wise Costing</h1>
-        <p className="text-muted">Diary → warp/weft → final ₹/mtr</p>
-      </header>
+    <div className={embedded ? 'dwc-screen dwc-embedded' : 'screen dwc-screen'}>
+      {!embedded ? (
+        <header className="screen-header">
+          <h1>Design Wise Costing</h1>
+          <p className="text-muted">Diary OCR → warp/weft formula → cost/mtr · sell · difference</p>
+        </header>
+      ) : (
+        <h2 className="section-title">1. New Design / DIN Costing</h2>
+      )}
 
       <section className="dwc-panel">
         <h2 className="section-title text-warp">Design Details</h2>
@@ -646,6 +721,16 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
         <h2 className="section-title text-warp">Per Meter Costing Buildup</h2>
         <div className="dwc-buildup-grid">
           <label className="field">
+            <span className="text-muted">Rate / Meter (persists)</span>
+            <input
+              className="num"
+              type="number"
+              step="any"
+              value={ratePerMeter}
+              onChange={(e) => setRatePerMeter(e.target.value)}
+            />
+          </label>
+          <label className="field">
             <span className="text-muted">Yarn Cost / Mtr</span>
             <input className="num dwc-auto" value={fmtMoney(buildup.yarnCostPerMtr)} readOnly />
           </label>
@@ -658,6 +743,10 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
               value={conversion}
               onChange={(e) => setConversion(e.target.value)}
             />
+          </label>
+          <label className="field">
+            <span className="text-muted">Wastage 5% (auto)</span>
+            <input className="num dwc-auto" value={fmtMoney(formula.wastage)} readOnly />
           </label>
           <label className="field">
             <span className="text-muted">Subtotal</span>
@@ -678,20 +767,62 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
             <input className="num dwc-auto" value={fmtMoney(buildup.afterMuPerMtr)} readOnly />
           </label>
           <label className="field">
+            <span className="text-muted">GST</span>
+            <div className="cashbook-type-toggle" role="group">
+              <button
+                type="button"
+                className={gstEnabled ? 'cashbook-type-btn credit active' : 'cashbook-type-btn credit'}
+                onClick={() => setGstEnabled(true)}
+              >
+                On
+              </button>
+              <button
+                type="button"
+                className={!gstEnabled ? 'cashbook-type-btn debit active' : 'cashbook-type-btn debit'}
+                onClick={() => setGstEnabled(false)}
+              >
+                Off
+              </button>
+            </div>
+          </label>
+          <label className="field">
             <span className="text-muted">GST %</span>
             <input
               className="num"
               type="number"
               step="any"
               value={gstPercent}
+              disabled={!gstEnabled}
               onChange={(e) => setGstPercent(e.target.value)}
+            />
+          </label>
+          <label className="field">
+            <span className="text-muted">Sell Rate (₹/mtr)</span>
+            <input
+              className="num"
+              type="number"
+              step="any"
+              value={sellRate}
+              onChange={(e) => setSellRate(e.target.value)}
+            />
+          </label>
+          <label className="field">
+            <span className="text-muted">Difference (Sell − Cost)</span>
+            <input
+              className="num dwc-auto"
+              value={fmtMoney(difference)}
+              readOnly
+              style={{ color: difference >= 0 ? undefined : 'var(--color-danger, #b33)' }}
             />
           </label>
         </div>
         <div className="dwc-final">
-          <span>Final Design Cost per Meter</span>
-          <strong className="num">₹{fmtMoney(buildup.finalCostPerMtr)}</strong>
+          <span>Cost / Meter (Yarn + 5% wastage + Conversion{gstEnabled ? ' + GST' : ''})</span>
+          <strong className="num">₹{fmtMoney(costPerMeter)}</strong>
         </div>
+        <p className="text-muted2">
+          Formula: Warp=(D×TAR×L)/9e6 · Weft=(D×Pic×W×L)/9e6 · Wastage=Yarn×5% · Final=Yarn+Wastage+Conv
+        </p>
       </section>
 
       <div className="dwc-actions">

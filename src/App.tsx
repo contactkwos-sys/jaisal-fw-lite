@@ -40,6 +40,14 @@ import { MaintenanceMaterialScreen } from './screens/MaintenanceMaterialScreen'
 import { LoanTrackerScreen } from './screens/LoanTrackerScreen'
 import { GebReadingScreen } from './screens/GebReadingScreen'
 import { OrdersPendingScreen } from './screens/OrdersPendingScreen'
+import { MachineProdReportScreen } from './screens/MachineProdReportScreen'
+import { CheckingScreen } from './screens/CheckingScreen'
+import { CtrStockScreen } from './screens/CtrStockScreen'
+import { ProgramBookScreen } from './screens/ProgramBookScreen'
+import { LotSettingsScreen } from './screens/LotSettingsScreen'
+import { SampleProgramCardScreen } from './screens/SampleProgramCardScreen'
+import { PhotoCatalogueScreen } from './screens/PhotoCatalogueScreen'
+import { SalesTrackerScreen } from './screens/SalesTrackerScreen'
 
 function AuthenticatedApp() {
   const { session, loading, isCeo, isManager, profile } = useAuth()
@@ -135,6 +143,14 @@ function AuthenticatedApp() {
       {tab === 'loan-tracker' ? <LoanTrackerScreen /> : null}
       {tab === 'geb-readings' ? <GebReadingScreen /> : null}
       {tab === 'orders-pending' ? <OrdersPendingScreen /> : null}
+      {tab === 'machine-prod-report' ? <MachineProdReportScreen /> : null}
+      {tab === 'checking' ? <CheckingScreen /> : null}
+      {tab === 'ctr-stock' ? <CtrStockScreen /> : null}
+      {tab === 'program-book' ? <ProgramBookScreen /> : null}
+      {tab === 'lot-settings' ? <LotSettingsScreen /> : null}
+      {tab === 'sample-program-card' ? <SampleProgramCardScreen /> : null}
+      {tab === 'photo-catalogue' ? <PhotoCatalogueScreen /> : null}
+      {tab === 'sales-tracker' ? <SalesTrackerScreen /> : null}
       {tab === 'parties' ? <PartyMasterScreen /> : null}
       {tab === 'purchase' ? <PurchaseScreen initialSub={sub || 'general'} /> : null}
       {tab === 'orders' ? <OrderBookScreen initialSub={sub || 'entry'} /> : null}
@@ -154,7 +170,7 @@ function AuthenticatedApp() {
       ) : null}
       {tab === 'dispatch' ? (
         <DispatchScreen
-          initialSub={(sub as 'folding' | 'challan' | 'gatepass') || 'folding'}
+          initialSub={(sub as 'folding' | 'challan' | 'from-check' | 'gatepass') || 'folding'}
           filter={filter}
         />
       ) : null}
