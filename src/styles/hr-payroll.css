@@ -200,6 +200,7 @@
   border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
   -webkit-overflow-scrolling: touch;
+  max-width: 100%;
 }
 
 .hr-table {
@@ -229,6 +230,323 @@
   text-transform: uppercase;
   color: var(--muted);
   z-index: 1;
+}
+
+/* —— Employee Master: full-width, readable, iPad-safe —— */
+.hr-emp-master {
+  display: grid;
+  gap: 0.85rem;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.hr-emp-master .hr-toolbar {
+  align-items: end;
+}
+
+.hr-emp-filters {
+  display: grid;
+  grid-template-columns: minmax(10rem, 1.4fr) repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: 0.65rem;
+  align-items: end;
+  min-width: 0;
+  flex: 1 1 36rem;
+}
+
+.hr-emp-filters .field {
+  min-width: 0;
+}
+
+.hr-emp-filters .field > span,
+.hr-emp-form .field > span {
+  font-size: 0.94rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.hr-emp-filters input,
+.hr-emp-filters select,
+.hr-emp-form input,
+.hr-emp-form select {
+  font-size: 1rem;
+  min-height: 2.75rem;
+  padding: 0.6rem 0.75rem;
+}
+
+.hr-emp-toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: end;
+  justify-content: space-between;
+}
+
+.hr-emp-toolbar-row .hr-emp-filters {
+  flex: 1 1 36rem;
+}
+
+.hr-emp-toolbar-row > .primary-save {
+  flex: 0 0 auto;
+  min-height: 2.75rem;
+  padding: 0.65rem 1.15rem;
+  white-space: nowrap;
+}
+
+.hr-emp-count {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.hr-emp-table-wrap {
+  display: block !important;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.hr-emp-table {
+  width: 100%;
+  min-width: 1100px;
+  border-collapse: collapse;
+  table-layout: auto;
+  font-size: 0.9375rem; /* 15px */
+  color: var(--text);
+}
+
+.hr-emp-table th,
+.hr-emp-table td {
+  padding: 0.85rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.hr-emp-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface2);
+  font-family: "Outfit", sans-serif;
+  font-size: 0.9375rem; /* 15px */
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--text);
+}
+
+.hr-emp-table tbody tr:hover {
+  background: color-mix(in srgb, var(--teal-soft) 55%, transparent);
+}
+
+.hr-emp-table .hr-emp-name,
+.hr-emp-table .hr-emp-desig,
+.hr-emp-table .hr-emp-dept,
+.hr-emp-table .hr-emp-shift {
+  white-space: normal;
+  word-break: break-word;
+  max-width: 16rem;
+  min-width: 7rem;
+  line-height: 1.35;
+}
+
+.hr-emp-table .hr-emp-actions {
+  position: sticky;
+  right: 0;
+  background: var(--surface);
+  box-shadow: -6px 0 10px -8px rgba(15, 40, 60, 0.25);
+  z-index: 1;
+}
+
+.hr-emp-table thead .hr-emp-actions {
+  background: var(--surface2);
+  z-index: 3;
+}
+
+.hr-emp-table tbody tr:hover .hr-emp-actions {
+  background: color-mix(in srgb, var(--teal-soft) 55%, var(--surface));
+}
+
+.hr-emp-actions .share-actions {
+  flex-wrap: nowrap;
+  gap: 0.35rem;
+}
+
+.hr-emp-actions .btn-ghost {
+  min-height: 2.4rem;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.hr-emp-form {
+  display: grid;
+  gap: 1rem;
+  padding: 1.1rem 1.15rem 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.hr-emp-form .section-title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--teal-deep);
+}
+
+.hr-emp-section {
+  display: grid;
+  gap: 0.75rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--line);
+}
+
+.hr-emp-section:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.hr-emp-section-title {
+  margin: 0;
+  font-family: "Outfit", sans-serif;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.hr-emp-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.85rem 1rem;
+}
+
+.hr-emp-form .field.has-error input,
+.hr-emp-form .field.has-error select {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.hr-emp-field-error {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--danger);
+}
+
+.hr-emp-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+}
+
+.hr-emp-checks .check-row {
+  font-size: 0.95rem;
+  min-height: 2.4rem;
+  align-items: center;
+}
+
+.hr-emp-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  padding-top: 0.35rem;
+}
+
+.hr-emp-form-actions .primary-save,
+.hr-emp-form-actions .btn-ghost {
+  min-height: 2.75rem;
+  padding: 0.65rem 1.25rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+/* Use full content width on iPad + desktop for Employee Master */
+@media (min-width: 768px) {
+  .app-shell[data-screen='hr-payroll'] .app-main {
+    max-width: none;
+    width: 100%;
+  }
+}
+
+@media (max-width: 1199px) {
+  .hr-emp-filters {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .hr-emp-filters .hr-emp-search {
+    grid-column: 1 / -1;
+  }
+
+  .hr-emp-toolbar-row > .primary-save {
+    width: 100%;
+  }
+
+  /* Priority columns when content is iPad-narrow; secondary via Edit / desktop */
+  .hr-emp-table {
+    min-width: 0;
+    width: 100%;
+    font-size: 0.9rem;
+  }
+
+  .hr-emp-table th {
+    font-size: 0.9rem;
+  }
+
+  .hr-emp-table .hr-emp-secondary {
+    display: none;
+  }
+
+  .hr-emp-table .hr-emp-name,
+  .hr-emp-table .hr-emp-desig,
+  .hr-emp-table .hr-emp-dept {
+    max-width: 12rem;
+    min-width: 5.5rem;
+  }
+
+  .hr-emp-table .hr-emp-actions {
+    position: static;
+    box-shadow: none;
+  }
+}
+
+@media (min-width: 1200px) {
+  .hr-emp-table {
+    min-width: 1100px;
+  }
+
+  .hr-emp-toolbar-row {
+    flex-wrap: nowrap;
+    align-items: end;
+  }
+
+  .hr-emp-toolbar-row .hr-emp-filters {
+    flex: 1 1 auto;
+  }
+
+  .hr-emp-toolbar-row > .primary-save {
+    width: auto;
+    margin-bottom: 0.1rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .hr-emp-filters {
+    grid-template-columns: 1fr;
+  }
 }
 
 .hr-table tbody tr:hover {

@@ -21,22 +21,29 @@ import {
   amountInWords,
   ATTENDANCE_STATUSES,
   calculateEmployeePayroll,
+  COMMON_DEPARTMENTS,
+  COMMON_DESIGNATIONS,
   dailyFromMonthly,
   DEFAULT_COMPANY,
   DEFAULT_MONTHLY_DIVISOR,
+  EMPLOYEE_PAY_TYPES,
+  EMPLOYEE_SHIFTS,
   formatINR,
   formatINRExact,
   isPresentStatus,
   maskAccountNumber,
+  mergeSelectOptions,
   monthBounds,
   PAY_TYPES,
   PAYROLL_STATUSES,
   payableDayFromAttendance,
-  SHIFTS,
+  resolveSelectValue,
+  splitSelectChoice,
   statusBadgeClass,
   todayISO,
   type CompanyProfile,
 } from '../lib/hrPayroll'
+import { listPayrollJobs } from '../lib/payrollJobs'
 import { supabase } from '../lib/supabase'
 
 type Sub =
@@ -65,10 +72,15 @@ type WorkerForm = {
   id: string | null
   full_name: string
   employee_code: string
-  designation: string
-  department: string
-  shift: string
-  pay_type: string
+  designation_choice: string
+  designation_other: string
+  department_choice: string
+  department_other: string
+  shift_choice: string
+  shift_other: string
+  pay_type_choice: string
+  pay_type_other: string
+  salary_rate: string
   phone: string
   joining_date: string
   bank_name: string
@@ -79,6 +91,14 @@ type WorkerForm = {
   pf_applicable: boolean
   pt_applicable: boolean
   is_active: boolean
+}
+
+type WorkerFormErrors = {
+  full_name?: string
+  designation?: string
+  department?: string
+  shift?: string
+  employee_code?: string
 }
 
 type RateDraft = {
@@ -114,7 +134,6 @@ const SUBS: Array<{ id: Sub; label: string }> = [
   { id: 'reports', label: 'Reports' },
 ]
 
-const DEPT_SUGGESTIONS = ['Weaving', 'Folding', 'Security', 'Maintenance', 'Office', 'Quality', 'Other']
 const MIGRATION_HINT = 'Run public/migration-hr-payroll-module.sql in Supabase SQL editor, then refresh.'
 
 function isMigrationError(msg: string): boolean {
@@ -143,10 +162,15 @@ function emptyWorkerForm(): WorkerForm {
     id: null,
     full_name: '',
     employee_code: '',
-    designation: '',
-    department: '',
-    shift: 'Day',
-    pay_type: 'Daily',
+    designation_choice: '',
+    designation_other: '',
+    department_choice: '',
+    department_other: '',
+    shift_choice: 'Day',
+    shift_other: '',
+    pay_type_choice: 'Daily',
+    pay_type_other: '',
+    salary_rate: '',
     phone: '',
     joining_date: '',
     bank_name: '',
@@ -160,15 +184,35 @@ function emptyWorkerForm(): WorkerForm {
   }
 }
 
-function workerToForm(w: Worker): WorkerForm {
+function workerToForm(
+  w: Worker,
+  opts: { designations: string[]; departments: string[]; shifts: string[]; payTypes: string[] },
+  latestRate?: SalaryRate | null,
+): WorkerForm {
+  const desig = splitSelectChoice(w.designation, opts.designations)
+  const dept = splitSelectChoice(w.department, opts.departments)
+  const shift = splitSelectChoice(w.shift || 'Day', opts.shifts)
+  const pay = splitSelectChoice(w.pay_type || 'Daily', opts.payTypes)
+  let salaryRate = ''
+  if (latestRate) {
+    const pt = (latestRate.pay_type || w.pay_type || 'Daily').toLowerCase()
+    if (pt === 'monthly') salaryRate = String(latestRate.monthly_rate || '')
+    else if (pt === 'hourly') salaryRate = String(latestRate.hourly_rate || '')
+    else salaryRate = String(latestRate.daily_rate || '')
+  }
   return {
     id: w.id,
     full_name: w.full_name,
     employee_code: w.employee_code || '',
-    designation: w.designation || '',
-    department: w.department || '',
-    shift: w.shift || 'Day',
-    pay_type: w.pay_type || 'Daily',
+    designation_choice: desig.choice,
+    designation_other: desig.other,
+    department_choice: dept.choice,
+    department_other: dept.other,
+    shift_choice: shift.choice || 'Day',
+    shift_other: shift.other,
+    pay_type_choice: pay.choice || 'Daily',
+    pay_type_other: pay.other,
+    salary_rate: salaryRate && salaryRate !== '0' ? salaryRate : '',
     phone: w.phone || '',
     joining_date: w.joining_date || '',
     bank_name: w.bank_name || '',
@@ -180,6 +224,14 @@ function workerToForm(w: Worker): WorkerForm {
     pt_applicable: !!w.pt_applicable,
     is_active: w.is_active,
   }
+}
+
+function rateLabelForPayType(payType: string): string {
+  const p = payType.toLowerCase()
+  if (p === 'monthly') return 'Monthly salary (₹)'
+  if (p === 'hourly') return 'Hourly rate (₹)'
+  if (p === 'other') return 'Salary / rate (₹)'
+  return 'Daily rate (₹)'
 }
 
 function pickLatestRate(rates: SalaryRate[], workerId: string, toDate: string): SalaryRate | null {
@@ -254,7 +306,14 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
   })
 
   const [workerForm, setWorkerForm] = useState<WorkerForm>(emptyWorkerForm())
+  const [workerFormErrors, setWorkerFormErrors] = useState<WorkerFormErrors>({})
   const [showWorkerForm, setShowWorkerForm] = useState(false)
+  const [jobNames, setJobNames] = useState<string[]>([])
+  const [empSearch, setEmpSearch] = useState('')
+  const [empFilterDesig, setEmpFilterDesig] = useState('')
+  const [empFilterDept, setEmpFilterDept] = useState('')
+  const [empFilterShift, setEmpFilterShift] = useState('')
+  const [empFilterActive, setEmpFilterActive] = useState<'all' | 'active' | 'inactive'>('all')
   const [rateDrafts, setRateDrafts] = useState<Record<string, RateDraft>>({})
 
   const [workingDays, setWorkingDays] = useState(DEFAULT_MONTHLY_DIVISOR)
@@ -288,6 +347,76 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
 
   const bounds = useMemo(() => monthBounds(payrollMonth), [payrollMonth])
   const activeWorkers = useMemo(() => workers.filter((w) => w.is_active), [workers])
+
+  const designationOptions = useMemo(
+    () =>
+      mergeSelectOptions(
+        COMMON_DESIGNATIONS,
+        jobNames,
+        workers.map((w) => w.designation),
+      ),
+    [jobNames, workers],
+  )
+
+  const departmentOptions = useMemo(
+    () =>
+      mergeSelectOptions(
+        COMMON_DEPARTMENTS,
+        roles.map((r) => r.role_name),
+        workers.map((w) => w.department),
+      ),
+    [roles, workers],
+  )
+
+  const shiftOptions = useMemo(
+    () => mergeSelectOptions(EMPLOYEE_SHIFTS, workers.map((w) => w.shift)),
+    [workers],
+  )
+
+  const payTypeOptions = useMemo(
+    () => mergeSelectOptions(EMPLOYEE_PAY_TYPES, workers.map((w) => w.pay_type)),
+    [workers],
+  )
+
+  const filterDesignationOptions = useMemo(
+    () => designationOptions.filter((d) => d.toLowerCase() !== 'other'),
+    [designationOptions],
+  )
+
+  const filterDepartmentOptions = useMemo(
+    () => departmentOptions.filter((d) => d.toLowerCase() !== 'other'),
+    [departmentOptions],
+  )
+
+  const filterShiftOptions = useMemo(
+    () => shiftOptions.filter((d) => d.toLowerCase() !== 'other'),
+    [shiftOptions],
+  )
+
+  const filteredEmployees = useMemo(() => {
+    const q = empSearch.trim().toLowerCase()
+    return workers.filter((w) => {
+      if (empFilterActive === 'active' && !w.is_active) return false
+      if (empFilterActive === 'inactive' && w.is_active) return false
+      if (empFilterDesig && (w.designation || '').toLowerCase() !== empFilterDesig.toLowerCase()) return false
+      if (empFilterDept && (w.department || '').toLowerCase() !== empFilterDept.toLowerCase()) return false
+      if (empFilterShift && (w.shift || '').toLowerCase() !== empFilterShift.toLowerCase()) return false
+      if (!q) return true
+      const code = (w.employee_code || '').toLowerCase()
+      const name = (w.full_name || '').toLowerCase()
+      return name.includes(q) || code.includes(q)
+    })
+  }, [workers, empSearch, empFilterDesig, empFilterDept, empFilterShift, empFilterActive])
+
+  const selectOpts = useMemo(
+    () => ({
+      designations: designationOptions,
+      departments: departmentOptions,
+      shifts: shiftOptions,
+      payTypes: payTypeOptions,
+    }),
+    [designationOptions, departmentOptions, shiftOptions, payTypeOptions],
+  )
 
   const handleDbError = useCallback((e: unknown) => {
     const msg = errMsg(e)
@@ -469,7 +598,15 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
       try {
         setError(null)
         if (sub === 'dashboard') await loadDashboard()
-        if (sub === 'rates') await loadSalaryRates()
+        if (sub === 'employees' || sub === 'rates') await loadSalaryRates()
+        if (sub === 'employees') {
+          try {
+            const jobs = await listPayrollJobs()
+            setJobNames(jobs.map((j) => j.job_name))
+          } catch {
+            setJobNames([])
+          }
+        }
         if (sub === 'leave') await loadHolidaysLeave()
         if (sub === 'payroll' || sub === 'statutory' || sub === 'payment') await loadPayrollRun(payrollMonth)
         if (sub === 'register') await loadRegisterEntries()
@@ -534,8 +671,27 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
 
   async function saveWorker(e: React.FormEvent) {
     e.preventDefault()
-    if (!workerForm.full_name.trim()) {
-      setError('Full name required')
+    const designation = resolveSelectValue(workerForm.designation_choice, workerForm.designation_other)
+    const department = resolveSelectValue(workerForm.department_choice, workerForm.department_other)
+    const shift = resolveSelectValue(workerForm.shift_choice, workerForm.shift_other)
+    const payType = resolveSelectValue(workerForm.pay_type_choice, workerForm.pay_type_other) || 'Daily'
+    const code = workerForm.employee_code.trim()
+    const errors: WorkerFormErrors = {}
+    if (!workerForm.full_name.trim()) errors.full_name = 'Employee name is required'
+    if (!designation) errors.designation = 'Designation is required'
+    if (!department) errors.department = 'Department is required'
+    if (!shift) errors.shift = 'Shift is required'
+    if (code) {
+      const dup = workers.find(
+        (w) =>
+          w.id !== workerForm.id &&
+          (w.employee_code || '').trim().toLowerCase() === code.toLowerCase(),
+      )
+      if (dup) errors.employee_code = `Code “${code}” already used by ${dup.full_name}`
+    }
+    setWorkerFormErrors(errors)
+    if (Object.keys(errors).length) {
+      setError('Please fix the highlighted fields')
       return
     }
     setBusy(true)
@@ -544,11 +700,11 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
     try {
       const payload = {
         full_name: workerForm.full_name.trim(),
-        employee_code: workerForm.employee_code.trim() || null,
-        designation: workerForm.designation.trim() || null,
-        department: workerForm.department.trim() || null,
-        shift: workerForm.shift,
-        pay_type: workerForm.pay_type,
+        employee_code: code || null,
+        designation,
+        department,
+        shift,
+        pay_type: payType,
         phone: workerForm.phone.trim() || null,
         joining_date: workerForm.joining_date || null,
         bank_name: workerForm.bank_name.trim() || null,
@@ -560,23 +716,82 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
         pt_applicable: workerForm.pt_applicable,
         is_active: workerForm.is_active,
       }
+      let workerId = workerForm.id
       if (workerForm.id) {
         const { error: uErr } = await supabase.from('workers').update(payload).eq('id', workerForm.id)
         if (uErr) throw uErr
         setMessage('Employee updated')
       } else {
-        const { error: iErr } = await supabase.from('workers').insert(payload)
+        const { data: inserted, error: iErr } = await supabase
+          .from('workers')
+          .insert(payload)
+          .select('id')
+          .single()
         if (iErr) throw iErr
+        workerId = (inserted as { id: string } | null)?.id ?? null
         setMessage('Employee added')
       }
+
+      const rateNum = Number(workerForm.salary_rate)
+      if (workerId && workerForm.salary_rate.trim() && !Number.isNaN(rateNum) && rateNum > 0) {
+        const existing = pickLatestRate(salaryRates, workerId, todayISO())
+        const ptLower = payType.toLowerCase()
+        const storedPay = ['monthly', 'daily', 'hourly'].includes(ptLower) ? payType : 'Daily'
+        const monthly = ptLower === 'monthly' ? rateNum : 0
+        const hourly = ptLower === 'hourly' ? rateNum : 0
+        const daily =
+          ptLower === 'monthly' ? dailyFromMonthly(rateNum) : ptLower === 'hourly' ? 0 : rateNum
+        const sameAsExisting =
+          existing &&
+          (existing.pay_type || '').toLowerCase() === storedPay.toLowerCase() &&
+          Number(existing.monthly_rate) === monthly &&
+          Number(existing.daily_rate) === daily &&
+          Number(existing.hourly_rate) === hourly
+        // New employees always get a rate row; edits only insert when no rate yet or values changed
+        // (never overwrite history — insert a new effective row instead).
+        if (!sameAsExisting) {
+          const ratePayload = {
+            worker_id: workerId,
+            pay_type: storedPay,
+            monthly_rate: monthly,
+            daily_rate: daily,
+            hourly_rate: hourly,
+            ot_rate: Number(existing?.ot_rate) || 0,
+            effective_from: existing ? todayISO() : workerForm.joining_date || todayISO(),
+            status: 'Active',
+            approved: true,
+            updated_at: new Date().toISOString(),
+          }
+          const { error: rErr } = await supabase.from('salary_rates').insert(ratePayload)
+          if (rErr) throw rErr
+          await loadSalaryRates()
+        }
+      }
+
       setShowWorkerForm(false)
       setWorkerForm(emptyWorkerForm())
+      setWorkerFormErrors({})
       await loadWorkers()
     } catch (e) {
       handleDbError(e)
     } finally {
       setBusy(false)
     }
+  }
+
+  function openAddEmployee() {
+    setWorkerForm(emptyWorkerForm())
+    setWorkerFormErrors({})
+    setError(null)
+    setShowWorkerForm(true)
+  }
+
+  function openEditEmployee(w: Worker) {
+    const latest = pickLatestRate(salaryRates, w.id, todayISO())
+    setWorkerForm(workerToForm(w, selectOpts, latest))
+    setWorkerFormErrors({})
+    setError(null)
+    setShowWorkerForm(true)
   }
 
   async function deactivateWorker(w: Worker) {
@@ -1237,216 +1452,430 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
       ) : null}
 
       {sub === 'employees' ? (
-        <div className="form-stack">
-          <div className="hr-toolbar share-actions">
-            <button
-              type="button"
-              className="primary-save"
-              onClick={() => {
-                setWorkerForm(emptyWorkerForm())
-                setShowWorkerForm(true)
-              }}
-            >
+        <div className="hr-emp-master">
+          <div className="hr-toolbar hr-emp-toolbar-row">
+            <div className="hr-emp-filters">
+              <label className="field hr-emp-search">
+                <span>Search name / code</span>
+                <input
+                  value={empSearch}
+                  onChange={(e) => setEmpSearch(e.target.value)}
+                  placeholder="Type to search…"
+                  autoComplete="off"
+                />
+              </label>
+              <label className="field">
+                <span>Designation</span>
+                <select value={empFilterDesig} onChange={(e) => setEmpFilterDesig(e.target.value)}>
+                  <option value="">All</option>
+                  {filterDesignationOptions.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Department</span>
+                <select value={empFilterDept} onChange={(e) => setEmpFilterDept(e.target.value)}>
+                  <option value="">All</option>
+                  {filterDepartmentOptions.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Shift</span>
+                <select value={empFilterShift} onChange={(e) => setEmpFilterShift(e.target.value)}>
+                  <option value="">All</option>
+                  {filterShiftOptions.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Status</span>
+                <select
+                  value={empFilterActive}
+                  onChange={(e) => setEmpFilterActive(e.target.value as 'all' | 'active' | 'inactive')}
+                >
+                  <option value="all">All</option>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </label>
+            </div>
+            <button type="button" className="primary-save" onClick={openAddEmployee}>
               Add Employee
             </button>
           </div>
+
           {showWorkerForm ? (
-            <form className="surface card-row form-stack" onSubmit={(e) => void saveWorker(e)}>
-              <h2 className="section-title">{workerForm.id ? 'Edit Employee' : 'New Employee'}</h2>
-              <label className="field">
-                <span className="text-muted">Full name</span>
-                <input
-                  value={workerForm.full_name}
-                  onChange={(e) => setWorkerForm((f) => ({ ...f, full_name: e.target.value }))}
-                  required
-                />
-              </label>
-              <label className="field">
-                <span className="text-muted">Employee code</span>
-                <input
-                  className="num"
-                  value={workerForm.employee_code}
-                  onChange={(e) => setWorkerForm((f) => ({ ...f, employee_code: e.target.value }))}
-                />
-              </label>
-              <label className="field">
-                <span className="text-muted">Designation</span>
-                <input
-                  value={workerForm.designation}
-                  onChange={(e) => setWorkerForm((f) => ({ ...f, designation: e.target.value }))}
-                />
-              </label>
-              <label className="field">
-                <span className="text-muted">Department</span>
-                <input
-                  list="hr-dept-list"
-                  value={workerForm.department}
-                  onChange={(e) => setWorkerForm((f) => ({ ...f, department: e.target.value }))}
-                />
-                <datalist id="hr-dept-list">
-                  {DEPT_SUGGESTIONS.map((d) => (
-                    <option key={d} value={d} />
-                  ))}
-                </datalist>
-              </label>
-              <label className="field">
-                <span className="text-muted">Shift</span>
-                <select
-                  value={workerForm.shift}
-                  onChange={(e) => setWorkerForm((f) => ({ ...f, shift: e.target.value }))}
-                >
-                  {SHIFTS.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span className="text-muted">Pay type</span>
-                <select
-                  value={workerForm.pay_type}
-                  onChange={(e) => setWorkerForm((f) => ({ ...f, pay_type: e.target.value }))}
-                >
-                  {PAY_TYPES.map((p) => (
-                    <option key={p} value={p}>
-                      {p}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span className="text-muted">Phone</span>
-                <input
-                  value={workerForm.phone}
-                  onChange={(e) => setWorkerForm((f) => ({ ...f, phone: e.target.value }))}
-                />
-              </label>
-              <label className="field">
-                <span className="text-muted">Joining date</span>
-                <input
-                  type="date"
-                  value={workerForm.joining_date}
-                  onChange={(e) => setWorkerForm((f) => ({ ...f, joining_date: e.target.value }))}
-                />
-              </label>
-              <label className="field">
-                <span className="text-muted">Bank name</span>
-                <input
-                  value={workerForm.bank_name}
-                  onChange={(e) => setWorkerForm((f) => ({ ...f, bank_name: e.target.value }))}
-                />
-              </label>
-              <label className="field">
-                <span className="text-muted">Account no</span>
-                <input
-                  className="num"
-                  value={workerForm.bank_account_no}
-                  onChange={(e) => setWorkerForm((f) => ({ ...f, bank_account_no: e.target.value }))}
-                />
-              </label>
-              <label className="field">
-                <span className="text-muted">IFSC</span>
-                <input
-                  value={workerForm.bank_ifsc}
-                  onChange={(e) => setWorkerForm((f) => ({ ...f, bank_ifsc: e.target.value }))}
-                />
-              </label>
-              <label className="field">
-                <span className="text-muted">Branch</span>
-                <input
-                  value={workerForm.bank_branch}
-                  onChange={(e) => setWorkerForm((f) => ({ ...f, bank_branch: e.target.value }))}
-                />
-              </label>
-              <label className="check-row">
-                <input
-                  type="checkbox"
-                  checked={workerForm.esi_applicable}
-                  onChange={(e) => setWorkerForm((f) => ({ ...f, esi_applicable: e.target.checked }))}
-                />
-                <span>ESI applicable</span>
-              </label>
-              <label className="check-row">
-                <input
-                  type="checkbox"
-                  checked={workerForm.pf_applicable}
-                  onChange={(e) => setWorkerForm((f) => ({ ...f, pf_applicable: e.target.checked }))}
-                />
-                <span>PF applicable</span>
-              </label>
-              <label className="check-row">
-                <input
-                  type="checkbox"
-                  checked={workerForm.pt_applicable}
-                  onChange={(e) => setWorkerForm((f) => ({ ...f, pt_applicable: e.target.checked }))}
-                />
-                <span>PT applicable</span>
-              </label>
-              <label className="check-row">
-                <input
-                  type="checkbox"
-                  checked={workerForm.is_active}
-                  onChange={(e) => setWorkerForm((f) => ({ ...f, is_active: e.target.checked }))}
-                />
-                <span>Active</span>
-              </label>
-              <div className="share-actions">
+            <form className="hr-emp-form" onSubmit={(e) => void saveWorker(e)} noValidate>
+              <h2 className="section-title">{workerForm.id ? 'Edit Employee' : 'Add Employee'}</h2>
+
+              <section className="hr-emp-section">
+                <h3 className="hr-emp-section-title">A. Basic Information</h3>
+                <div className="hr-emp-form-grid">
+                  <label className={`field${workerFormErrors.full_name ? ' has-error' : ''}`}>
+                    <span>Employee Name *</span>
+                    <input
+                      value={workerForm.full_name}
+                      onChange={(e) => {
+                        setWorkerForm((f) => ({ ...f, full_name: e.target.value }))
+                        setWorkerFormErrors((err) => ({ ...err, full_name: undefined }))
+                      }}
+                      autoFocus={!workerForm.id}
+                    />
+                    {workerFormErrors.full_name ? (
+                      <span className="hr-emp-field-error">{workerFormErrors.full_name}</span>
+                    ) : null}
+                  </label>
+                  <label className={`field${workerFormErrors.employee_code ? ' has-error' : ''}`}>
+                    <span>Employee Code</span>
+                    <input
+                      className="num"
+                      value={workerForm.employee_code}
+                      onChange={(e) => {
+                        setWorkerForm((f) => ({ ...f, employee_code: e.target.value }))
+                        setWorkerFormErrors((err) => ({ ...err, employee_code: undefined }))
+                      }}
+                      placeholder="Optional · must be unique"
+                    />
+                    {workerFormErrors.employee_code ? (
+                      <span className="hr-emp-field-error">{workerFormErrors.employee_code}</span>
+                    ) : null}
+                  </label>
+                  <label className="field">
+                    <span>Phone</span>
+                    <input
+                      value={workerForm.phone}
+                      onChange={(e) => setWorkerForm((f) => ({ ...f, phone: e.target.value }))}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Joining date</span>
+                    <input
+                      type="date"
+                      value={workerForm.joining_date}
+                      onChange={(e) => setWorkerForm((f) => ({ ...f, joining_date: e.target.value }))}
+                    />
+                  </label>
+                </div>
+              </section>
+
+              <section className="hr-emp-section">
+                <h3 className="hr-emp-section-title">B. Job Information</h3>
+                <div className="hr-emp-form-grid">
+                  <label className={`field${workerFormErrors.designation ? ' has-error' : ''}`}>
+                    <span>Designation *</span>
+                    <select
+                      value={workerForm.designation_choice}
+                      onChange={(e) => {
+                        setWorkerForm((f) => ({
+                          ...f,
+                          designation_choice: e.target.value,
+                          designation_other: e.target.value === 'Other' ? f.designation_other : '',
+                        }))
+                        setWorkerFormErrors((err) => ({ ...err, designation: undefined }))
+                      }}
+                    >
+                      <option value="">Select designation…</option>
+                      {designationOptions.map((d) => (
+                        <option key={d} value={d}>
+                          {d}
+                        </option>
+                      ))}
+                    </select>
+                    {workerFormErrors.designation ? (
+                      <span className="hr-emp-field-error">{workerFormErrors.designation}</span>
+                    ) : null}
+                  </label>
+                  {workerForm.designation_choice === 'Other' ? (
+                    <label className={`field${workerFormErrors.designation ? ' has-error' : ''}`}>
+                      <span>Enter Designation *</span>
+                      <input
+                        value={workerForm.designation_other}
+                        onChange={(e) => {
+                          setWorkerForm((f) => ({ ...f, designation_other: e.target.value }))
+                          setWorkerFormErrors((err) => ({ ...err, designation: undefined }))
+                        }}
+                        placeholder="Custom designation"
+                      />
+                    </label>
+                  ) : null}
+                  <label className={`field${workerFormErrors.department ? ' has-error' : ''}`}>
+                    <span>Department *</span>
+                    <select
+                      value={workerForm.department_choice}
+                      onChange={(e) => {
+                        setWorkerForm((f) => ({
+                          ...f,
+                          department_choice: e.target.value,
+                          department_other: e.target.value === 'Other' ? f.department_other : '',
+                        }))
+                        setWorkerFormErrors((err) => ({ ...err, department: undefined }))
+                      }}
+                    >
+                      <option value="">Select department…</option>
+                      {departmentOptions.map((d) => (
+                        <option key={d} value={d}>
+                          {d}
+                        </option>
+                      ))}
+                    </select>
+                    {workerFormErrors.department ? (
+                      <span className="hr-emp-field-error">{workerFormErrors.department}</span>
+                    ) : null}
+                  </label>
+                  {workerForm.department_choice === 'Other' ? (
+                    <label className={`field${workerFormErrors.department ? ' has-error' : ''}`}>
+                      <span>Enter Department *</span>
+                      <input
+                        value={workerForm.department_other}
+                        onChange={(e) => {
+                          setWorkerForm((f) => ({ ...f, department_other: e.target.value }))
+                          setWorkerFormErrors((err) => ({ ...err, department: undefined }))
+                        }}
+                        placeholder="Custom department"
+                      />
+                    </label>
+                  ) : null}
+                  <label className={`field${workerFormErrors.shift ? ' has-error' : ''}`}>
+                    <span>Shift *</span>
+                    <select
+                      value={workerForm.shift_choice}
+                      onChange={(e) => {
+                        setWorkerForm((f) => ({
+                          ...f,
+                          shift_choice: e.target.value,
+                          shift_other: e.target.value === 'Other' ? f.shift_other : '',
+                        }))
+                        setWorkerFormErrors((err) => ({ ...err, shift: undefined }))
+                      }}
+                    >
+                      <option value="">Select shift…</option>
+                      {shiftOptions.map((d) => (
+                        <option key={d} value={d}>
+                          {d}
+                        </option>
+                      ))}
+                    </select>
+                    {workerFormErrors.shift ? (
+                      <span className="hr-emp-field-error">{workerFormErrors.shift}</span>
+                    ) : null}
+                  </label>
+                  {workerForm.shift_choice === 'Other' ? (
+                    <label className={`field${workerFormErrors.shift ? ' has-error' : ''}`}>
+                      <span>Enter Shift *</span>
+                      <input
+                        value={workerForm.shift_other}
+                        onChange={(e) => {
+                          setWorkerForm((f) => ({ ...f, shift_other: e.target.value }))
+                          setWorkerFormErrors((err) => ({ ...err, shift: undefined }))
+                        }}
+                        placeholder="Custom shift"
+                      />
+                    </label>
+                  ) : null}
+                </div>
+              </section>
+
+              <section className="hr-emp-section">
+                <h3 className="hr-emp-section-title">C. Salary &amp; Pay</h3>
+                <div className="hr-emp-form-grid">
+                  <label className="field">
+                    <span>Pay Type</span>
+                    <select
+                      value={workerForm.pay_type_choice}
+                      onChange={(e) =>
+                        setWorkerForm((f) => ({
+                          ...f,
+                          pay_type_choice: e.target.value,
+                          pay_type_other: e.target.value === 'Other' ? f.pay_type_other : '',
+                        }))
+                      }
+                    >
+                      {payTypeOptions.map((d) => (
+                        <option key={d} value={d}>
+                          {d}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {workerForm.pay_type_choice === 'Other' ? (
+                    <label className="field">
+                      <span>Enter Pay Type</span>
+                      <input
+                        value={workerForm.pay_type_other}
+                        onChange={(e) => setWorkerForm((f) => ({ ...f, pay_type_other: e.target.value }))}
+                        placeholder="Custom pay type"
+                      />
+                    </label>
+                  ) : null}
+                  <label className="field">
+                    <span>
+                      {rateLabelForPayType(
+                        workerForm.pay_type_choice === 'Other'
+                          ? workerForm.pay_type_other || 'Other'
+                          : workerForm.pay_type_choice,
+                      )}
+                    </span>
+                    <input
+                      className="num"
+                      inputMode="decimal"
+                      value={workerForm.salary_rate}
+                      onChange={(e) => setWorkerForm((f) => ({ ...f, salary_rate: e.target.value }))}
+                      placeholder="Optional"
+                    />
+                  </label>
+                </div>
+              </section>
+
+              <section className="hr-emp-section">
+                <h3 className="hr-emp-section-title">D. Statutory</h3>
+                <div className="hr-emp-checks">
+                  <label className="check-row">
+                    <input
+                      type="checkbox"
+                      checked={workerForm.esi_applicable}
+                      onChange={(e) => setWorkerForm((f) => ({ ...f, esi_applicable: e.target.checked }))}
+                    />
+                    <span>ESI applicable</span>
+                  </label>
+                  <label className="check-row">
+                    <input
+                      type="checkbox"
+                      checked={workerForm.pf_applicable}
+                      onChange={(e) => setWorkerForm((f) => ({ ...f, pf_applicable: e.target.checked }))}
+                    />
+                    <span>PF applicable</span>
+                  </label>
+                  <label className="check-row">
+                    <input
+                      type="checkbox"
+                      checked={workerForm.pt_applicable}
+                      onChange={(e) => setWorkerForm((f) => ({ ...f, pt_applicable: e.target.checked }))}
+                    />
+                    <span>PT applicable</span>
+                  </label>
+                </div>
+              </section>
+
+              <section className="hr-emp-section">
+                <h3 className="hr-emp-section-title">E. Bank Details</h3>
+                <div className="hr-emp-form-grid">
+                  <label className="field">
+                    <span>Bank name</span>
+                    <input
+                      value={workerForm.bank_name}
+                      onChange={(e) => setWorkerForm((f) => ({ ...f, bank_name: e.target.value }))}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Account no</span>
+                    <input
+                      className="num"
+                      value={workerForm.bank_account_no}
+                      onChange={(e) => setWorkerForm((f) => ({ ...f, bank_account_no: e.target.value }))}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>IFSC</span>
+                    <input
+                      value={workerForm.bank_ifsc}
+                      onChange={(e) => setWorkerForm((f) => ({ ...f, bank_ifsc: e.target.value }))}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Branch</span>
+                    <input
+                      value={workerForm.bank_branch}
+                      onChange={(e) => setWorkerForm((f) => ({ ...f, bank_branch: e.target.value }))}
+                    />
+                  </label>
+                </div>
+              </section>
+
+              <section className="hr-emp-section">
+                <h3 className="hr-emp-section-title">F. Status</h3>
+                <div className="hr-emp-checks">
+                  <label className="check-row">
+                    <input
+                      type="checkbox"
+                      checked={workerForm.is_active}
+                      onChange={(e) => setWorkerForm((f) => ({ ...f, is_active: e.target.checked }))}
+                    />
+                    <span>Active</span>
+                  </label>
+                </div>
+              </section>
+
+              <div className="hr-emp-form-actions share-actions">
                 <button type="submit" className="primary-save" disabled={busy}>
                   Save
                 </button>
-                <button type="button" className="btn-ghost" onClick={() => setShowWorkerForm(false)}>
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  onClick={() => {
+                    setShowWorkerForm(false)
+                    setWorkerFormErrors({})
+                  }}
+                >
                   Cancel
                 </button>
               </div>
             </form>
           ) : null}
-          <div className="hr-table-wrap">
-            <table className="hr-table">
+
+          <div className="hr-emp-count">
+            Showing {filteredEmployees.length} of {workers.length} employees
+          </div>
+
+          <div className="hr-emp-table-wrap hr-force-table">
+            <table className="hr-emp-table">
               <thead>
                 <tr>
                   <th>Code</th>
                   <th>Name</th>
                   <th>Designation</th>
-                  <th>Dept</th>
+                  <th>Department</th>
                   <th>Shift</th>
-                  <th>Pay</th>
-                  <th>Bank</th>
-                  <th>ESI</th>
-                  <th>PF</th>
-                  <th>PT</th>
+                  <th className="hr-emp-secondary">Pay Type</th>
+                  <th className="hr-emp-secondary">Bank</th>
+                  <th className="hr-emp-secondary">ESI</th>
+                  <th className="hr-emp-secondary">PF</th>
+                  <th className="hr-emp-secondary">PT</th>
                   <th>Active</th>
-                  <th />
+                  <th className="hr-emp-actions">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {workers.map((w) => (
+                {filteredEmployees.map((w) => (
                   <tr key={w.id}>
                     <td className="num">{w.employee_code || '—'}</td>
-                    <td>{w.full_name}</td>
-                    <td>{w.designation || '—'}</td>
-                    <td>{w.department || '—'}</td>
-                    <td>{w.shift || '—'}</td>
-                    <td>{w.pay_type || '—'}</td>
-                    <td className="num">{maskAccountNumber(w.bank_account_no)}</td>
-                    <td>{w.esi_applicable ? 'Y' : '—'}</td>
-                    <td>{w.pf_applicable ? 'Y' : '—'}</td>
-                    <td>{w.pt_applicable ? 'Y' : '—'}</td>
+                    <td className="hr-emp-name">{w.full_name}</td>
+                    <td className="hr-emp-desig">{w.designation || '—'}</td>
+                    <td className="hr-emp-dept">{w.department || '—'}</td>
+                    <td className="hr-emp-shift">{w.shift || '—'}</td>
+                    <td className="hr-emp-secondary">{w.pay_type || '—'}</td>
+                    <td className="hr-emp-secondary num">{maskAccountNumber(w.bank_account_no)}</td>
+                    <td className="hr-emp-secondary">{w.esi_applicable ? 'Y' : '—'}</td>
+                    <td className="hr-emp-secondary">{w.pf_applicable ? 'Y' : '—'}</td>
+                    <td className="hr-emp-secondary">{w.pt_applicable ? 'Y' : '—'}</td>
                     <td>
                       <span className={w.is_active ? 'hr-badge hr-badge-ok' : 'hr-badge hr-badge-danger'}>
                         {w.is_active ? 'Yes' : 'No'}
                       </span>
                     </td>
-                    <td>
+                    <td className="hr-emp-actions">
                       <div className="share-actions">
-                        <button
-                          type="button"
-                          className="btn-ghost"
-                          onClick={() => {
-                            setWorkerForm(workerToForm(w))
-                            setShowWorkerForm(true)
-                          }}
-                        >
+                        <button type="button" className="btn-ghost" onClick={() => openEditEmployee(w)}>
                           Edit
                         </button>
                         {w.is_active ? (
@@ -1458,6 +1887,13 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
                     </td>
                   </tr>
                 ))}
+                {!filteredEmployees.length ? (
+                  <tr>
+                    <td colSpan={12} className="text-muted">
+                      No employees match the current filters.
+                    </td>
+                  </tr>
+                ) : null}
               </tbody>
             </table>
           </div>
