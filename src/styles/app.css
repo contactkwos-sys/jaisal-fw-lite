@@ -1865,6 +1865,35 @@ body.drawer-open {
   cursor: pointer;
 }
 
+.cashbook-save-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  min-width: 8.5rem;
+}
+
+.cashbook-save-btn:disabled {
+  opacity: 0.85;
+  cursor: wait;
+}
+
+.cashbook-save-spinner {
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid color-mix(in srgb, currentColor 28%, transparent);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: cashbook-spin 0.65s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes cashbook-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .cashbook-ledger-card {
   display: grid;
   gap: 0.55rem;

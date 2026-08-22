@@ -144,9 +144,47 @@ export async function addCashBookItemMaster(itemName: string): Promise<CashBookI
   return data as CashBookItemMaster
 }
 
+/**
+ * Upsert item names into master in parallel. Skips names already known locally
+ * (case-insensitive) and "Other". Safe to fire-and-forget after a save.
+ */
+export async function ensureCashBookItemsInMaster(
+  itemNames: string[],
+  knownNames?: Iterable<string>,
+): Promise<CashBookItemMaster[]> {
+  const known = new Set(
+    [...(knownNames ?? [])].map((n) => n.trim().toLowerCase()).filter(Boolean),
+  )
+  const unique: string[] = []
+  const seen = new Set<string>()
+  for (const raw of itemNames) {
+    const name = raw.trim()
+    if (!name) continue
+    const key = name.toLowerCase()
+    if (key === 'other' || known.has(key) || seen.has(key)) continue
+    seen.add(key)
+    unique.push(name)
+  }
+  if (!unique.length) return []
+  const results = await Promise.allSettled(unique.map((name) => addCashBookItemMaster(name)))
+  return results
+    .filter((r): r is PromiseFulfilledResult<CashBookItemMaster> => r.status === 'fulfilled')
+    .map((r) => r.value)
+}
+
+/** Persist machine tag for debit expenses (and Machine Repair, which requires it). */
+function resolveMachineNumber(payload: {
+  entry_type: CashBookEntryType
+  category: CashBookCategory
+  machine_number?: string | null
+}): string | null {
+  const trimmed = payload.machine_number?.trim() || null
+  if (payload.category === 'Machine Repair') return trimmed
+  if (payload.entry_type === 'debit') return trimmed
+  return null
+}
+
 async function replaceEntryItems(entryId: string, items: CashBookLineItemInput[]) {
-  const { error: delErr } = await supabase.from('cashbook_entry_items').delete().eq('entry_id', entryId)
-  if (delErr) throw delErr
   const rows = items
     .map((i) => ({
       entry_id: entryId,
@@ -154,12 +192,21 @@ async function replaceEntryItems(entryId: string, items: CashBookLineItemInput[]
       amount: Number(i.amount),
     }))
     .filter((i) => i.item_name && Number.isFinite(i.amount) && i.amount > 0)
+
+  // Single round-trip when clearing; otherwise delete+insert (no upsert key available)
+  const { error: delErr } = await supabase.from('cashbook_entry_items').delete().eq('entry_id', entryId)
+  if (delErr) throw delErr
   if (!rows.length) return
   const { error } = await supabase.from('cashbook_entry_items').insert(rows)
   if (error) throw error
 }
 
-export async function insertCashBookEntry(payload: CashBookInsert): Promise<string> {
+export type CashBookInsertResult = {
+  id: string
+  entry: CashBookEntry
+}
+
+export async function insertCashBookEntry(payload: CashBookInsert): Promise<CashBookInsertResult> {
   const items = payload.items ?? []
   const purpose =
     payload.purpose_notes?.trim() ||
@@ -173,18 +220,29 @@ export async function insertCashBookEntry(payload: CashBookInsert): Promise<stri
     party_name: normalizeParty(payload.party_name),
     contact_number: payload.contact_number?.trim() || null,
     category: payload.category,
-    machine_number:
-      payload.category === 'Machine Repair' ? payload.machine_number?.trim() || null : null,
+    machine_number: resolveMachineNumber(payload),
     purpose_notes: purpose || null,
     amount: payload.amount,
     entered_by: payload.entered_by,
   }
-  const { data, error } = await supabase.from('cashbook_entries').insert(row).select('id').single()
+  const { data, error } = await supabase
+    .from('cashbook_entries')
+    .insert(row)
+    .select('*')
+    .single()
   if (error) throw error
-  const id = (data as { id: string }).id
+  const saved = data as CashBookEntry
+  const id = saved.id
+  let savedItems: CashBookEntryItem[] = []
   if (items.length) {
     try {
       await replaceEntryItems(id, items)
+      savedItems = items.map((i, idx) => ({
+        id: `local-${idx}`,
+        entry_id: id,
+        item_name: i.item_name.trim(),
+        amount: Number(i.amount),
+      }))
     } catch (itemErr) {
       // Keep parent row but surface item error clearly
       throw new Error(
@@ -192,7 +250,13 @@ export async function insertCashBookEntry(payload: CashBookInsert): Promise<stri
       )
     }
   }
-  return id
+  return {
+    id,
+    entry: {
+      ...saved,
+      items: savedItems,
+    },
+  }
 }
 
 function normalizeUpdate(payload: CashBookUpdate) {
@@ -209,8 +273,7 @@ function normalizeUpdate(payload: CashBookUpdate) {
     party_name: normalizeParty(payload.party_name),
     contact_number: payload.contact_number?.trim() || null,
     category: payload.category,
-    machine_number:
-      payload.category === 'Machine Repair' ? payload.machine_number?.trim() || null : null,
+    machine_number: resolveMachineNumber(payload),
     purpose_notes: purpose || null,
     amount: payload.amount,
     edited_by: payload.edited_by || null,
