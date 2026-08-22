@@ -10,6 +10,7 @@ import {
   emptySalaryLedgerRow,
   fetchAllPaginated,
   formatINRExact,
+  formatUserError,
   pickLatestSalaryRate,
   sumSalaryLedgerTotals,
   todayISO,
@@ -172,6 +173,7 @@ export function SalaryUpToDatePanel({
       setProgress(`Calculating ${activeWorkers.length} employees…`)
 
       const ledger: SalaryLedgerRow[] = []
+      let calculated = 0
       for (const worker of activeWorkers) {
         try {
           const rate = pickLatestSalaryRate(salaryRates, worker.id, asOfDate)
@@ -188,6 +190,7 @@ export function SalaryUpToDatePanel({
               payrollRates as never,
             ),
           )
+          calculated++
         } catch (rowErr) {
           console.error('Salary Up To Date row error:', worker.full_name, rowErr)
           ledger.push(
@@ -212,9 +215,8 @@ export function SalaryUpToDatePanel({
       }
     } catch (e) {
       if (seq !== loadSeq.current) return
-      const msg = e instanceof Error ? e.message : 'Salary calculation failed'
       console.error('Salary Up To Date calculation failed:', e)
-      setError(msg)
+      setError(formatUserError(e, 'Unable to complete salary calculation. Please retry.'))
       setRows([])
       setPhase('error')
       setProgress('')
@@ -457,7 +459,7 @@ export function SalaryUpToDatePanel({
         </div>
       ) : null}
 
-      <div className="hr-table-wrap">
+      <div className="hr-table-wrap hr-force-table">
         <table className="hr-table hr-salary-status-table">
           <thead>
             <tr>

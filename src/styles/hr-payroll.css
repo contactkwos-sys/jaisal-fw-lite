@@ -2,6 +2,9 @@
 
 .hr-screen {
   gap: 1rem;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .hr-subnav {
@@ -230,6 +233,129 @@
   text-transform: uppercase;
   color: var(--muted);
   z-index: 1;
+}
+
+/* Use full content width on iPad + desktop for HR & Payroll */
+@media (min-width: 768px) {
+  .app-shell[data-screen='hr-payroll'] .app-main {
+    max-width: none;
+    width: 100%;
+  }
+}
+
+/* —— Salary Rate Master: full-width scrollable table —— */
+.hr-rates-master {
+  display: grid;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.hr-rates-table-wrap {
+  display: block !important;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.hr-rates-table {
+  width: 100%;
+  min-width: 1280px;
+  border-collapse: collapse;
+  table-layout: auto;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.hr-rates-table th,
+.hr-rates-table td {
+  padding: 0.65rem 0.6rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.hr-rates-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface2);
+  font-family: "Outfit", sans-serif;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.hr-rates-table tbody tr:hover {
+  background: color-mix(in srgb, var(--teal-soft) 55%, transparent);
+}
+
+.hr-rates-sticky {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--surface);
+  box-shadow: 4px 0 8px -6px rgba(15, 40, 60, 0.18);
+}
+
+.hr-rates-sticky-code {
+  left: 0;
+  min-width: 3.5rem;
+}
+
+.hr-rates-table th.hr-rates-sticky-code:nth-child(1),
+.hr-rates-table td.hr-rates-sticky-code:nth-child(1) {
+  left: 0;
+  min-width: 3rem;
+}
+
+.hr-rates-table th.hr-rates-sticky-code:nth-child(2),
+.hr-rates-table td.hr-rates-sticky-code:nth-child(2) {
+  left: 3rem;
+  min-width: 4.5rem;
+}
+
+.hr-rates-sticky-name {
+  left: 7.5rem;
+  min-width: 9rem;
+  max-width: 14rem;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.hr-rates-table thead .hr-rates-sticky {
+  background: var(--surface2);
+  z-index: 3;
+}
+
+.hr-rates-table tbody tr:hover .hr-rates-sticky {
+  background: color-mix(in srgb, var(--teal-soft) 55%, var(--surface));
+}
+
+.hr-rates-table input[type="number"],
+.hr-rates-table input[type="date"],
+.hr-rates-table select {
+  width: 100%;
+  min-width: 5.5rem;
+  font-size: 0.88rem;
+  min-height: 2.5rem;
+  padding: 0.4rem 0.5rem;
+}
+
+.hr-rates-save {
+  min-height: 2.5rem;
+  white-space: nowrap;
 }
 
 /* —— Employee Master: full-width, readable, iPad-safe —— */
@@ -474,9 +600,10 @@
   font-weight: 700;
 }
 
-/* Use full content width on iPad + desktop for Employee Master */
+/* Use full content width on iPad + desktop for HR & Payroll screens */
 @media (min-width: 768px) {
-  .app-shell[data-screen='hr-payroll'] .app-main {
+  .app-shell[data-screen='hr-payroll'] .app-main,
+  .app-shell[data-screen='attendance'] .app-main {
     max-width: none;
     width: 100%;
   }
@@ -971,13 +1098,6 @@
   gap: 0.75rem;
 }
 
-@media (min-width: 768px) {
-  .app-shell[data-screen='attendance'] .app-main {
-    max-width: none;
-    width: 100%;
-  }
-}
-
 @media (max-width: 900px) {
   .hr-att-matrix-wrap:not(.compact) {
     display: none;
@@ -991,17 +1111,17 @@
   .hr-att-bulk-cards {
     display: grid;
   }
-}
 
-@media (max-width: 900px) {
-  .hr-table-wrap {
+  .hr-table-wrap:not(.hr-force-table) {
     display: none;
   }
   .hr-att-cards {
     display: grid;
   }
-  .hr-screen .hr-table-wrap.hr-force-table {
-    display: block;
+  .hr-screen .hr-table-wrap.hr-force-table,
+  .hr-screen .hr-rates-table-wrap,
+  .hr-screen .hr-emp-table-wrap {
+    display: block !important;
   }
 }
 

@@ -299,14 +299,50 @@ export function amountInWords(amount: number): string {
 export function monthBounds(ym: string): { from: string; to: string; label: string } {
   const [y, m] = ym.split('-').map(Number)
   const from = `${ym}-01`
-  const last = new Date(y, m, 0).getDate()
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate()
   const to = `${ym}-${String(last).padStart(2, '0')}`
-  const label = new Date(y, m - 1, 1).toLocaleString('en-IN', { month: 'long', year: 'numeric' })
+  const label = new Date(Date.UTC(y, m - 1, 1)).toLocaleString('en-IN', {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'Asia/Kolkata',
+  })
   return { from, to, label }
 }
 
+/** Business calendar date in India (IST) — avoids UTC midnight shifting the day. */
 export function todayISO(): string {
-  return new Date().toISOString().slice(0, 10)
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+}
+
+/** Convert unknown errors (incl. Supabase PostgrestError objects) to user-safe text. */
+export function formatUserError(e: unknown, fallback = 'Unable to load data. Please retry.'): string {
+  if (e == null) return fallback
+  if (typeof e === 'string') {
+    const s = e.trim()
+    return s || fallback
+  }
+  if (e instanceof Error) {
+    const msg = e.message?.trim()
+    if (msg && msg !== '[object Object]') return msg
+    console.error(e)
+    return fallback
+  }
+  if (typeof e === 'object') {
+    const o = e as Record<string, unknown>
+    for (const key of ['message', 'error', 'details', 'hint'] as const) {
+      const val = o[key]
+      if (typeof val === 'string' && val.trim()) return val.trim()
+    }
+    const nested = o.message
+    if (nested && typeof nested === 'object') {
+      const inner = (nested as Record<string, unknown>).message
+      if (typeof inner === 'string' && inner.trim()) return inner.trim()
+    }
+    console.error('Unhandled error object:', e)
+    return fallback
+  }
+  const s = String(e)
+  return s === '[object Object]' ? fallback : s
 }
 
 export function statusBadgeClass(status: string): string {
