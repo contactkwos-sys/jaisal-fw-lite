@@ -408,7 +408,13 @@ export function isPresentStatus(status: string | null | undefined): boolean {
 export function pickLatestSalaryRate(rates: SalaryRate[], workerId: string, toDate: string): SalaryRate | null {
   return (
     rates
-      .filter((r) => r.worker_id === workerId && r.effective_from <= toDate)
+      .filter(
+        (r) =>
+          r.worker_id === workerId &&
+          r.effective_from <= toDate &&
+          (r.status || 'Active') === 'Active' &&
+          r.approved !== false,
+      )
       .sort((a, b) => b.effective_from.localeCompare(a.effective_from))[0] ?? null
   )
 }
