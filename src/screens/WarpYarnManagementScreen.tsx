@@ -123,7 +123,7 @@ export function WarpYarnManagementScreen({
       if (/relation .* does not exist|Could not find the table/i.test(msg)) {
         setTablesReady(false)
         setError(
-          'Warp Yarn tables are not applied yet. Run public/migration-warp-yarn-management.sql in Supabase SQL Editor.',
+          'Warp Yarn database tables are missing. Run these in Supabase SQL Editor: public/migration-warp-yarn-management.sql then public/migration-warp-beam-stock-entry.sql',
         )
       } else {
         setError(msg)

@@ -24,7 +24,14 @@ type HubTone =
 
 const INVENTORY_TONES: Record<string, HubTone> = {
   'yarn-stock': 'purple',
+  'wy-overview': 'blue',
+  'wy-machines': 'teal',
+  'wy-godown': 'green',
+  'wy-empty': 'slate',
+  'wy-warper': 'violet',
+  'wy-reports': 'orange',
   'warp-yarn': 'blue',
+  'warp-yarn-link': 'blue',
   'beam-stock': 'green',
   'warp-beam-pipe': 'orange',
   'yarn-inward': 'teal',

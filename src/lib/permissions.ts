@@ -103,8 +103,17 @@ const SECURITY_SUBS: Partial<Record<MainModuleId, string[]>> = {
     'geb-sec',
     'login-activity',
   ],
-  inventory: ['yarn-stock', 'warp-yarn-link', 'stock-reports'],
-  'warp-yarn': ['wy-overview', 'wy-machines', 'wy-godown', 'wy-empty', 'wy-warper'],
+  inventory: [
+    'yarn-stock',
+    'wy-overview',
+    'wy-machines',
+    'wy-godown',
+    'wy-empty',
+    'wy-warper',
+    'wy-reports',
+    'stock-reports',
+  ],
+  'warp-yarn': ['wy-overview', 'wy-machines', 'wy-godown', 'wy-empty', 'wy-warper', 'wy-reports'],
   'hr-payroll': ['hr-attendance', 'hr-dash'],
 }
 
