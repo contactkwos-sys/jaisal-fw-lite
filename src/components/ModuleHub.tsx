@@ -11,6 +11,9 @@ type Props = {
   onNavigate: (t: NavTarget) => void
 }
 
+/** Production process sequence shown with flow arrows (matches Dashboard flow). */
+const PRODUCTION_FLOW_IDS = ['warp-issue', 'weft-issue', 'prod-entry', 'folding', 'dispatch'] as const
+
 type HubTone =
   | 'purple'
   | 'green'
@@ -128,11 +131,22 @@ function HubCardButton({
   item,
   tone,
   onOpen,
+  simple,
 }: {
   item: SubItem
   tone: HubTone
   onOpen: (item: SubItem) => void
+  simple?: boolean
 }) {
+  if (simple) {
+    return (
+      <button type="button" className={`hub-card hub-tone-${tone}`} onClick={() => onOpen(item)}>
+        <span className="hub-card-label">{item.label}</span>
+        {item.hint ? <span className="hub-card-hint text-muted">{item.hint}</span> : null}
+      </button>
+    )
+  }
+
   return (
     <button
       type="button"
@@ -215,6 +229,15 @@ export function ModuleHub({ moduleId, onNavigate }: Props) {
   const mod = moduleById(moduleId)
   const items = mod.items.filter((item) => canAccessSub(roleName, moduleId, item.id))
   const isInventory = moduleId === 'inventory'
+  const isProduction = moduleId === 'production'
+  const flowItems = isProduction
+    ? PRODUCTION_FLOW_IDS.map((id) => items.find((item) => item.id === id)).filter(
+        (item): item is SubItem => Boolean(item),
+      )
+    : []
+  const restItems = isProduction
+    ? items.filter((item) => !(PRODUCTION_FLOW_IDS as readonly string[]).includes(item.id))
+    : items
   const [overview, setOverview] = useState<OverviewStat[]>(
     isInventory ? EMPTY_INVENTORY_OVERVIEW : [],
   )
@@ -304,7 +327,9 @@ export function ModuleHub({ moduleId, onNavigate }: Props) {
   }
 
   return (
-    <div className={`screen module-hub module-hub-${moduleId}`}>
+    <div
+      className={`screen module-hub ${isProduction ? 'module-hub-production' : `module-hub-${moduleId}`}`}
+    >
       <header className="screen-header module-hub-header">
         <h1 className="hub-section-title">Select a Function</h1>
         <p className="text-muted hub-section-sub">
@@ -314,12 +339,53 @@ export function ModuleHub({ moduleId, onNavigate }: Props) {
         </p>
       </header>
 
-      <div className="hub-grid" role="list">
-        {items.map((item, index) => (
-          <div key={item.id} role="listitem" className="hub-grid-item">
-            <HubCardButton item={item} tone={toneFor(moduleId, item, index)} onOpen={open} />
+      <div
+        className={isProduction ? 'hub-grid hub-grid-production' : 'hub-grid'}
+        role={isProduction ? undefined : 'list'}
+      >
+        {isProduction && flowItems.length > 0 ? (
+          <div className="hub-flow-row" aria-label="Production process sequence">
+            {flowItems.map((item, idx) => {
+              const index = items.indexOf(item)
+              return (
+                <div key={item.id} className="hub-flow-step">
+                  <HubCardButton
+                    item={item}
+                    tone={toneFor(moduleId, item, index)}
+                    onOpen={open}
+                    simple
+                  />
+                  {idx < flowItems.length - 1 ? (
+                    <span className="hub-flow-arrow" aria-hidden="true">→</span>
+                  ) : null}
+                </div>
+              )
+            })}
           </div>
-        ))}
+        ) : null}
+
+        {isProduction ? (
+          restItems.length > 0 ? (
+            <div className="hub-rest-grid">
+              {restItems.map((item, index) => (
+                <HubCardButton
+                  key={item.id}
+                  item={item}
+                  tone={toneFor(moduleId, item, index)}
+                  onOpen={open}
+                  simple
+                />
+              ))}
+            </div>
+          ) : null
+        ) : (
+          items.map((item, index) => (
+            <div key={item.id} role="listitem" className="hub-grid-item">
+              <HubCardButton item={item} tone={toneFor(moduleId, item, index)} onOpen={open} />
+            </div>
+          ))
+        )}
+
         {items.length === 0 ? (
           <p className="text-muted">No functions available for your role.</p>
         ) : null}
