@@ -1427,7 +1427,7 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
           </button>
         </div>
         <p className="text-muted2 dwc-history-lead">
-          Design to Order / Reports → Design-wise Costing · latest first · click DESI to open · Clear Filters if list looks empty
+          Design to Order / Reports → Design Wise Costing · latest first · click DESI/DIN to open full costing · Clear Filters if list looks empty
         </p>
         <div className="dwc-filters">
           <label className="field">
