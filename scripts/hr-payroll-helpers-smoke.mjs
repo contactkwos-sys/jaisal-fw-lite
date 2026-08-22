@@ -126,4 +126,57 @@ const rates = [
 ]
 assert(pickLatestSalaryRate(rates, 'w1', '2026-08-22')?.daily_rate === 500)
 
+function mergeAttendanceByDate(rows) {
+  const STATUS_PRIORITY = {
+    Present: 6,
+    Completed: 6,
+    'On Break': 5,
+    'Half Day': 4,
+    Leave: 3,
+    Holiday: 2,
+    'Weekly Off': 1,
+    Absent: 0,
+  }
+  const byDate = new Map()
+  for (const row of rows) {
+    const key = row.date
+    const existing = byDate.get(key)
+    if (!existing) {
+      byDate.set(key, { ...row })
+      continue
+    }
+    const payable = Number(existing.payable_day || 0) + Number(row.payable_day || 0)
+    const existingPri = STATUS_PRIORITY[(existing.status || 'Absent').trim()] ?? 0
+    const rowPri = STATUS_PRIORITY[(row.status || 'Absent').trim()] ?? 0
+    const dominant = rowPri > existingPri ? row : existing
+    byDate.set(key, { ...dominant, payable_day: payable })
+  }
+  return Array.from(byDate.values())
+}
+
+const merged = mergeAttendanceByDate([
+  { date: '2026-08-01', status: 'Present', payable_day: 1, worker_id: 'w1' },
+  { date: '2026-08-01', status: 'Present', payable_day: 1, worker_id: 'w1' },
+  { date: '2026-08-02', status: 'Absent', payable_day: 0, worker_id: 'w1' },
+])
+assert(merged.length === 2)
+assert(merged.find((r) => r.date === '2026-08-01').payable_day === 2)
+
+function sumSalaryLedgerTotals(rows) {
+  const t = { earned: 0, advance: 0, paid: 0, balance: 0 }
+  for (const r of rows) {
+    t.earned += r.earnedSalary
+    t.advance += r.advancePaid
+    t.paid += r.paidAmount
+    t.balance += r.balanceSalary
+  }
+  return t
+}
+assert(
+  sumSalaryLedgerTotals([
+    { earnedSalary: 100, advancePaid: 10, paidAmount: 50, balanceSalary: 40 },
+    { earnedSalary: 200, advancePaid: 20, paidAmount: 100, balanceSalary: 80 },
+  ]).earned === 300,
+)
+
 console.log('hr-payroll-helpers-smoke: PASS')
