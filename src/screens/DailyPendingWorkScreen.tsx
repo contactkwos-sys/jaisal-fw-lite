@@ -24,6 +24,8 @@ import {
   loadWorksForDate,
   machineLabelOnly,
   printWorkReport,
+  printPersonWiseReport,
+  printCommHistoryReport,
   priorityBadgeClass,
   saveWork,
   sendWorkWhatsApp,
@@ -229,10 +231,7 @@ export function DailyPendingWorkScreen({ initialTab = 'today', onTabChange }: Pr
           row.assigned_to.trim() ||
           row.db_id
         if (!needsSave) continue
-        const workStatus =
-          row.machine_status === 'Running OK' && !row.work_description.trim()
-            ? 'Completed'
-            : row.status || 'Pending'
+        const workStatus = row.status || 'Pending'
         await saveWork(supabase, {
           id: row.db_id,
           work_category: 'machine',
@@ -399,6 +398,7 @@ export function DailyPendingWorkScreen({ initialTab = 'today', onTabChange }: Pr
                     <th>Priority</th>
                     <th>Assigned To</th>
                     <th>Contact</th>
+                    <th>Work Status</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -433,11 +433,19 @@ export function DailyPendingWorkScreen({ initialTab = 'today', onTabChange }: Pr
                         </select>
                       </td>
                       <td className="num">{row.contact_phone || '—'}</td>
+                      <td>
+                        <select value={row.status} onChange={(e) => updateMachineRow(idx, { status: e.target.value })}>
+                          {WORK_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </td>
                       <td className="dpw-actions-cell">
                         <button type="button" className="btn-wa-sm" title="WhatsApp" disabled={!row.contact_phone} onClick={() => void handleWhatsApp(row, false)}>WA</button>
                         <button type="button" className="btn-wa-biz-sm" title="WhatsApp Business" disabled={!row.contact_phone_business && !row.contact_phone} onClick={() => void handleWhatsApp(row, true)}>Biz</button>
                         {row.db_id ? (
-                          <button type="button" className="btn-ghost btn-sm" onClick={() => void viewCommHistory(row.db_id!)}>History</button>
+                          <>
+                            <button type="button" className="btn-ghost btn-sm" title="Mark complete" onClick={() => row.work && void handleComplete(row.work)}>✓</button>
+                            <button type="button" className="btn-ghost btn-sm" onClick={() => void viewCommHistory(row.db_id!)}>History</button>
+                          </>
                         ) : null}
                       </td>
                     </tr>
@@ -474,6 +482,9 @@ export function DailyPendingWorkScreen({ initialTab = 'today', onTabChange }: Pr
                     <div className="dpw-card-actions">
                       <button type="button" className="btn-wa" onClick={() => void handleWhatsApp(row, false)}>WhatsApp</button>
                       <button type="button" className="btn-wa-biz" onClick={() => void handleWhatsApp(row, true)}>WA Business</button>
+                      {row.db_id && row.work ? (
+                        <button type="button" className="btn-ghost btn-sm" onClick={() => void handleComplete(row.work!)}>Done</button>
+                      ) : null}
                     </div>
                   </article>
                 ))}
@@ -526,6 +537,9 @@ export function DailyPendingWorkScreen({ initialTab = 'today', onTabChange }: Pr
                   <strong>Tomorrow Carry Forward</strong>
                   <p>{carryWorks.filter((w) => w.carry_forward_to_date === addDaysISO(selectedDate, 1)).length} items</p>
                 </div>
+                <button type="button" className="btn-ghost dpw-view-history-btn" onClick={() => { void loadAllCommHistory(supabase).then(setCommHistory); setHistoryWorkId('all') }}>
+                  View Communication History
+                </button>
               </article>
             </aside>
           </div>
@@ -569,6 +583,11 @@ export function DailyPendingWorkScreen({ initialTab = 'today', onTabChange }: Pr
               <option value="">All Status</option>
               {WORK_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
+            <select value={filters.priority} onChange={(e) => setFilters((f) => ({ ...f, priority: e.target.value }))}>
+              <option value="">All Priority</option>
+              {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+            <input placeholder="Assigned person" value={filters.assigned} onChange={(e) => setFilters((f) => ({ ...f, assigned: e.target.value }))} />
             <input type="date" value={filters.dateFrom} onChange={(e) => setFilters((f) => ({ ...f, dateFrom: e.target.value }))} />
             <input type="date" value={filters.dateTo} onChange={(e) => setFilters((f) => ({ ...f, dateTo: e.target.value }))} />
             <button type="button" className="btn-ghost" onClick={() => void reload()}>Apply</button>
@@ -623,9 +642,12 @@ export function DailyPendingWorkScreen({ initialTab = 'today', onTabChange }: Pr
         <section className="dpw-section">
           <div className="dpw-report-actions">
             <button type="button" className="btn-warp" onClick={() => printWorkReport("Today's Work Overview", todayOverview)}>Print Daily Report</button>
-            <button type="button" className="btn-ghost" onClick={() => printWorkReport('Machine-wise Issues', works.filter((w) => w.work_category === 'machine'))}>Machine Issues</button>
+            <button type="button" className="btn-ghost" onClick={() => printWorkReport('Machine-wise Issues', works.filter((w) => w.work_category === 'machine' && w.machine_status !== 'Running OK'))}>Machine Issues</button>
+            <button type="button" className="btn-ghost" onClick={() => printPersonWiseReport(allWorks)}>Person-wise Pending</button>
             <button type="button" className="btn-ghost" onClick={() => printWorkReport('Completed Work', works.filter((w) => w.status === 'Completed'))}>Completed</button>
             <button type="button" className="btn-ghost" onClick={() => printWorkReport('Carry Forward', carryWorks)}>Carry Forward</button>
+            <button type="button" className="btn-ghost" onClick={() => printWorkReport('Maintenance/Repair Calls', works.filter((w) => w.work_category === 'machine' && w.assigned_to))}>Repair Calls</button>
+            <button type="button" className="btn-ghost" onClick={() => printCommHistoryReport(commHistory)}>WhatsApp History</button>
           </div>
           <div className="dpw-report-grid">
             {[
