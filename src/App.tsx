@@ -56,6 +56,9 @@ import { ProgramDispatchScreen } from './screens/ProgramDispatchScreen'
 import { MachineWiseProductionScreen } from './screens/MachineWiseProductionScreen'
 import { SecurityInventoryScreen, type SiSub } from './screens/SecurityInventoryScreen'
 import { ItemMasterScreen } from './screens/ItemMasterScreen'
+import { CeoPinManagementScreen } from './screens/CeoPinManagementScreen'
+import { ModulePinGate } from './components/ModulePinGate'
+import { isModuleUnlocked } from './lib/ceoPinManagement'
 
 function AuthenticatedApp() {
   const { session, loading, isCeo, isManager, roleName } = useAuth()
@@ -63,6 +66,8 @@ function AuthenticatedApp() {
   const [sub, setSub] = useState<string | undefined>()
   const [filter, setFilter] = useState<string | undefined>()
   const [activeModule, setActiveModule] = useState<MainModuleId>('dashboard')
+  const [pinGateModule, setPinGateModule] = useState<MainModuleId | null>(null)
+  const [pendingNav, setPendingNav] = useState<NavTarget | null>(null)
   /** Prevent auth/profile refreshes from kicking the user off Design Broadcast etc. */
   const landedUserIdRef = useRef<string | null>(null)
 
@@ -109,13 +114,9 @@ function AuthenticatedApp() {
     return <LoginScreen />
   }
 
-  function go(t: NavTarget) {
-    if (isManager && (t.screen === 'home' || t.module === 'dashboard' || t.hub === 'dashboard')) {
-      return
-    }
+  function applyNav(t: NavTarget) {
     const nextScreen = t.screen
     const nextSub = t.hub || t.sub
-    // Prefer explicit filter (including undefined) when provided so hub opens clear a prior DIN
     const nextFilter = Object.prototype.hasOwnProperty.call(t, 'filter')
       ? t.filter
       : t.hub
@@ -125,6 +126,47 @@ function AuthenticatedApp() {
     setSub(nextSub)
     setFilter(nextFilter)
     setActiveModule(t.module || t.hub || moduleForScreen(nextScreen, nextSub, nextFilter))
+  }
+
+  function go(t: NavTarget) {
+    if (isManager && (t.screen === 'home' || t.module === 'dashboard' || t.hub === 'dashboard')) {
+      return
+    }
+    if (t.screen === 'ceo-pin-management' && !isCeo) {
+      return
+    }
+    const nextScreen = t.screen
+    const nextSub = t.hub || t.sub
+    const nextFilter = Object.prototype.hasOwnProperty.call(t, 'filter')
+      ? t.filter
+      : t.hub
+        ? t.hub
+        : undefined
+    const nextModule = (t.module || t.hub || moduleForScreen(nextScreen, nextSub, nextFilter)) as MainModuleId
+    const skipPinGate =
+      isCeo ||
+      t.screen === 'ceo-pin-management' ||
+      nextModule === activeModule ||
+      isModuleUnlocked(nextModule, isCeo)
+    if (!skipPinGate) {
+      setPendingNav(t)
+      setPinGateModule(nextModule)
+      return
+    }
+    applyNav(t)
+  }
+
+  function onModulePinUnlocked() {
+    if (pendingNav) {
+      applyNav(pendingNav)
+      setPendingNav(null)
+    }
+    setPinGateModule(null)
+  }
+
+  function onModulePinGateCancel() {
+    setPendingNav(null)
+    setPinGateModule(null)
   }
 
   const hubModule = (sub as MainModuleId) || activeModule
@@ -137,6 +179,14 @@ function AuthenticatedApp() {
       activeModule={activeModule}
       onNavigate={go}
     >
+      {pinGateModule ? (
+        <ModulePinGate
+          moduleId={pinGateModule}
+          onUnlocked={onModulePinUnlocked}
+          onCancel={onModulePinGateCancel}
+        />
+      ) : null}
+      {tab === 'ceo-pin-management' ? <CeoPinManagementScreen /> : null}
       {tab === 'home' ? <DashboardScreen onNavigate={go} /> : null}
       {tab === 'module-hub' ? (
         <ModuleHub moduleId={hubModule} onNavigate={go} />

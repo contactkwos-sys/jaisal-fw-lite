@@ -43,6 +43,11 @@ import {
   todayISO,
   type CompanyProfile,
 } from '../lib/hrPayroll'
+import {
+  createSalaryAdvance,
+  fetchSalaryAdvances,
+  type SalaryAdvanceRow,
+} from '../lib/ceoPinManagement'
 import { listPayrollJobs } from '../lib/payrollJobs'
 import { supabase } from '../lib/supabase'
 
@@ -51,6 +56,7 @@ type Sub =
   | 'employees'
   | 'leave'
   | 'rates'
+  | 'advance'
   | 'payroll'
   | 'statutory'
   | 'register'
@@ -126,6 +132,7 @@ const SUBS: Array<{ id: Sub; label: string }> = [
   { id: 'employees', label: 'Employees' },
   { id: 'leave', label: 'Leave' },
   { id: 'rates', label: 'Rates' },
+  { id: 'advance', label: 'Advance Salary' },
   { id: 'payroll', label: 'Payroll' },
   { id: 'statutory', label: 'Statutory' },
   { id: 'register', label: 'Register' },
@@ -254,6 +261,7 @@ function titleForSub(sub: Sub): string {
     employees: 'Employee Master',
     leave: 'Leave / Holiday',
     rates: 'Salary Rate Master',
+    advance: 'Advance Salary',
     payroll: 'Payroll',
     statutory: 'ESI / PF / PT',
     register: 'Salary Register',
@@ -295,6 +303,15 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
   const [letters, setLetters] = useState<BankSalaryLetter[]>([])
   const [letterItems, setLetterItems] = useState<BankSalaryLetterItem[]>([])
   const [viewLetterId, setViewLetterId] = useState<string | null>(null)
+
+  const [advances, setAdvances] = useState<SalaryAdvanceRow[]>([])
+  const [advanceWorkerId, setAdvanceWorkerId] = useState('')
+  const [advanceDate, setAdvanceDate] = useState(() => todayISO())
+  const [advanceAmount, setAdvanceAmount] = useState('')
+  const [advanceMode, setAdvanceMode] = useState<'Cash' | 'Cheque' | 'Bank Transfer'>('Cash')
+  const [advanceRef, setAdvanceRef] = useState('')
+  const [advanceBank, setAdvanceBank] = useState('')
+  const [advanceRemarks, setAdvanceRemarks] = useState('')
 
   const [kpis, setKpis] = useState<DashboardKpis>({
     totalEmployees: 0,
@@ -542,6 +559,11 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
     setLeaveEntries((l as LeaveEntry[]) ?? [])
   }, [])
 
+  const loadAdvances = useCallback(async () => {
+    const rows = await fetchSalaryAdvances()
+    setAdvances(rows)
+  }, [])
+
   const loadLetters = useCallback(async (letterId?: string | null) => {
     const { data: ls, error: lErr } = await supabase
       .from('bank_salary_letters')
@@ -608,6 +630,7 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
           }
         }
         if (sub === 'leave') await loadHolidaysLeave()
+        if (sub === 'advance') await loadAdvances()
         if (sub === 'payroll' || sub === 'statutory' || sub === 'payment') await loadPayrollRun(payrollMonth)
         if (sub === 'register') await loadRegisterEntries()
         if (sub === 'bank-letter' || sub === 'reports') await loadLetters(viewLetterId)
@@ -622,6 +645,7 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
     loadDashboard,
     loadSalaryRates,
     loadHolidaysLeave,
+    loadAdvances,
     loadPayrollRun,
     loadRegisterEntries,
     loadLetters,
@@ -946,6 +970,7 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
     attRows: Attendance[],
     rate: SalaryRate | null,
     run: PayrollRun,
+    advanceAmount = 0,
   ): Omit<PayrollEntry, 'id' | 'created_at' | 'updated_at'> {
     let presentDays = 0
     let leaveDays = 0
@@ -984,6 +1009,7 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
       pfOn,
       ptOn,
       otherOn,
+      advance: advanceAmount,
     })
 
     return {
@@ -1059,6 +1085,21 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
         .gte('date', from)
         .lte('date', to)
       if (aErr) throw aErr
+      const { data: advAll, error: advErr } = await supabase
+        .from('salary_advance_transactions')
+        .select('worker_id, amount')
+        .eq('is_voided', false)
+        .gte('advance_date', from)
+        .lte('advance_date', to)
+      if (advErr) throw advErr
+      const advanceByWorker = new Map<string, number>()
+      for (const row of advAll ?? []) {
+        const wid = String((row as { worker_id: string }).worker_id)
+        advanceByWorker.set(
+          wid,
+          (advanceByWorker.get(wid) || 0) + Number((row as { amount: number }).amount || 0),
+        )
+      }
       const attByWorker = new Map<string, Attendance[]>()
       for (const a of (attAll as Attendance[]) ?? []) {
         const list = attByWorker.get(a.worker_id) || []
@@ -1068,7 +1109,13 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
 
       for (const worker of activeWorkers) {
         const rate = pickLatestRate(salaryRates, worker.id, to) || null
-        const payload = buildEntryPayload(worker, attByWorker.get(worker.id) || [], rate, run)
+        const payload = buildEntryPayload(
+          worker,
+          attByWorker.get(worker.id) || [],
+          rate,
+          run,
+          advanceByWorker.get(worker.id) || 0,
+        )
         const { error: upErr } = await supabase.from('payroll_entries').upsert(payload, {
           onConflict: 'payroll_run_id,worker_id',
         })
@@ -2107,6 +2154,151 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
               </tbody>
             </table>
           </div>
+        </div>
+      ) : null}
+
+      {sub === 'advance' ? (
+        <div className="form-stack surface hr-panel">
+          <h2 className="section-title">Advance Salary Entry</h2>
+          <p className="text-muted">
+            Record multiple cash / cheque / bank advances per employee. Totals auto-deduct in payroll for the selected month.
+          </p>
+          <div className="hr-toolbar form-stack">
+            <label className="field">
+              <span className="text-muted">Employee</span>
+              <select value={advanceWorkerId} onChange={(e) => setAdvanceWorkerId(e.target.value)}>
+                <option value="">Select employee…</option>
+                {activeWorkers.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.employee_code ? `${w.employee_code} · ` : ''}{w.full_name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span className="text-muted">Date</span>
+              <input type="date" value={advanceDate} onChange={(e) => setAdvanceDate(e.target.value)} />
+            </label>
+            <label className="field">
+              <span className="text-muted">Amount (₹)</span>
+              <input
+                className="num"
+                type="number"
+                min="1"
+                value={advanceAmount}
+                onChange={(e) => setAdvanceAmount(e.target.value)}
+              />
+            </label>
+            <label className="field">
+              <span className="text-muted">Payment mode</span>
+              <select
+                value={advanceMode}
+                onChange={(e) => setAdvanceMode(e.target.value as 'Cash' | 'Cheque' | 'Bank Transfer')}
+              >
+                <option value="Cash">Cash</option>
+                <option value="Cheque">Cheque</option>
+                <option value="Bank Transfer">Bank Transfer</option>
+              </select>
+            </label>
+            {advanceMode === 'Cheque' ? (
+              <label className="field">
+                <span className="text-muted">Cheque no.</span>
+                <input value={advanceRef} onChange={(e) => setAdvanceRef(e.target.value)} />
+              </label>
+            ) : null}
+            {advanceMode === 'Bank Transfer' ? (
+              <>
+                <label className="field">
+                  <span className="text-muted">Transfer reference</span>
+                  <input value={advanceRef} onChange={(e) => setAdvanceRef(e.target.value)} />
+                </label>
+                <label className="field">
+                  <span className="text-muted">Bank</span>
+                  <input value={advanceBank} onChange={(e) => setAdvanceBank(e.target.value)} />
+                </label>
+              </>
+            ) : null}
+            <label className="field">
+              <span className="text-muted">Remarks</span>
+              <input value={advanceRemarks} onChange={(e) => setAdvanceRemarks(e.target.value)} />
+            </label>
+            <button
+              type="button"
+              className="primary-save"
+              disabled={busy}
+              onClick={() => void (async () => {
+                if (!advanceWorkerId || !advanceAmount) {
+                  setError('Select employee and amount')
+                  return
+                }
+                setBusy(true)
+                setError(null)
+                try {
+                  await createSalaryAdvance(
+                    {
+                      worker_id: advanceWorkerId,
+                      advance_date: advanceDate,
+                      amount: Number(advanceAmount),
+                      payment_mode: advanceMode,
+                      reference_no: advanceRef || undefined,
+                      bank_name: advanceBank || undefined,
+                      remarks: advanceRemarks || undefined,
+                    },
+                    { id: profile?.id, name: profile?.full_name || profile?.roles?.role_name },
+                  )
+                  setMessage('Advance recorded')
+                  setAdvanceAmount('')
+                  setAdvanceRef('')
+                  setAdvanceBank('')
+                  setAdvanceRemarks('')
+                  await loadAdvances()
+                } catch (e) {
+                  handleDbError(e)
+                } finally {
+                  setBusy(false)
+                }
+              })()}
+            >
+              Save Advance
+            </button>
+          </div>
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Employee</th>
+                  <th>Amount</th>
+                  <th>Mode</th>
+                  <th>Reference</th>
+                  <th>Remarks</th>
+                  <th>By</th>
+                </tr>
+              </thead>
+              <tbody>
+                {advances.map((a) => (
+                  <tr key={a.id}>
+                    <td>{a.advance_date}</td>
+                    <td>
+                      {a.workers?.employee_code ? `${a.workers.employee_code} · ` : ''}
+                      {a.workers?.full_name || a.worker_id}
+                    </td>
+                    <td className="num">{formatINRExact(a.amount)}</td>
+                    <td>{a.payment_mode}</td>
+                    <td>{a.reference_no || a.bank_name || '—'}</td>
+                    <td>{a.remarks || '—'}</td>
+                    <td>{a.created_by_name || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {advances.length ? (
+            <p className="text-muted">
+              Outstanding advance total (all active entries):{' '}
+              <strong className="num">{formatINRExact(advances.reduce((s, a) => s + Number(a.amount), 0))}</strong>
+            </p>
+          ) : null}
         </div>
       ) : null}
 
