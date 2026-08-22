@@ -10,6 +10,7 @@ import {
   type DinMatching,
   type DinWithMatchings,
 } from '../lib/designToOrder'
+import { perMeterCostSuffix } from '../lib/designWiseCosting'
 import { applyOrQueue, todayISO } from '../lib/mutate'
 import type { NavTarget } from '../lib/nav'
 import { supabase } from '../lib/supabase'
@@ -253,7 +254,9 @@ export function DtoOrderBookingScreen({ onNavigate, initialDinNumber }: Props) {
               <h2>{din.design_name || din.din_number}</h2>
               <p className="text-muted">
                 <DtoStatusPill status={din.status} /> · Costing{' '}
-                {din.final_cost_per_mtr != null ? `${fmtInrIn(din.final_cost_per_mtr)} / Mtr Inc. GST` : din.costing_status}
+                {din.final_cost_per_mtr != null
+                  ? `${fmtInrIn(din.final_cost_per_mtr)} ${perMeterCostSuffix(din.gst_percent)}`
+                  : din.costing_status}
               </p>
               {din.base_cost_per_mtr != null ? (
                 <p className="text-muted">

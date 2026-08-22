@@ -8,10 +8,61 @@ export function n(v: string | number | null | undefined): number {
   return Number.isFinite(x) ? x : 0
 }
 
-/** Financial / weight rounding — avoids float noise in ₹ and kg displays */
+/**
+ * Financial / weight rounding — avoids float noise in ₹ and kg displays.
+ * Rule: round each monetary step to 2 dp (half-up via Math.round) so UI rows
+ * (Weight × Rate = Amount) stay auditable; GST is applied once on after-MU only.
+ */
 export function round2(v: number): number {
   if (!Number.isFinite(v)) return 0
   return Math.round((v + Number.EPSILON) * 100) / 100
+}
+
+/** True when a positive GST % is applied to after-MU cost. */
+export function isGstApplied(gstPercent: number | string | null | undefined): boolean {
+  return n(gstPercent) > 0
+}
+
+/** Final cost card title — "Including GST" only when GST is actually added. */
+export function finalCostLabel(gstPercent: number | string | null | undefined): string {
+  return isGstApplied(gstPercent) ? 'Final Cost Including GST' : 'Final Cost — Excl. GST'
+}
+
+/** Banner title for per-meter final design cost. */
+export function finalDesignCostMeterLabel(gstPercent: number | string | null | undefined): string {
+  return isGstApplied(gstPercent)
+    ? 'Final Design Cost / Meter (Inc. GST)'
+    : 'Final Design Cost / Meter (Excl. GST)'
+}
+
+/** Hint under the final cost card in the GST split panel. */
+export function finalCostHint(gstPercent: number | string | null | undefined): string {
+  return isGstApplied(gstPercent) ? 'Base + GST' : 'After MU · no GST applied'
+}
+
+/** Auditable subtitle under the final design cost banner. */
+export function finalCostAuditLine(
+  afterMuPerMtr: number,
+  gstAmount: number,
+  gstPercent: number | string | null | undefined,
+  designLengthMtr: number,
+  totalPic: number,
+): string {
+  const chain = `length ${fmtQty(designLengthMtr, 0)} mtr · PIC ${fmtQty(totalPic, 0)}`
+  if (isGstApplied(gstPercent)) {
+    return `Auditable chain · ${chain} · base ${fmtInr(afterMuPerMtr)} + GST ${fmtInr(gstAmount)}`
+  }
+  return `Auditable chain · ${chain} · ${fmtInr(afterMuPerMtr)} (excl. GST)`
+}
+
+/** DTO / order screens: "/ Mtr (Inc. GST)" vs "/ Mtr (Excl. GST)". */
+export function perMeterCostSuffix(gstPercent: number | string | null | undefined): string {
+  return isGstApplied(gstPercent) ? '/ Mtr (Inc. GST)' : '/ Mtr (Excl. GST)'
+}
+
+/** Reports table header for final per-meter column. */
+export function finalPerMeterColumnLabel(): string {
+  return 'Final ₹/Mtr'
 }
 
 /** Warp weight (kg) = (denier × tar_ends × length_mtr) / 9_000_000 */
@@ -180,8 +231,9 @@ export function computeBuildup(
   const gst = n(gstPercent)
   const muAmount = round2(subtotalPerMtr * (mu / 100))
   const afterMuPerMtr = round2(subtotalPerMtr + muAmount)
-  const gstAmount = round2(afterMuPerMtr * (gst / 100))
-  const finalCostPerMtr = round2(afterMuPerMtr + gstAmount)
+  // GST applied exactly once: after MU × GST% (0% → no GST added to final)
+  const gstAmount = gst > 0 ? round2(afterMuPerMtr * (gst / 100)) : 0
+  const finalCostPerMtr = gst > 0 ? round2(afterMuPerMtr + gstAmount) : afterMuPerMtr
 
   return {
     totalWarpWeightKg,

@@ -58,8 +58,9 @@ function computeBuildup(warps, wefts, designLengthMtr, picConversionRate, muPerc
   const subtotalPerMtr = round2(yarnCostPerMtr + conversionCharge)
   const muAmount = round2(subtotalPerMtr * (n(muPercent) / 100))
   const afterMuPerMtr = round2(subtotalPerMtr + muAmount)
-  const gstAmount = round2(afterMuPerMtr * (n(gstPercent) / 100))
-  const finalCostPerMtr = round2(afterMuPerMtr + gstAmount)
+  const gst = n(gstPercent)
+  const gstAmount = gst > 0 ? round2(afterMuPerMtr * (gst / 100)) : 0
+  const finalCostPerMtr = gst > 0 ? round2(afterMuPerMtr + gstAmount) : afterMuPerMtr
 
   return {
     totalWarpWeightKg,
@@ -117,6 +118,50 @@ const expectedAfterMu = round2(r.subtotalPerMtr * 1.05)
 const expectedFinal = round2(expectedAfterMu * 1.05)
 checks.push(['After MU ≈ subtotal × 1.05', Math.abs(r3.afterMuPerMtr - expectedAfterMu) < 0.02])
 checks.push(['Final ≈ after MU × 1.05', Math.abs(r3.finalCostPerMtr - expectedFinal) < 0.02])
+
+// GST matrix — Jfg1872-style chain (yarn ₹4713.86 / 110 mtr, PIC 56, MU 5%)
+function chainFromYarnTotals(totalYarnAmount, designLength, totalPic, picRate, muPercent, gstPercent) {
+  const yarnCostPerMtr = round2(totalYarnAmount / designLength)
+  const conversionCharge = round2(totalPic * picRate)
+  const subtotalPerMtr = round2(yarnCostPerMtr + conversionCharge)
+  const muAmount = round2(subtotalPerMtr * (muPercent / 100))
+  const afterMuPerMtr = round2(subtotalPerMtr + muAmount)
+  const gst = n(gstPercent)
+  const gstAmount = gst > 0 ? round2(afterMuPerMtr * (gst / 100)) : 0
+  const finalCostPerMtr = gst > 0 ? round2(afterMuPerMtr + gstAmount) : afterMuPerMtr
+  return { yarnCostPerMtr, conversionCharge, subtotalPerMtr, afterMuPerMtr, gstAmount, finalCostPerMtr }
+}
+
+const jfg = chainFromYarnTotals(4713.86, 110, 56, 0.45, 5, 0)
+checks.push(['Jfg1872 yarn cost/mtr = 42.85', jfg.yarnCostPerMtr === 42.85])
+checks.push(['Jfg1872 weaving = 25.20', jfg.conversionCharge === 25.2])
+checks.push(['Jfg1872 subtotal = 68.05', jfg.subtotalPerMtr === 68.05])
+checks.push(['Jfg1872 after MU = 71.45', jfg.afterMuPerMtr === 71.45])
+checks.push(['GST 0% → amount 0', jfg.gstAmount === 0])
+checks.push(['GST 0% → final = after MU', jfg.finalCostPerMtr === jfg.afterMuPerMtr])
+
+const jfg5 = chainFromYarnTotals(4713.86, 110, 56, 0.45, 5, 5)
+checks.push(['GST 5% → amount 3.57', jfg5.gstAmount === 3.57])
+checks.push(['GST 5% → final 75.02', jfg5.finalCostPerMtr === 75.02])
+
+const jfg12 = chainFromYarnTotals(4713.86, 110, 56, 0.45, 5, 12)
+checks.push(['GST 12% → amount 8.57', jfg12.gstAmount === 8.57])
+checks.push(['GST 12% → final 80.02', jfg12.finalCostPerMtr === 80.02])
+
+// GST label helpers (mirror designWiseCosting.ts)
+function isGstApplied(gstPercent) {
+  return n(gstPercent) > 0
+}
+function finalCostLabel(gstPercent) {
+  return isGstApplied(gstPercent) ? 'Final Cost Including GST' : 'Final Cost — Excl. GST'
+}
+checks.push(['Label GST 0% excludes GST', finalCostLabel(0) === 'Final Cost — Excl. GST'])
+checks.push(['Label GST 5% includes GST', finalCostLabel(5) === 'Final Cost Including GST'])
+checks.push(['Label GST 12% includes GST', finalCostLabel(12) === 'Final Cost Including GST'])
+
+// GST toggle: 5 → 0
+const toggled = chainFromYarnTotals(4713.86, 110, 56, 0.45, 5, 0)
+checks.push(['GST 5→0: final drops to after MU', toggled.finalCostPerMtr === 71.45 && toggled.gstAmount === 0])
 
 // Div by zero guard
 const r0 = computeBuildup(warps, wefts, 0, 0.45, 0, 0)
