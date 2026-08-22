@@ -279,11 +279,11 @@ export const MAIN_MODULES: MainModule[] = [
     sub: 'overview',
     items: [
       { id: 'wy-overview', label: 'Overview', screen: 'warp-yarn', sub: 'overview', hint: 'Live beam / pipe KPIs' },
-      { id: 'wy-machines', label: 'Warp Yarn Stock', screen: 'warp-yarn', sub: 'machines', hint: 'M1–M6 + Others beams on loom' },
-      { id: 'wy-godown', label: 'Warehouse Filled Beams', screen: 'warp-yarn', sub: 'godown', hint: 'Godown filled stock' },
-      { id: 'wy-empty', label: 'Empty Pipe Stock', screen: 'warp-yarn', sub: 'empty', hint: 'Empty pipe inventory' },
-      { id: 'wy-warper', label: 'Warper / Job Worker', screen: 'warp-yarn', sub: 'warper', hint: 'Issue · return · KG/meter' },
-      { id: 'wy-reports', label: 'Warp Reports', screen: 'warp-yarn', sub: 'reports', hint: 'Transactions & history' },
+      { id: 'wy-machines', label: 'On Machines', screen: 'warp-yarn', sub: 'machines', hint: 'M1–M6 + Others beams on loom' },
+      { id: 'wy-godown', label: 'Godown – Filled Pipes', screen: 'warp-yarn', sub: 'godown', hint: 'Filled pipes in godown' },
+      { id: 'wy-empty', label: 'Empty Pipes', screen: 'warp-yarn', sub: 'empty', hint: 'Empty pipe inventory' },
+      { id: 'wy-warper', label: 'At Warper / Job Work', screen: 'warp-yarn', sub: 'warper', hint: 'Send · receive · KG/meter diff' },
+      { id: 'wy-reports', label: 'Transactions & Reports', screen: 'warp-yarn', sub: 'reports', hint: 'Movement history & stock reports' },
       { id: 'beam-remaining', label: 'Beam Remaining', screen: 'beam-remaining', hint: 'Beam meters left' },
       {
         id: 'legacy-beam',
@@ -301,13 +301,12 @@ export const MAIN_MODULES: MainModule[] = [
     hasHub: true,
     items: [
       { id: 'yarn-stock', label: 'Yarn Stock', screen: 'stock', sub: 'weft', hint: 'Opening stock & yarn item master' },
-      {
-        id: 'warp-yarn-link',
-        label: 'Warp Yarn Management',
-        screen: 'warp-yarn',
-        sub: 'overview',
-        hint: 'Open Warp Yarn Management module',
-      },
+      { id: 'wy-overview', label: 'Warp Yarn · Overview', screen: 'warp-yarn', sub: 'overview', hint: 'KPIs & quick actions' },
+      { id: 'wy-machines', label: 'Warp Yarn · On Machines', screen: 'warp-yarn', sub: 'machines', hint: 'M1–M6 beams on loom' },
+      { id: 'wy-godown', label: 'Warp Yarn · Godown – Filled', screen: 'warp-yarn', sub: 'godown', hint: 'Filled pipes in godown' },
+      { id: 'wy-empty', label: 'Warp Yarn · Empty Pipes', screen: 'warp-yarn', sub: 'empty', hint: 'Empty pipe inventory' },
+      { id: 'wy-warper', label: 'Warp Yarn · At Warper', screen: 'warp-yarn', sub: 'warper', hint: 'Job-work send & receive' },
+      { id: 'wy-reports', label: 'Warp Yarn · Transactions', screen: 'warp-yarn', sub: 'reports', hint: 'Movement history & reports' },
       {
         id: 'stock-reports',
         label: 'Stock Reports',
@@ -839,11 +838,11 @@ export function titleFor(screen: AppScreen, sub?: string, moduleId?: MainModuleI
   if (screen === 'warp-yarn') {
     const labels: Record<string, string> = {
       overview: 'Warp Yarn Management',
-      machines: 'Warp Yarn Stock Entry',
-      godown: 'Warehouse Filled Beams',
-      empty: 'Empty Pipe Stock',
-      warper: 'Warper / Job Worker',
-      reports: 'Warp Reports',
+      machines: 'On Machines',
+      godown: 'Godown – Filled Pipes',
+      empty: 'Empty Pipes',
+      warper: 'At Warper / Job Work',
+      reports: 'Transactions & Reports',
     }
     return labels[sub || 'overview'] || 'Warp Yarn Management'
   }
