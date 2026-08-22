@@ -7,6 +7,7 @@ import { monthStartISO } from '../../lib/attendanceMatrix'
 import {
   buildSalaryLedgerRow,
   formatINRExact,
+  formatUserError,
   pickLatestSalaryRate,
   todayISO,
   type SalaryLedgerRow,
@@ -32,6 +33,7 @@ export function SalaryUpToDatePanel({ workers, salaryRates, roles, payrollRates,
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loadedOnce, setLoadedOnce] = useState(false)
+  const [calcStats, setCalcStats] = useState<{ eligible: number; calculated: number } | null>(null)
 
   const fromDate = useMemo(() => monthStartISO(asOfDate.slice(0, 7)), [asOfDate])
   const activeWorkers = useMemo(() => workers.filter((w) => w.is_active), [workers])
@@ -90,6 +92,7 @@ export function SalaryUpToDatePanel({ workers, salaryRates, roles, payrollRates,
       }
 
       const ledger: SalaryLedgerRow[] = []
+      let calculated = 0
       for (const worker of activeWorkers) {
         try {
           const rate = pickLatestSalaryRate(salaryRates, worker.id, asOfDate)
@@ -106,15 +109,19 @@ export function SalaryUpToDatePanel({ workers, salaryRates, roles, payrollRates,
               payrollRates as never,
             ),
           )
+          calculated++
         } catch (rowErr) {
           console.warn('Salary Up To Date row skipped:', worker.full_name, rowErr)
         }
       }
       setRows(ledger)
+      setCalcStats({ eligible: activeWorkers.length, calculated })
       setLoadedOnce(true)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Load failed')
+      console.error('Salary Up To Date load failed:', e)
+      setError(formatUserError(e, 'Unable to load salary up to date data. Please retry.'))
       setRows([])
+      setCalcStats(null)
     } finally {
       setBusy(false)
     }
@@ -188,7 +195,27 @@ export function SalaryUpToDatePanel({ workers, salaryRates, roles, payrollRates,
         Current salary status for every employee based on attendance entered up to the selected date (month-to-date).
       </p>
 
-      {error ? <p className="form-error text-danger">{error}</p> : null}
+      {error ? (
+        <p className="form-error text-danger">
+          {error}{' '}
+          <button type="button" className="btn-ghost" onClick={() => void load()}>
+            Retry
+          </button>
+        </p>
+      ) : null}
+
+      {calcStats && calcStats.eligible > calcStats.calculated ? (
+        <p className="form-error text-danger">
+          Calculation incomplete: {calcStats.calculated} of {calcStats.eligible} employees calculated.{' '}
+          {calcStats.eligible - calcStats.calculated} could not be processed — check console for details.
+        </p>
+      ) : null}
+
+      {loadedOnce && calcStats && calcStats.eligible === calcStats.calculated && calcStats.eligible > 0 ? (
+        <p className="text-muted">
+          Complete: {calcStats.calculated} of {calcStats.eligible} eligible employees calculated.
+        </p>
+      ) : null}
 
       <div className="hr-toolbar">
         <label className="field">
@@ -229,7 +256,7 @@ export function SalaryUpToDatePanel({ workers, salaryRates, roles, payrollRates,
         </div>
       </div>
 
-      <div className="hr-table-wrap">
+      <div className="hr-table-wrap hr-force-table">
         <table className="hr-table">
           <thead>
             <tr>

@@ -126,4 +126,19 @@ const rates = [
 ]
 assert(pickLatestSalaryRate(rates, 'w1', '2026-08-22')?.daily_rate === 500)
 
+function formatUserError(e, fallback = 'Unable to load data. Please retry.') {
+  if (e == null) return fallback
+  if (typeof e === 'string') return e.trim() || fallback
+  if (e instanceof Error) return e.message?.trim() || fallback
+  if (typeof e === 'object') {
+    const msg = e.message
+    if (typeof msg === 'string' && msg.trim()) return msg.trim()
+    return fallback
+  }
+  return String(e) === '[object Object]' ? fallback : String(e)
+}
+assert(formatUserError({ message: 'permission denied' }) === 'permission denied')
+assert(formatUserError({ code: '42501' }) === 'Unable to load data. Please retry.')
+assert(formatUserError('[object Object]') === '[object Object]')
+
 console.log('hr-payroll-helpers-smoke: PASS')

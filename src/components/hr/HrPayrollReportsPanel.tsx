@@ -13,6 +13,7 @@ import {
   buildSalaryLedgerRow,
   formatINR,
   formatINRExact,
+  formatUserError,
   monthBounds,
   pickLatestSalaryRate,
   statusBadgeClass,
@@ -160,7 +161,8 @@ export function HrPayrollReportsPanel({
       })
       setLedgerRows(rows)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Load failed')
+      console.error('HR reports load failed:', e)
+      setError(formatUserError(e, 'Unable to load report data. Please retry.'))
     } finally {
       setBusy(false)
     }
@@ -411,10 +413,17 @@ export function HrPayrollReportsPanel({
         </button>
       </div>
 
-      {error ? <p className="form-error text-danger">{error}</p> : null}
+      {error ? (
+        <p className="form-error text-danger">
+          {error}{' '}
+          <button type="button" className="btn-ghost" onClick={() => void loadData()}>
+            Retry
+          </button>
+        </p>
+      ) : null}
 
       {reportKind === 'daily-attendance' ? (
-        <div className="hr-table-wrap">
+        <div className="hr-table-wrap hr-force-table">
           <table className="hr-table">
             <thead>
               <tr>
@@ -437,7 +446,7 @@ export function HrPayrollReportsPanel({
       ) : null}
 
       {reportKind === 'advance-salary' ? (
-        <div className="hr-table-wrap">
+        <div className="hr-table-wrap hr-force-table">
           <table className="hr-table">
             <thead>
               <tr>
@@ -466,7 +475,7 @@ export function HrPayrollReportsPanel({
       ) : null}
 
       {reportKind === 'department-payroll' ? (
-        <div className="hr-table-wrap">
+        <div className="hr-table-wrap hr-force-table">
           <table className="hr-table">
             <thead>
               <tr>
@@ -510,7 +519,7 @@ export function HrPayrollReportsPanel({
       ) : null}
 
       {reportKind === 'shift-attendance' ? (
-        <div className="hr-table-wrap">
+        <div className="hr-table-wrap hr-force-table">
           <table className="hr-table">
             <thead>
               <tr>
@@ -555,7 +564,7 @@ export function HrPayrollReportsPanel({
         reportKind === 'date-range-attendance' ||
         reportKind === 'monthly-attendance' ||
         reportKind === 'employee-attendance') ? (
-        <div className="hr-table-wrap hr-reports-table-wrap">
+        <div className="hr-table-wrap hr-force-table hr-reports-table-wrap">
           <table className="hr-table">
             <thead>
               <tr>
@@ -671,7 +680,7 @@ function EmployeeSalaryHistoryInline({
   return (
     <div className="form-stack">
       <h3 className="section-title">Daily salary history</h3>
-      <div className="hr-table-wrap">
+      <div className="hr-table-wrap hr-force-table">
         <table className="hr-table">
           <thead>
             <tr>
