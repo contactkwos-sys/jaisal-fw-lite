@@ -1,5 +1,5 @@
 /**
- * Date-range attendance matrix — fast P/A/HD/L/WO/H entry for JAISAL FW HR.
+ * Attendance — bulk detail table (default) + date-range matrix for fast P/A/HD/L/WO/H entry.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Attendance, Worker } from '../lib/database.types'
@@ -21,6 +21,9 @@ import {
 } from '../lib/attendanceMatrix'
 import { SHIFTS, todayISO } from '../lib/hrPayroll'
 import { supabase } from '../lib/supabase'
+import { AttendanceBulkTable } from '../components/hr/AttendanceBulkTable'
+
+type ViewMode = 'table' | 'matrix'
 
 type CellState = {
   attendanceId: string | null
@@ -47,9 +50,10 @@ const DEPT_SUGGESTIONS = [
 const DEFAULT_MATRIX_CODE: MatrixCode = 'A'
 
 export function AttendanceScreen() {
-  const [fromDate, setFromDate] = useState(() => resolveDateRangePreset('this-month').from)
+  const [viewMode, setViewMode] = useState<ViewMode>('table')
+  const [fromDate, setFromDate] = useState(() => todayISO())
   const [toDate, setToDate] = useState(() => todayISO())
-  const [rangePreset, setRangePreset] = useState<DateRangePreset>('this-month')
+  const [rangePreset, setRangePreset] = useState<DateRangePreset>('today')
   const [shiftFilter, setShiftFilter] = useState('All')
   const [deptFilter, setDeptFilter] = useState('All')
   const [search, setSearch] = useState('')
@@ -68,6 +72,18 @@ export function AttendanceScreen() {
   const [newDesig, setNewDesig] = useState('')
   const [focusCell, setFocusCell] = useState<{ workerId: string; date: string } | null>(null)
   const matrixRef = useRef<HTMLDivElement>(null)
+  const [deptOptions, setDeptOptions] = useState<string[]>([])
+
+  useEffect(() => {
+    void (async () => {
+      const { data } = await supabase.from('workers').select('department').eq('is_active', true)
+      const set = new Set<string>()
+      for (const w of (data as { department?: string | null }[]) ?? []) {
+        if (w.department) set.add(w.department)
+      }
+      setDeptOptions([...set].sort())
+    })()
+  }, [])
 
   useEffect(() => {
     void (async () => {
@@ -153,12 +169,12 @@ export function AttendanceScreen() {
   }, [fromDate, toDate])
 
   const departments = useMemo(() => {
-    const set = new Set<string>()
+    const set = new Set<string>(deptOptions)
     for (const r of rows) {
       if (r.worker.department) set.add(r.worker.department)
     }
     return [...set].sort()
-  }, [rows])
+  }, [rows, deptOptions])
 
   const visibleRows = useMemo(() => {
     return rows.filter((row) => {
@@ -307,6 +323,7 @@ export function AttendanceScreen() {
       setNewDesig('')
       setShowAdd(false)
       setMessage(`${full_name} added — load attendance to include in matrix`)
+      if (newDept.trim()) setDeptOptions((prev) => [...new Set([...prev, newDept.trim()])].sort())
       if (loaded) await loadAttendance()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Add worker failed')
@@ -320,11 +337,17 @@ export function AttendanceScreen() {
       employees: visibleRows.length,
       present: 0,
       absent: 0,
+      halfDay: 0,
+      leave: 0,
+      weeklyOff: 0,
       paidDays: 0,
     }
     for (const r of visibleRows) {
       t.present += r.summary.present
       t.absent += r.summary.absent
+      t.halfDay += r.summary.halfDay
+      t.leave += r.summary.leave
+      t.weeklyOff += r.summary.weeklyOff
       t.paidDays += r.summary.paidDays
     }
     t.paidDays = Math.round(t.paidDays * 100) / 100
@@ -336,7 +359,23 @@ export function AttendanceScreen() {
       <header className="screen-header">
         <div>
           <h1>Attendance</h1>
-          <p className="text-muted2">JAISAL FASHIONWEAV INDUSTRIES · Date-range matrix</p>
+          <p className="text-muted2">JAISAL FASHIONWEAV INDUSTRIES · Bulk table &amp; date-range matrix</p>
+        </div>
+        <div className="hr-att-view-toggle">
+          <button
+            type="button"
+            className={viewMode === 'table' ? 'hr-att-preset active' : 'hr-att-preset'}
+            onClick={() => setViewMode('table')}
+          >
+            Bulk Table
+          </button>
+          <button
+            type="button"
+            className={viewMode === 'matrix' ? 'hr-att-preset active' : 'hr-att-preset'}
+            onClick={() => setViewMode('matrix')}
+          >
+            Range Matrix
+          </button>
         </div>
         <button type="button" className="btn-ghost" onClick={() => setShowAdd((v) => !v)}>
           {showAdd ? 'Cancel' : '+ Add Employee'}
@@ -423,25 +462,29 @@ export function AttendanceScreen() {
             ))}
           </select>
         </label>
-        <label className="field">
-          <span className="text-muted">Default cell</span>
-          <select value={defaultCode} onChange={(e) => setDefaultCode(e.target.value as MatrixCode)}>
-            {(['P', 'A', 'HD', 'L', 'WO', 'H'] as const).map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
-        </label>
-        <div className="hr-att-actions">
-          <button type="button" className="primary-save" disabled={busy} onClick={() => void loadAttendance()}>
-            Load Attendance
-          </button>
-          <button type="button" className="btn-ghost" disabled={busy || !loaded} onClick={() => void handleSave()}>
-            Save Changes
-          </button>
-          <button type="button" className="btn-ghost" disabled={busy} onClick={handleClear}>
-            Clear
-          </button>
-        </div>
+        {viewMode === 'matrix' ? (
+          <>
+            <label className="field">
+              <span className="text-muted">Default cell</span>
+              <select value={defaultCode} onChange={(e) => setDefaultCode(e.target.value as MatrixCode)}>
+                {(['P', 'A', 'HD', 'L', 'WO', 'H'] as const).map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </label>
+            <div className="hr-att-actions">
+              <button type="button" className="primary-save" disabled={busy} onClick={() => void loadAttendance()}>
+                Load Attendance
+              </button>
+              <button type="button" className="btn-ghost" disabled={busy || !loaded} onClick={() => void handleSave()}>
+                Save Changes
+              </button>
+              <button type="button" className="btn-ghost" disabled={busy} onClick={handleClear}>
+                Clear
+              </button>
+            </div>
+          </>
+        ) : null}
       </div>
 
       {showAdd ? (
@@ -475,17 +518,33 @@ export function AttendanceScreen() {
         </form>
       ) : null}
 
-      {loaded ? (
+      {viewMode === 'table' ? (
+        <AttendanceBulkTable
+          fromDate={fromDate}
+          toDate={toDate}
+          shiftFilter={shiftFilter}
+          deptFilter={deptFilter}
+          search={search}
+          statusFilter={statusFilter}
+          onError={setError}
+          onMessage={setMessage}
+        />
+      ) : null}
+
+      {viewMode === 'matrix' && loaded ? (
         <div className="hr-att-summary-bar">
           <span>Employees: <strong className="num">{companyTotals.employees}</strong></span>
           <span>Present days: <strong className="num">{companyTotals.present}</strong></span>
           <span>Absent days: <strong className="num">{companyTotals.absent}</strong></span>
+          <span>Half Day: <strong className="num">{companyTotals.halfDay}</strong></span>
+          <span>Leave: <strong className="num">{companyTotals.leave}</strong></span>
+          <span>Weekly Off: <strong className="num">{companyTotals.weeklyOff}</strong></span>
           <span>Total paid days: <strong className="num">{companyTotals.paidDays}</strong></span>
           <span className="text-muted2">Tap cell or press P/A/HD/L/WO/H · arrows to navigate</span>
         </div>
       ) : null}
 
-      {loaded ? (
+      {viewMode === 'matrix' && loaded ? (
         <div className="hr-att-matrix-wrap" ref={matrixRef}>
           <table className="hr-att-matrix">
             <thead>
@@ -546,12 +605,12 @@ export function AttendanceScreen() {
           </table>
           {!visibleRows.length ? <p className="text-muted">No employees match filters.</p> : null}
         </div>
-      ) : (
+      ) : viewMode === 'matrix' ? (
         <p className="text-muted">Select date range and click Load Attendance.</p>
-      )}
+      ) : null}
 
-      {/* Mobile cards */}
-      {loaded ? (
+      {/* Mobile cards — matrix only */}
+      {viewMode === 'matrix' && loaded ? (
         <div className="hr-att-mobile-cards">
           {visibleRows.map((row) => (
             <article key={`m-${row.worker.id}`} className="hr-att-mobile-card surface">
