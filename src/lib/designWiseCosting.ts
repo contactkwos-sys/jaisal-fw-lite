@@ -84,6 +84,16 @@ export function rowAmount(weightKg: number, ratePerKg: number): number {
   return weightKg * ratePerKg
 }
 
+export type RateRowMeta = {
+  rate_source?: 'rate_master' | 'manual' | ''
+  rate_master_id?: string
+  rate_basic?: number
+  rate_gst_percent?: number
+  rate_gst_amount?: number
+  rate_freight?: number
+  rate_effective_from?: string
+}
+
 export type WarpDraft = {
   key: string
   sr_no: number
@@ -92,7 +102,7 @@ export type WarpDraft = {
   tar_ends: string
   length_mtr: string
   rate_per_kg: string
-}
+} & RateRowMeta
 
 export type WeftDraft = {
   key: string
@@ -103,7 +113,7 @@ export type WeftDraft = {
   width: string
   length_mtr: string
   rate_per_kg: string
-}
+} & RateRowMeta
 
 export type CostingBuildup = {
   totalWarpWeightKg: number

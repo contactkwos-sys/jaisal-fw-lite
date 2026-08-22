@@ -42,6 +42,7 @@ export type AppScreen =
   | 'dto-promotion'
   | 'dto-followup'
   | 'dto-reports'
+  | 'rate-master'
   | 'hr-payroll'
   | 'program-dispatch'
   | 'machine-wise-production'
@@ -128,6 +129,12 @@ export const MAIN_MODULES: MainModule[] = [
         label: 'Design-wise Costing',
         screen: 'design-wise-costing',
         hint: 'Canonical Design-wise Costing engine (CEO)',
+      },
+      {
+        id: 'rate-master',
+        label: 'Rate Master',
+        screen: 'rate-master',
+        hint: 'Date-wise warp & weft yarn rates',
       },
       { id: 'sample-job', label: 'Sample Job Card', screen: 'dto-sample-job', hint: 'Issue sample cards from DESIGN' },
       { id: 'sample-tracking', label: 'Sample Tracking', screen: 'dto-tracking', hint: 'Produce · receive · approve matching' },
@@ -667,6 +674,7 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   'sample-register': 'Sample Register (Archive)',
   'beam-remaining': 'Beam Remaining',
   'design-wise-costing': 'Design-wise Costing',
+  'rate-master': 'Rate Master',
   'design-catalog': 'Design Catalog',
   crm: 'CRM',
   'cash-book': 'Cash Book',
@@ -739,7 +747,8 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
     screen === 'dto-order-status' ||
     screen === 'dto-promotion' ||
     screen === 'dto-followup' ||
-    screen === 'dto-reports'
+    screen === 'dto-reports' ||
+    screen === 'rate-master'
   ) {
     return 'design-to-order'
   }

@@ -221,7 +221,7 @@ export function canAccessSub(roleName: string, moduleId: MainModuleId, subId: st
   if (n === 'manager' && moduleId === 'dashboard') return false
   // Design-wise Costing is CEO / MD / Owner / Manager only
   if (
-    (subId === 'din-costing' || subId === 'design-costing') &&
+    (subId === 'din-costing' || subId === 'design-costing' || subId === 'rate-master') &&
     !(n === 'manager' || n.includes('ceo') || n === 'md' || n.includes('director') || n === 'owner')
   ) {
     return false

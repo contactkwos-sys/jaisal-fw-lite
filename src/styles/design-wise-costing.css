@@ -1,5 +1,13 @@
 /* Design Wise Costing — JAISAL FW light ERP theme */
 
+.dwc-rate-meta {
+  display: block;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  margin-top: 0.25rem;
+  max-width: 14rem;
+}
+
 .dwc-screen {
   display: grid;
   gap: 1rem;

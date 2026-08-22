@@ -22,6 +22,13 @@ import {
   type WeftDraft,
 } from '../lib/designWiseCosting'
 import { syncDinCostingFromLatest } from '../lib/designToOrder'
+import {
+  fetchAllRates,
+  formatDisplayDate as formatRateDate,
+  gstLabel,
+  lookupRate,
+  type RateMasterRow,
+} from '../lib/rateMaster'
 
 type Props = { initialDin?: string }
 
@@ -168,6 +175,73 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
   const [historyError, setHistoryError] = useState<string | null>(null)
   /** After "Save As New", skip one DIN blur auto-load so the form is not overwritten. */
   const skipDinAutoloadRef = useRef(false)
+  const [masterRates, setMasterRates] = useState<RateMasterRow[]>([])
+
+  useEffect(() => {
+    void fetchAllRates()
+      .then(setMasterRates)
+      .catch(() => setMasterRates([]))
+  }, [])
+
+  const applyWarpRateFromMaster = useCallback(
+    (row: WarpDraft): WarpDraft => {
+      if (!row.yarn_name.trim() || !costingDate) return row
+      const found = lookupRate(masterRates, 'warp', row.yarn_name, costingDate, { denier: row.denier })
+      if (!found) return row
+      return {
+        ...row,
+        rate_per_kg: String(found.calc.effectiveRate),
+        rate_source: 'rate_master',
+        rate_master_id: found.row.id,
+        rate_basic: found.calc.basicRate,
+        rate_gst_percent: found.calc.gstPercent,
+        rate_gst_amount: found.calc.gstAmount,
+        rate_freight: found.calc.freightPerKg,
+        rate_effective_from: found.row.effective_from,
+      }
+    },
+    [masterRates, costingDate],
+  )
+
+  const applyWeftRateFromMaster = useCallback(
+    (row: WeftDraft): WeftDraft => {
+      if (!row.weft_name.trim() || !costingDate) return row
+      const found = lookupRate(masterRates, 'weft', row.weft_name, costingDate, { denier: row.denier })
+      if (!found) return row
+      return {
+        ...row,
+        rate_per_kg: String(found.calc.effectiveRate),
+        rate_source: 'rate_master',
+        rate_master_id: found.row.id,
+        rate_basic: found.calc.basicRate,
+        rate_gst_percent: found.calc.gstPercent,
+        rate_gst_amount: found.calc.gstAmount,
+        rate_freight: found.calc.freightPerKg,
+        rate_effective_from: found.row.effective_from,
+      }
+    },
+    [masterRates, costingDate],
+  )
+
+  useEffect(() => {
+    if (!masterRates.length || !costingDate) return
+    setWarps((prev) =>
+      prev.map((row) => {
+        if (row.rate_source === 'manual') return row
+        if (!row.yarn_name.trim()) return row
+        if (row.rate_source === 'rate_master' || !row.rate_per_kg) return applyWarpRateFromMaster(row)
+        return row
+      }),
+    )
+    setWefts((prev) =>
+      prev.map((row) => {
+        if (row.rate_source === 'manual') return row
+        if (!row.weft_name.trim()) return row
+        if (row.rate_source === 'rate_master' || !row.rate_per_kg) return applyWeftRateFromMaster(row)
+        return row
+      }),
+    )
+  }, [costingDate, masterRates, applyWarpRateFromMaster, applyWeftRateFromMaster])
 
   useEffect(() => {
     void (async () => {
@@ -311,6 +385,8 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
               tar_ends: r.tar_ends != null ? String(r.tar_ends) : '',
               length_mtr: r.length_mtr != null ? String(r.length_mtr) : '',
               rate_per_kg: r.rate_per_kg != null ? String(r.rate_per_kg) : '',
+              rate_source: (r.rate_source as WarpDraft['rate_source']) || '',
+              rate_master_id: r.rate_master_id || undefined,
             }))
           : [emptyWarp(1)]
 
@@ -325,6 +401,8 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
               width: r.width != null ? String(r.width) : '',
               length_mtr: r.length_mtr != null ? String(r.length_mtr) : '',
               rate_per_kg: r.rate_per_kg != null ? String(r.rate_per_kg) : '',
+              rate_source: (r.rate_source as WeftDraft['rate_source']) || '',
+              rate_master_id: r.rate_master_id || undefined,
             }))
           : [emptyWeft(1)]
 
@@ -592,6 +670,8 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
         tar_ends: n(row.tar_ends) || null,
         length_mtr: n(row.length_mtr) || null,
         rate_per_kg: n(row.rate_per_kg) || null,
+        rate_source: row.rate_source || null,
+        rate_master_id: row.rate_master_id || null,
       }))
       const weftPayload = wefts.map((row, i) => ({
         costing_id: costingId,
@@ -602,6 +682,8 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
         width: n(row.width) || null,
         length_mtr: n(row.length_mtr) || null,
         rate_per_kg: n(row.rate_per_kg) || null,
+        rate_source: row.rate_source || null,
+        rate_master_id: row.rate_master_id || null,
       }))
 
       if (warpPayload.length) {
@@ -863,6 +945,11 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
                             prev.map((r) => (r.key === row.key ? { ...r, yarn_name: e.target.value } : r)),
                           )
                         }
+                        onBlur={() =>
+                          setWarps((prev) =>
+                            prev.map((r) => (r.key === row.key ? applyWarpRateFromMaster(r) : r)),
+                          )
+                        }
                       />
                     </td>
                     <td>
@@ -923,11 +1010,27 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
                         onChange={(e) =>
                           setWarps((prev) =>
                             prev.map((r) =>
-                              r.key === row.key ? { ...r, rate_per_kg: e.target.value } : r,
+                              r.key === row.key
+                                ? {
+                                    ...r,
+                                    rate_per_kg: e.target.value,
+                                    rate_source: 'manual',
+                                    rate_master_id: undefined,
+                                  }
+                                : r,
                             ),
                           )
                         }
                       />
+                      {row.rate_source === 'rate_master' && row.rate_basic != null ? (
+                        <small className="dwc-rate-meta text-muted">
+                          {fmtInr(row.rate_basic)}/kg · {gstLabel(row.rate_gst_percent ?? 0)}{' '}
+                          {fmtInr(row.rate_gst_amount ?? 0)} · Freight {fmtInr(row.rate_freight ?? 0)} ·{' '}
+                          Rate Master · {formatRateDate(row.rate_effective_from || '')}
+                        </small>
+                      ) : row.rate_source === 'manual' ? (
+                        <small className="dwc-rate-meta text-muted">Manual Override</small>
+                      ) : null}
                     </td>
                     <td>
                       <input className="num dwc-auto" value={fmtMoney(calc.amount)} readOnly />
@@ -998,6 +1101,11 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
                         onChange={(e) =>
                           setWefts((prev) =>
                             prev.map((r) => (r.key === row.key ? { ...r, weft_name: e.target.value } : r)),
+                          )
+                        }
+                        onBlur={() =>
+                          setWefts((prev) =>
+                            prev.map((r) => (r.key === row.key ? applyWeftRateFromMaster(r) : r)),
                           )
                         }
                       />
@@ -1074,11 +1182,27 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
                         onChange={(e) =>
                           setWefts((prev) =>
                             prev.map((r) =>
-                              r.key === row.key ? { ...r, rate_per_kg: e.target.value } : r,
+                              r.key === row.key
+                                ? {
+                                    ...r,
+                                    rate_per_kg: e.target.value,
+                                    rate_source: 'manual',
+                                    rate_master_id: undefined,
+                                  }
+                                : r,
                             ),
                           )
                         }
                       />
+                      {row.rate_source === 'rate_master' && row.rate_basic != null ? (
+                        <small className="dwc-rate-meta text-muted">
+                          {fmtInr(row.rate_basic)}/kg · {gstLabel(row.rate_gst_percent ?? 0)}{' '}
+                          {fmtInr(row.rate_gst_amount ?? 0)} · Freight {fmtInr(row.rate_freight ?? 0)} ·{' '}
+                          Rate Master · {formatRateDate(row.rate_effective_from || '')}
+                        </small>
+                      ) : row.rate_source === 'manual' ? (
+                        <small className="dwc-rate-meta text-muted">Manual Override</small>
+                      ) : null}
                     </td>
                     <td>
                       <input className="num dwc-auto" value={fmtMoney(calc.amount)} readOnly />

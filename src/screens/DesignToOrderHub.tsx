@@ -74,6 +74,11 @@ export function DesignToOrderHub({ onNavigate }: Props) {
         }),
     },
     {
+      id: 'rate-master',
+      label: 'Rate Master',
+      onClick: () => onNavigate({ screen: 'rate-master', module: 'design-to-order' }),
+    },
+    {
       id: 'sample',
       label: 'Sample Job Card',
       onClick: () => onNavigate({ screen: 'dto-sample-job', filter: detail?.id, module: 'design-to-order' }),
