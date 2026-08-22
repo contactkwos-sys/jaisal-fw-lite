@@ -24,6 +24,7 @@ export const WARP_TXN_TYPES = [
   'Receive from Warper',
   'Issue to Machine',
   'Return from Machine',
+  'Machine Consumption',
   'Move to Godown',
   'Empty Pipe',
   'Adjustment',

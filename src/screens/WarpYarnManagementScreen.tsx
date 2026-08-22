@@ -4,7 +4,9 @@
  */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { SubTabs } from '../components/SubTabs'
+import { WarpBeamStockEntry } from '../components/warp/WarpBeamStockEntry'
 import { useAuth } from '../lib/auth'
+import { createWarperGatePass, loadGatePasses, printGatePass, type WarpGatePass } from '../lib/warpBeamStock'
 import { MACHINES } from '../lib/database.types'
 import type { NavTarget } from '../lib/nav'
 import { supabase } from '../lib/supabase'
@@ -94,6 +96,7 @@ export function WarpYarnManagementScreen({
   const [historyPipe, setHistoryPipe] = useState<WarpPipe | null>(null)
   const [reportKind, setReportKind] = useState<ReportKind>('current')
   const [tablesReady, setTablesReady] = useState(true)
+  const [gatePasses, setGatePasses] = useState<WarpGatePass[]>([])
 
   useEffect(() => {
     if (initialTab) setTab(initialTab)
@@ -111,6 +114,8 @@ export function WarpYarnManagementScreen({
       setTxns(data.txns)
       setJobs(data.jobs)
       setPurchases(data.purchases)
+      const gps = await loadGatePasses(supabase).catch(() => [] as WarpGatePass[])
+      setGatePasses(gps)
       setTablesReady(true)
       setError(null)
     } catch (e) {
@@ -139,6 +144,21 @@ export function WarpYarnManagementScreen({
     return Array.from(set).sort()
   }, [pipes])
 
+  const pipeNoOptions = useMemo(() => {
+    const set = new Set<string>()
+    pipes.forEach((p) => {
+      if (p.pipe_no) set.add(p.pipe_no)
+    })
+    return Array.from(set).sort()
+  }, [pipes])
+
+  const todayConsumption = useMemo(() => {
+    const today = todayISO()
+    return txns
+      .filter((t) => t.txn_type === 'Machine Consumption' && t.txn_date === today)
+      .reduce((s, t) => s + Number(t.meter || 0), 0)
+  }, [txns])
+
   const onMachine = useMemo(
     () => filterPipes(pipes.filter((p) => p.status === 'ON_MACHINE'), filters),
     [pipes, filters],
@@ -159,7 +179,8 @@ export function WarpYarnManagementScreen({
   const filteredTxns = useMemo(() => filterTxns(txns, filters), [txns, filters])
 
   const machineRows = useMemo(() => {
-    return MACHINES.map((m) => {
+    const allMachines = [...MACHINES, 'OTR'] as const
+    return allMachines.map((m) => {
       const pipe = onMachine.find((p) => p.machine_no === m) || null
       return { machine: m, pipe }
     })
@@ -329,7 +350,7 @@ export function WarpYarnManagementScreen({
         status: 'SENT',
         entered_by: userName,
       }
-      const { error: jErr } = await supabase.from('warp_warper_jobs').insert(job)
+      const { data: jobRow, error: jErr } = await supabase.from('warp_warper_jobs').insert(job).select('id').single()
       if (jErr) throw jErr
 
       const { error: uErr } = await supabase
@@ -381,7 +402,24 @@ export function WarpYarnManagementScreen({
         status: 'SENT',
         remarks: job.remarks,
       })
-      setMessage(`Pipe ${pipe.pipe_no} sent to ${warper}`)
+
+      const gp = await createWarperGatePass(supabase, {
+        party_name: warper,
+        pipe_no: pipe.pipe_no,
+        item_yarn: job.yarn_quality,
+        single_meter: meter,
+        double_meter: expectedTotal,
+        pass_date: job.sent_date,
+        expected_return_date: form.expected_return_date || null,
+        vehicle_no: form.vehicle_no?.trim() || null,
+        driver_name: form.driver_name?.trim() || null,
+        remarks: form.remarks.trim() || null,
+        issued_by: userName,
+        warper_job_id: jobRow?.id || null,
+        ref_id: jobRow?.id || null,
+      })
+
+      setMessage(`Pipe ${pipe.pipe_no} sent to ${warper} · Gate Pass ${gp.gate_pass_no}`)
       setAction(null)
     })
   }
@@ -467,6 +505,13 @@ export function WarpYarnManagementScreen({
         status,
         remarks: `KG diff ${kgDiff} · Meter diff ${meterDiff}`,
       })
+
+      try {
+        await supabase.from('warp_gate_passes').update({ status: 'Returned' }).eq('warper_job_id', job.id)
+      } catch {
+        /* gate pass table may not exist yet */
+      }
+
       setMessage(`Received ${job.pipe_no} · ${status}`)
       setAction(null)
     })
@@ -788,6 +833,7 @@ export function WarpYarnManagementScreen({
             <KpiCard label="Total Available Meter" value={formatNum(kpis.totalAvailableMeter)} tone="info" />
             <KpiCard label="Total Used Meter" value={formatNum(kpis.totalUsedMeter)} tone="warn" />
             <KpiCard label="Total Balance Meter" value={formatNum(kpis.totalBalanceMeter)} tone="ok" />
+            <KpiCard label="Today's Consumption" value={formatNum(todayConsumption)} tone="warn" />
           </div>
           <div className="wym-overview-grid">
             <article className="surface wym-panel">
@@ -863,48 +909,55 @@ export function WarpYarnManagementScreen({
 
       {tab === 'machines' ? (
         <section className="wym-section">
-          <FilterBar showWarper={false} />
-          <div className="wym-table-wrap surface">
-            <table className="wym-table">
-              <thead>
-                <tr>
-                  <th>Machine No.</th>
-                  <th>Pipe No.</th>
-                  <th>Yarn Quality</th>
-                  <th>Original Meter</th>
-                  <th>Multiplier</th>
-                  <th>Total Meter</th>
-                  <th>Used Meter</th>
-                  <th>Balance Meter</th>
-                  <th>Weight KG</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {machineRows.map(({ machine, pipe }) => (
-                  <tr key={machine} className={pipe ? 'wym-row-active' : undefined}>
-                    <td>
-                      <strong>{machine}</strong>
-                    </td>
-                    <td>{pipe ? <PipeLink pipe={pipe} /> : '—'}</td>
-                    <td>{pipe?.yarn_quality || '—'}</td>
-                    <td className="num">{pipe ? formatNum(pipe.meter) : '—'}</td>
-                    <td className="num">{pipe ? formatNum(pipe.multiplier) : '—'}</td>
-                    <td className="num">{pipe ? formatNum(pipe.total_meter) : '—'}</td>
-                    <td className="num">{pipe ? formatNum(pipe.used_meter) : '—'}</td>
-                    <td className="num">{pipe ? formatNum(pipe.balance_meter) : '—'}</td>
-                    <td className="num">{pipe ? formatNum(pipe.weight_kg, 2) : '—'}</td>
-                    <td>
-                      {pipe ? (
-                        <span className={statusBadgeClass(pipe.status)}>{statusLabel(pipe.status)}</span>
-                      ) : (
-                        <span className="wym-badge">Idle</span>
-                      )}
-                    </td>
+          <WarpBeamStockEntry
+            pipeOptions={pipeNoOptions}
+            tablesReady={tablesReady}
+            onSaved={() => void reload()}
+          />
+          <div className="wbs-machine-status surface">
+            <h3 className="section-title">Current Machine Stock</h3>
+            <div className="wym-table-wrap">
+              <table className="wym-table">
+                <thead>
+                  <tr>
+                    <th>Machine No.</th>
+                    <th>Pipe No.</th>
+                    <th>Yarn Quality</th>
+                    <th>Original Meter</th>
+                    <th>Multiplier</th>
+                    <th>Total Meter</th>
+                    <th>Used Meter</th>
+                    <th>Balance Meter</th>
+                    <th>Weight KG</th>
+                    <th>Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {machineRows.map(({ machine, pipe }) => (
+                    <tr key={machine} className={pipe ? 'wym-row-active' : undefined}>
+                      <td>
+                        <strong>{machine}</strong>
+                      </td>
+                      <td>{pipe ? <PipeLink pipe={pipe} /> : '—'}</td>
+                      <td>{pipe?.yarn_quality || '—'}</td>
+                      <td className="num">{pipe ? formatNum(pipe.meter) : '—'}</td>
+                      <td className="num">{pipe ? formatNum(pipe.multiplier) : '—'}</td>
+                      <td className="num">{pipe ? formatNum(pipe.total_meter) : '—'}</td>
+                      <td className="num">{pipe ? formatNum(pipe.used_meter) : '—'}</td>
+                      <td className="num">{pipe ? formatNum(pipe.balance_meter) : '—'}</td>
+                      <td className="num">{pipe ? formatNum(pipe.weight_kg, 2) : '—'}</td>
+                      <td>
+                        {pipe ? (
+                          <span className={statusBadgeClass(pipe.status)}>{statusLabel(pipe.status)}</span>
+                        ) : (
+                          <span className="wym-badge">Idle</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
       ) : null}
@@ -1004,6 +1057,49 @@ export function WarpYarnManagementScreen({
       {tab === 'warper' ? (
         <section className="wym-section">
           <FilterBar showMachine={false} />
+          {gatePasses.length ? (
+            <div className="wym-table-wrap surface wbs-gate-passes">
+              <h3 className="section-title">Gate Passes</h3>
+              <table className="wym-table">
+                <thead>
+                  <tr>
+                    <th>GP No.</th>
+                    <th>Date</th>
+                    <th>Party</th>
+                    <th>Pipe No.</th>
+                    <th>Item / Yarn</th>
+                    <th>Single M</th>
+                    <th>Double M</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {gatePasses.slice(0, 20).map((gp) => (
+                    <tr key={gp.id}>
+                      <td>
+                        <strong>{gp.gate_pass_no}</strong>
+                      </td>
+                      <td>{gp.pass_date}</td>
+                      <td>{gp.party_name}</td>
+                      <td>{gp.pipe_no}</td>
+                      <td>{gp.item_yarn || '—'}</td>
+                      <td className="num">{formatNum(gp.single_meter)}</td>
+                      <td className="num">{formatNum(gp.double_meter)}</td>
+                      <td>
+                        <span className={statusBadgeClass(gp.status)}>{gp.status}</span>
+                      </td>
+                      <td>
+                        <button type="button" className="btn-ghost btn-sm" onClick={() => printGatePass(gp)}>
+                          Print
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
           <div className="wym-table-wrap surface">
             <table className="wym-table">
               <thead>
@@ -1779,6 +1875,9 @@ type SendForm = {
   multiplier: string
   challan_no: string
   remarks: string
+  expected_return_date: string
+  vehicle_no: string
+  driver_name: string
 }
 
 function SendModal({
@@ -1803,6 +1902,9 @@ function SendModal({
     multiplier: String(DEFAULT_MULTIPLIER),
     challan_no: '',
     remarks: '',
+    expected_return_date: '',
+    vehicle_no: '',
+    driver_name: '',
   })
   const total = calcTotalMeter(Number(form.expected_meter) || 0, Number(form.multiplier) || 0)
 
@@ -1898,6 +2000,22 @@ function SendModal({
           <label className="field">
             <span>Challan No.</span>
             <input value={form.challan_no} onChange={(e) => setForm({ ...form, challan_no: e.target.value })} />
+          </label>
+          <label className="field">
+            <span>Expected Return Date</span>
+            <input
+              type="date"
+              value={form.expected_return_date}
+              onChange={(e) => setForm({ ...form, expected_return_date: e.target.value })}
+            />
+          </label>
+          <label className="field">
+            <span>Vehicle No.</span>
+            <input value={form.vehicle_no} onChange={(e) => setForm({ ...form, vehicle_no: e.target.value })} />
+          </label>
+          <label className="field">
+            <span>Driver Name</span>
+            <input value={form.driver_name} onChange={(e) => setForm({ ...form, driver_name: e.target.value })} />
           </label>
           <label className="field">
             <span>Remarks</span>

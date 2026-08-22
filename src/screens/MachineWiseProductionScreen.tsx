@@ -41,6 +41,7 @@ import { maybeCompleteProgramFromProduction } from '../lib/programs'
 import { printReport, printWeftYarnIssueSlip } from '../lib/printDocs'
 import { shareWhatsApp, shareWhatsAppBusiness } from '../lib/share'
 import { supabase } from '../lib/supabase'
+import { deductWarpBeamConsumption } from '../lib/warpBeamStock'
 
 type TabId = 'weft' | 'entry' | 'report'
 type ReportMode = 'production' | 'weft'
@@ -480,6 +481,7 @@ export function MachineWiseProductionScreen({ initialTab }: { initialTab?: strin
         apply: async () => {
           const { error: iErr } = await supabase.from('production_entries').insert(payload)
           if (iErr) throw iErr
+          await deductWarpBeamConsumption(supabase, machine, date, meters)
           await maybeCompleteProgramFromProduction(programId)
           await supabase
             .from('programs')
