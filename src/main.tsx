@@ -16,6 +16,7 @@ import './styles/security-inventory.css'
 import './styles/machine-maintenance.css'
 import './styles/machine-wise-production.css'
 import './styles/ceo-pin-management.css'
+import './styles/order-entry.css'
 
 import App from './App.tsx'
 

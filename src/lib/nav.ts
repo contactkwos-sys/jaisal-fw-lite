@@ -49,6 +49,7 @@ export type AppScreen =
   | 'module-hub'
   | 'settings-hub'
   | 'ceo-pin-management'
+  | 'order-entry'
   | 'placeholder'
 
 export type MainModuleId =
@@ -395,6 +396,13 @@ export const MAIN_MODULES: MainModule[] = [
     hasHub: true,
     items: [
       {
+        id: 'order-entry',
+        label: 'Order Entry',
+        screen: 'order-entry',
+        sub: 'warp',
+        hint: 'Warp · Weft · Material · Repair orders + WhatsApp',
+      },
+      {
         id: 'orders-pending',
         label: 'Internal Pending',
         screen: 'orders-pending',
@@ -656,6 +664,7 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   'orders-pending': 'Internal Pending',
   'dto-hub': 'Design to Order',
   'ceo-pin-management': 'CEO PIN Management',
+  'order-entry': 'Order Entry',
   'dto-intake': 'DESIGN Intake',
   'dto-sample-job': 'Sample Job Card',
   'dto-tracking': 'Sample Tracking',
@@ -725,6 +734,7 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
   if (screen === 'cash-book') return 'cash-book'
   if (
     screen === 'orders' ||
+    screen === 'order-entry' ||
     screen === 'orders-pending' ||
     screen === 'programs' ||
     screen === 'design' ||
@@ -816,6 +826,19 @@ export function titleFor(screen: AppScreen, sub?: string, moduleId?: MainModuleI
       reports: 'Warp Reports',
     }
     return labels[sub || 'overview'] || 'Warp Yarn Management'
+  }
+  if (screen === 'order-entry') {
+    const labels: Record<string, string> = {
+      warp: 'Warp Yarn Order',
+      weft: 'Weft Yarn Order',
+      material: 'Maintenance Material Order',
+      repair: 'Maintenance Repair Order',
+      list: 'Order List',
+      history: 'Order History',
+      delivery: 'Delivery & Follow-up',
+      reports: 'Order Reports',
+    }
+    return labels[sub || 'warp'] || 'Order Entry'
   }
   if (screen === 'maintenance') {
     const labels: Record<string, string> = {

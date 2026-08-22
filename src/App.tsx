@@ -57,6 +57,7 @@ import { MachineWiseProductionScreen } from './screens/MachineWiseProductionScre
 import { SecurityInventoryScreen, type SiSub } from './screens/SecurityInventoryScreen'
 import { ItemMasterScreen } from './screens/ItemMasterScreen'
 import { CeoPinManagementScreen } from './screens/CeoPinManagementScreen'
+import { OrderEntryScreen } from './screens/OrderEntryScreen'
 import { ModulePinGate } from './components/ModulePinGate'
 import { isModuleUnlocked } from './lib/ceoPinManagement'
 
@@ -230,6 +231,9 @@ function AuthenticatedApp() {
       {tab === 'maint-material' ? <MaintenanceMaterialScreen /> : null}
       {tab === 'loan-tracker' ? <LoanTrackerScreen /> : null}
       {tab === 'geb-readings' ? <GebReadingScreen /> : null}
+      {tab === 'order-entry' ? (
+        <OrderEntryScreen initialTab={(sub as 'warp' | 'weft' | 'material' | 'repair' | 'list' | 'history' | 'delivery' | 'reports') || 'warp'} />
+      ) : null}
       {tab === 'orders-pending' ? <OrdersPendingScreen /> : null}
       {tab === 'program-dispatch' ? (
         <ProgramDispatchScreen initialSub={sub || 'pto'} onNavigate={go} />
