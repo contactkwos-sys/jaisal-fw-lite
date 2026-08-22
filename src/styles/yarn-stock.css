@@ -333,17 +333,23 @@
   }
   .yarn-card-list {
     display: grid;
+    padding-bottom: 4.5rem;
   }
   .yarn-sticky-add {
     display: block;
-    position: sticky;
-    bottom: 4.5rem;
-    z-index: 5;
-    margin-top: 0.5rem;
+    position: fixed;
+    left: 0.75rem;
+    right: 0.75rem;
+    bottom: 4.25rem;
+    z-index: 20;
+    margin-top: 0;
   }
   .yarn-sticky-add button {
     width: 100%;
     box-shadow: var(--shadow-md);
+  }
+  .yarn-toolbar .btn-primary {
+    display: none;
   }
 }
 
