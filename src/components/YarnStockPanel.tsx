@@ -6,7 +6,9 @@ import { supabase } from '../lib/supabase'
 import {
   EMPTY_YARN_FILTERS,
   EMPTY_YARN_FORM,
+  clearEntryFields,
   filterYarnRows,
+  findDuplicateYarn,
   formFromYarn,
   formatInr,
   formatKg,
@@ -16,9 +18,10 @@ import {
   loadYarnLedger,
   masterPayloadFromForm,
   nextYarnTxnNo,
+  type YarnFieldErrors,
   type YarnFilters,
   type YarnFormValues,
-  validateYarnForm,
+  validateYarnFormFields,
   yarnDisplayName,
   yarnKpis,
   yarnReorderLevel,
@@ -26,6 +29,7 @@ import {
   yarnStatusLabel,
   yarnStockValue,
 } from '../lib/yarnStock'
+import { YarnAddForm, type YarnFormTab } from './YarnAddForm'
 
 type View =
   | { mode: 'list' }
@@ -78,7 +82,7 @@ export function YarnStockPanel() {
     invoice_no: '',
     quantity: '',
     rate: '',
-    gst_pct: '0',
+    gst_pct: '5',
     lot_number: '',
     location: '',
     remarks: '',
@@ -86,6 +90,11 @@ export function YarnStockPanel() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [formTab, setFormTab] = useState<YarnFormTab>('opening')
+  const [fieldErrors, setFieldErrors] = useState<YarnFieldErrors>({})
+  const [duplicateCandidate, setDuplicateCandidate] = useState<WeftYarnStock | null>(null)
+  const [pendingSaveAnother, setPendingSaveAnother] = useState(false)
+  const [skipDuplicateCheck, setSkipDuplicateCheck] = useState(false)
 
   const load = useCallback(async () => {
     const { data, error: err } = await supabase
@@ -138,6 +147,10 @@ export function YarnStockPanel() {
 
   function openAdd() {
     setForm({ ...EMPTY_YARN_FORM })
+    setFormTab('opening')
+    setFieldErrors({})
+    setDuplicateCandidate(null)
+    setSkipDuplicateCheck(false)
     setError(null)
     setMessage(null)
     setView({ mode: 'form', yarnId: null })
@@ -146,6 +159,10 @@ export function YarnStockPanel() {
   function openEdit(row: WeftYarnStock, e?: React.MouseEvent) {
     e?.stopPropagation()
     setForm(formFromYarn(row))
+    setFormTab('opening')
+    setFieldErrors({})
+    setDuplicateCandidate(null)
+    setSkipDuplicateCheck(false)
     setError(null)
     setMessage(null)
     setView({ mode: 'form', yarnId: row.id })
@@ -165,7 +182,7 @@ export function YarnStockPanel() {
       invoice_no: '',
       quantity: '',
       rate: String(row.rate_per_kg ?? 0),
-      gst_pct: String(row.gst_pct ?? 0),
+      gst_pct: String(row.gst_pct ?? 5),
       lot_number: row.lot_number || '',
       location: row.location || '',
       remarks: '',
@@ -175,17 +192,31 @@ export function YarnStockPanel() {
     setView({ mode: 'inward', yarnId: row.id })
   }
 
-  async function saveYarn(andAnother: boolean) {
+  async function saveYarn(andAnother: boolean, opts?: { allowDuplicate?: boolean }) {
     if (!profile) return
     const isNew = view.mode === 'form' && view.yarnId == null
-    const validation = validateYarnForm(form, isNew)
-    if (validation) {
-      setError(validation)
+    const errors = validateYarnFormFields(form, isNew)
+    setFieldErrors(errors)
+    if (Object.keys(errors).length > 0) {
+      setError('Please fix the highlighted fields.')
       return
     }
+
+    const allowDup = opts?.allowDuplicate || skipDuplicateCheck
+    if (!allowDup) {
+      const dup = findDuplicateYarn(yarns, form, view.mode === 'form' ? view.yarnId : null)
+      if (dup) {
+        setDuplicateCandidate(dup)
+        setPendingSaveAnother(andAnother)
+        return
+      }
+    }
+
     setBusy(true)
     setError(null)
     setMessage(null)
+    setDuplicateCandidate(null)
+    setSkipDuplicateCheck(false)
     try {
       if (isNew) {
         const payload = masterPayloadFromForm(form, { includeOpening: true })
@@ -229,7 +260,9 @@ export function YarnStockPanel() {
             }
           },
         })
-        setMessage(result === 'applied' ? 'Yarn saved' : 'Sent to approval queue')
+        setMessage(
+          result === 'applied' ? 'Yarn added successfully.' : 'Sent to approval queue',
+        )
       } else if (view.mode === 'form' && view.yarnId) {
         const yarnId = view.yarnId
         // Master fields only — do not overwrite transaction-derived stock_kg
@@ -249,11 +282,15 @@ export function YarnStockPanel() {
             if (err) throw err
           },
         })
-        setMessage(result === 'applied' ? 'Yarn updated' : 'Sent to approval queue')
+        setMessage(
+          result === 'applied' ? 'Yarn updated successfully.' : 'Sent to approval queue',
+        )
       }
       await load()
       if (andAnother) {
-        setForm({ ...EMPTY_YARN_FORM })
+        setForm(clearEntryFields(form))
+        setFieldErrors({})
+        setFormTab('opening')
         setView({ mode: 'form', yarnId: null })
       } else {
         setView({ mode: 'list' })
@@ -414,250 +451,43 @@ export function YarnStockPanel() {
   if (view.mode === 'form') {
     const isNew = view.yarnId == null
     return (
-      <div className="yarn-form-page">
-        <p className="yarn-crumb">
-          Inventory &gt; Yarn Stock &gt; <strong>{isNew ? 'Add Yarn' : 'Edit Yarn'}</strong>
-        </p>
-        <header className="yarn-detail-head">
-          <div>
-            <h2 className="yarn-detail-title">{isNew ? 'Add Yarn' : 'Edit Yarn'}</h2>
-            <p className="yarn-detail-sub">
-              {isNew
-                ? 'Complete yarn entry on one page. Opening stock seeds the ledger.'
-                : 'Update master information. Current stock is driven by transactions.'}
-            </p>
-          </div>
-          <button type="button" className="btn-secondary" onClick={() => setView({ mode: 'list' })}>
-            Back
-          </button>
-        </header>
-
-        <div className="yarn-form-sections">
-          <section className="yarn-form-section">
-            <h2>Basic Information</h2>
-            <div className="yarn-form-grid cols-3">
-              <label className="field">
-                <span>
-                  Supplier <em className="req">*</em>
-                </span>
-                <input
-                  value={form.supplier}
-                  onChange={(e) => setField('supplier', e.target.value)}
-                  placeholder="ABC Yarns Pvt Ltd"
-                />
-              </label>
-              <label className="field">
-                <span>
-                  Colour Name <em className="req">*</em>
-                </span>
-                <input
-                  value={form.colour_name}
-                  onChange={(e) => setField('colour_name', e.target.value)}
-                  placeholder="Red Blue"
-                />
-              </label>
-              <label className="field">
-                <span>
-                  Colour Number <em className="req">*</em>
-                </span>
-                <input
-                  value={form.colour_no}
-                  onChange={(e) => setField('colour_no', e.target.value)}
-                  placeholder="RB-101"
-                />
-              </label>
-              <label className="field">
-                <span>
-                  Quality <em className="req">*</em>
-                </span>
-                <input
-                  value={form.quality}
-                  onChange={(e) => setField('quality', e.target.value)}
-                  placeholder="300"
-                  list="yarn-quality-suggestions"
-                />
-              </label>
-              <label className="field">
-                <span>
-                  Yarn Specification <em className="req">*</em>
-                </span>
-                <input
-                  value={form.yarn_specification}
-                  onChange={(e) => setField('yarn_specification', e.target.value)}
-                  placeholder="300 Tex"
-                  list="yarn-spec-suggestions"
-                />
-              </label>
-              <label className="field">
-                <span>
-                  Unit <em className="req">*</em>
-                </span>
-                <select value={form.unit} onChange={(e) => setField('unit', e.target.value)}>
-                  <option value="KG">KG</option>
-                  <option value="Cone">Cone</option>
-                  <option value="Bag">Bag</option>
-                </select>
-              </label>
-            </div>
-          </section>
-
-          <section className="yarn-form-section">
-            <h2>Stock Information</h2>
-            <div className="yarn-form-grid cols-3">
-              {isNew ? (
-                <label className="field">
-                  <span>
-                    Opening Stock <em className="req">*</em>
-                  </span>
-                  <input
-                    className="num"
-                    inputMode="decimal"
-                    value={form.opening_stock}
-                    onChange={(e) => setField('opening_stock', e.target.value)}
-                    placeholder="1000"
-                  />
-                </label>
-              ) : (
-                <label className="field">
-                  <span>Current Stock (read-only)</span>
-                  <input
-                    className="num"
-                    readOnly
-                    value={formatKg(Number(activeYarn?.stock_kg || 0))}
-                  />
-                </label>
-              )}
-              <label className="field">
-                <span>Reorder Level</span>
-                <input
-                  className="num"
-                  inputMode="decimal"
-                  value={form.reorder_level}
-                  onChange={(e) => setField('reorder_level', e.target.value)}
-                />
-              </label>
-              <label className="field">
-                <span>Minimum Stock</span>
-                <input
-                  className="num"
-                  inputMode="decimal"
-                  value={form.min_stock}
-                  onChange={(e) => setField('min_stock', e.target.value)}
-                />
-              </label>
-              <label className="field">
-                <span>Maximum Stock</span>
-                <input
-                  className="num"
-                  inputMode="decimal"
-                  value={form.max_stock}
-                  onChange={(e) => setField('max_stock', e.target.value)}
-                />
-              </label>
-              <label className="field">
-                <span>Location</span>
-                <input
-                  value={form.location}
-                  onChange={(e) => setField('location', e.target.value)}
-                  placeholder="Store A / Rack 3"
-                />
-              </label>
-              <label className="field">
-                <span>Lot Number</span>
-                <input
-                  value={form.lot_number}
-                  onChange={(e) => setField('lot_number', e.target.value)}
-                />
-              </label>
-            </div>
-          </section>
-
-          <section className="yarn-form-section">
-            <h2>Purchase Information</h2>
-            <div className="yarn-form-grid cols-3">
-              <label className="field">
-                <span>
-                  Rate / KG <em className="req">*</em>
-                </span>
-                <input
-                  className="num"
-                  inputMode="decimal"
-                  value={form.rate_per_kg}
-                  onChange={(e) => setField('rate_per_kg', e.target.value)}
-                  placeholder="320"
-                />
-              </label>
-              <label className="field">
-                <span>GST %</span>
-                <input
-                  className="num"
-                  inputMode="decimal"
-                  value={form.gst_pct}
-                  onChange={(e) => setField('gst_pct', e.target.value)}
-                />
-              </label>
-              <label className="field">
-                <span>HSN Code</span>
-                <input value={form.hsn_code} onChange={(e) => setField('hsn_code', e.target.value)} />
-              </label>
-            </div>
-          </section>
-
-          <section className="yarn-form-section">
-            <h2>Additional Information</h2>
-            <div className="yarn-form-grid">
-              <label className="field" style={{ gridColumn: '1 / -1' }}>
-                <span>Remarks</span>
-                <textarea
-                  value={form.remarks}
-                  onChange={(e) => setField('remarks', e.target.value)}
-                  rows={3}
-                />
-              </label>
-              <label className="yarn-check">
-                <input
-                  type="checkbox"
-                  checked={form.is_active}
-                  onChange={(e) => setField('is_active', e.target.checked)}
-                />
-                Active
-              </label>
-            </div>
-          </section>
-        </div>
-
-        <datalist id="yarn-quality-suggestions">
-          {qualities.map((q) => (
-            <option key={q} value={q} />
-          ))}
-        </datalist>
-        <datalist id="yarn-spec-suggestions">
-          {specs.map((s) => (
-            <option key={s} value={s} />
-          ))}
-          <option value="300 Tex" />
-          <option value="300 Lichi" />
-          <option value="300 Denier" />
-          <option value="150 Denier" />
-          <option value="450 Denier" />
-          <option value="150 Tex" />
-        </datalist>
-
-        {error ? <p className="form-error text-danger">{error}</p> : null}
-        {message ? <p className="form-ok text-sage">{message}</p> : null}
-
-        <div className="yarn-form-actions">
-          <button type="button" className="btn-secondary" disabled={busy} onClick={() => setView({ mode: 'list' })}>
-            Cancel
-          </button>
-          <button type="button" className="btn-secondary" disabled={busy} onClick={() => void saveYarn(true)}>
-            Save &amp; Add Another
-          </button>
-          <button type="button" className="btn-primary" disabled={busy} onClick={() => void saveYarn(false)}>
-            Save Yarn
-          </button>
-        </div>
-      </div>
+      <YarnAddForm
+        form={form}
+        isNew={isNew}
+        busy={busy}
+        error={error}
+        message={message}
+        fieldErrors={fieldErrors}
+        yarns={yarns}
+        activeYarn={activeYarn}
+        formTab={formTab}
+        duplicate={duplicateCandidate}
+        onField={setField}
+        onFormChange={setForm}
+        onTabChange={setFormTab}
+        onBack={() => setView({ mode: 'list' })}
+        onCancel={() => setView({ mode: 'list' })}
+        onSave={(andAnother) => void saveYarn(andAnother)}
+        onContinueDuplicate={() => {
+          setSkipDuplicateCheck(true)
+          setDuplicateCandidate(null)
+          void saveYarn(pendingSaveAnother, { allowDuplicate: true })
+        }}
+        onOpenExisting={(row) => {
+          setDuplicateCandidate(null)
+          openEdit(row)
+        }}
+        onDismissDuplicate={() => setDuplicateCandidate(null)}
+        onPurchaseYarn={(row) => openInward(row)}
+        onClearFieldError={(key) =>
+          setFieldErrors((prev) => {
+            if (!prev[key]) return prev
+            const next = { ...prev }
+            delete next[key]
+            return next
+          })
+        }
+      />
     )
   }
 
@@ -1207,8 +1037,8 @@ export function YarnStockPanel() {
                 <th>Supplier</th>
                 <th>Quality</th>
                 <th>Yarn Specification</th>
-                <th>Opening Stock</th>
-                <th>Current Stock</th>
+                <th>Opening Stock (KG)</th>
+                <th>Current Stock (KG)</th>
                 <th>Unit</th>
                 <th>Rate / KG</th>
                 <th>Stock Value</th>
@@ -1272,6 +1102,15 @@ export function YarnStockPanel() {
                           >
                             Edit
                           </button>
+                          <button
+                            type="button"
+                            className="btn-ghost text-danger"
+                            aria-label="Delete"
+                            disabled={busy}
+                            onClick={(e) => void deleteYarn(row, e)}
+                          >
+                            Delete
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -1316,6 +1155,12 @@ export function YarnStockPanel() {
                       <strong>{row.yarn_specification || '—'}</strong>
                     </div>
                     <div>
+                      Opening Stock
+                      <strong>
+                        {formatKg(Number(row.opening_stock ?? 0))} {row.unit || 'KG'}
+                      </strong>
+                    </div>
+                    <div>
                       Current Stock
                       <strong>
                         {formatKg(Number(row.stock_kg || 0))} {row.unit || 'KG'}
@@ -1339,6 +1184,14 @@ export function YarnStockPanel() {
                       onClick={(e) => openEdit(row, e)}
                     >
                       Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-ghost text-danger"
+                      disabled={busy}
+                      onClick={(e) => void deleteYarn(row, e)}
+                    >
+                      Delete
                     </button>
                   </div>
                 </button>

@@ -24,9 +24,18 @@ type HubTone =
 
 const INVENTORY_TONES: Record<string, HubTone> = {
   'yarn-stock': 'purple',
+  'wy-overview': 'blue',
+  'wy-machines': 'teal',
+  'wy-godown': 'green',
+  'wy-empty': 'slate',
+  'wy-warper': 'violet',
+  'wy-reports': 'orange',
+  'warp-yarn': 'blue',
+  'warp-yarn-link': 'blue',
   'beam-stock': 'green',
   'warp-beam-pipe': 'orange',
-  'yarn-inward': 'blue',
+  'yarn-inward': 'teal',
+  'security-inventory': 'blue',
   'greige-stock': 'amber',
   consumables: 'pink',
   inward: 'teal',
@@ -71,12 +80,16 @@ const ICON_PATHS: Record<string, string> = {
   default: 'M4 7l8-4 8 4v2H4V7zm0 3h16v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-9zm4 2v2h8v-2H8z',
   'yarn-stock':
     'M12 2a4 4 0 0 1 4 4v1.1A5 5 0 0 1 17 17.9V20a2 2 0 0 1-2 2h-6a2 2 0 0 1-2-2v-2.1A5 5 0 0 1 8 7.1V6a4 4 0 0 1 4-4zm0 2a2 2 0 0 0-2 2v1.05c.64-.1 1.3-.15 2-.15s1.36.05 2 .15V6a2 2 0 0 0-2-2z',
+  'warp-yarn':
+    'M4 6h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zm2 3v6h12V9H6zm2 2h2v2H8v-2zm4 0h2v2h-2v-2z',
   'beam-stock':
     'M3 7h18v2H3V7zm1 4h16v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8zm4 2v2h8v-2H8z',
   'warp-beam-pipe':
     'M4 6h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zm2 3v6h12V9H6zm2 2h2v2H8v-2zm4 0h2v2h-2v-2z',
   'yarn-inward':
     'M11 4h2v7h3l-4 5-4-5h3V4zm-7 14h16v2H4v-2z',
+  'security-inventory':
+    'M12 2l7 3v6c0 5-3.5 8.5-7 9.5C8.5 19.5 5 16 5 11V5l7-3zm0 2.2L7 6.1v4.9c0 3.6 2.4 6.3 5 7.2 2.6-.9 5-3.6 5-7.2V6.1l-5-1.9zM11 10h2v5h-2v-5zm0-3h2v2h-2V7z',
   'greige-stock':
     'M4 5h16v3H4V5zm0 5h16v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-9zm3 2v2h10v-2H7z',
   consumables:
@@ -204,19 +217,29 @@ export function ModuleHub({ moduleId, onNavigate }: Props) {
     let cancelled = false
     void (async () => {
       try {
-        const [{ data: beams }, { data: yarns }] = await Promise.all([
+        const [{ data: beams }, { data: yarns }, pipesRes] = await Promise.all([
           supabase.from('beam_pipe_stock').select('id,quantity_pcs'),
           supabase.from('weft_yarn_stock').select('id,stock_kg'),
+          supabase.from('warp_pipes').select('id,status'),
         ])
         if (cancelled) return
         const beamRows = (beams as Pick<BeamPipeStock, 'id' | 'quantity_pcs'>[]) ?? []
         const yarnRows = (yarns as Pick<WeftYarnStock, 'id' | 'stock_kg'>[]) ?? []
-        const totalSku = beamRows.length + yarnRows.length
+        const pipeRows = pipesRes.error
+          ? []
+          : ((pipesRes.data as Array<{ id: string; status: string }> | null) ?? [])
+        const totalSku = yarnRows.length + (pipeRows.length || beamRows.length)
         const inStock =
-          beamRows.filter((b) => Number(b.quantity_pcs) > 0).length +
-          yarnRows.filter((y) => Number(y.stock_kg) > 0).length
+          yarnRows.filter((y) => Number(y.stock_kg) > 0).length +
+          (pipeRows.length
+            ? pipeRows.filter((p) =>
+                ['FILLED_GODOWN', 'ON_MACHINE', 'EMPTY'].includes(p.status),
+              ).length
+            : beamRows.filter((b) => Number(b.quantity_pcs) > 0).length)
         const outOfStock = Math.max(0, totalSku - inStock)
-        const beamPcs = beamRows.reduce((s, b) => s + Number(b.quantity_pcs || 0), 0)
+        const beamPcs = pipeRows.length
+          ? pipeRows.length
+          : beamRows.reduce((s, b) => s + Number(b.quantity_pcs || 0), 0)
         const yarnKg = yarnRows.reduce((s, y) => s + Number(y.stock_kg || 0), 0)
         setOverview([
           {
@@ -239,7 +262,7 @@ export function ModuleHub({ moduleId, onNavigate }: Props) {
           },
           {
             id: 'beam',
-            label: 'Beam Pcs',
+            label: pipeRows.length ? 'Warp Pipes' : 'Beam Pcs',
             value: beamPcs.toLocaleString('en-IN'),
             tone: 'blue',
           },

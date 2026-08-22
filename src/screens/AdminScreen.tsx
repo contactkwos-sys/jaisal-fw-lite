@@ -1,11 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ApprovalsWidget } from '../components/ApprovalsWidget'
+import { GmailAdminSection } from '../components/GmailAdminSection'
 import { ShareActions } from '../components/ShareActions'
 import { SubTabs } from '../components/SubTabs'
 import { useAuth } from '../lib/auth'
 import type { ApprovalQueue, PayrollRate, Role, Worker } from '../lib/database.types'
 import { applyOrQueue } from '../lib/mutate'
 import type { MainModuleId } from '../lib/nav'
+import {
+  addPayrollJob,
+  listPayrollJobs,
+  PAYROLL_JOB_LIMIT,
+  removePayrollJob,
+  updatePayrollJob,
+  type PayrollJob,
+} from '../lib/payrollJobs'
 import {
   ALL_MODULE_OPTIONS,
   clearRolePermissionOverride,
@@ -22,7 +31,7 @@ import {
 } from '../lib/systemRoles'
 import { supabase } from '../lib/supabase'
 
-type Sub = 'roles' | 'payroll' | 'approvals' | 'permissions'
+type Sub = 'roles' | 'payroll' | 'approvals' | 'permissions' | 'gmail'
 type Props = { initialSub?: Sub }
 
 type PayableRow = {
@@ -54,6 +63,11 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
   const [rateDraft, setRateDraft] = useState<Record<string, string>>({})
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7))
   const [payables, setPayables] = useState<PayableRow[]>([])
+  const [payrollJobs, setPayrollJobs] = useState<PayrollJob[]>([])
+  const [newJobName, setNewJobName] = useState('')
+  const [editingJobId, setEditingJobId] = useState<string | null>(null)
+  const [editJobName, setEditJobName] = useState('')
+  const [editJobCode, setEditJobCode] = useState('')
 
   const [queue, setQueue] = useState<ApprovalQueue[]>([])
 
@@ -98,7 +112,7 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
   }, [])
 
   const loadPayroll = useCallback(async () => {
-    const [{ data: r }, { data: workers }, { data: att }] = await Promise.all([
+    const [{ data: r }, { data: workers }, { data: att }, jobs] = await Promise.all([
       supabase.from('payroll_rates').select('*'),
       supabase.from('workers').select('*').eq('is_active', true),
       supabase
@@ -106,7 +120,9 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
         .select('worker_id, status, date')
         .gte('date', `${month}-01`)
         .lte('date', `${month}-31`),
+      listPayrollJobs(),
     ])
+    setPayrollJobs(jobs)
     setRates((r as PayrollRate[]) ?? [])
     const rateByRole = new Map((r as PayrollRate[] | null)?.map((x) => [x.role_id, x.rate_per_day]) ?? [])
     const roleMap = new Map(roles.map((x) => [x.id, x.role_name]))
@@ -255,11 +271,13 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
         let pin = ''
         const isCeoRole = role.role_name.toLowerCase() === 'ceo'
         if (isCeoRole) {
-          pin = '3060'
+          do {
+            pin = String(cryptoRand())
+          } while (used.has(pin))
         } else {
           do {
             pin = String(cryptoRand())
-          } while (used.has(pin) || pin === '3060')
+          } while (used.has(pin))
         }
         used.add(pin)
 
@@ -358,6 +376,66 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
       setBusy(false)
     }
   }
+
+  async function handleAddPayrollJob() {
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const next = await addPayrollJob(newJobName)
+      setPayrollJobs(next)
+      setNewJobName('')
+      setMessage(`Job “${newJobName.trim()}” added`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Add job failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleSavePayrollJobEdit() {
+    if (!editingJobId) return
+    setBusy(true)
+    setError(null)
+    try {
+      const next = await updatePayrollJob(editingJobId, {
+        job_name: editJobName,
+        job_code: editJobCode,
+      })
+      setPayrollJobs(next)
+      setEditingJobId(null)
+      setMessage('Job updated')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Update failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleDeletePayrollJob(id: string, name: string) {
+    if (!window.confirm(`Remove job “${name}” from Payroll Master?`)) return
+    setBusy(true)
+    setError(null)
+    try {
+      const next = await removePayrollJob(id)
+      setPayrollJobs(next)
+      setMessage(`Job “${name}” removed`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Delete failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const jobWorkerCount = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const p of payables) {
+      const dept = (p.worker.department || '').trim().toLowerCase()
+      if (!dept) continue
+      map.set(dept, (map.get(dept) || 0) + 1)
+    }
+    return map
+  }, [payables])
 
   async function resolveQueue(item: ApprovalQueue, status: 'approved' | 'rejected') {
     if (!isCeo || !profile) return
@@ -460,6 +538,7 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
           options={[
             { id: 'roles', label: 'Roles & PIN' },
             { id: 'permissions', label: 'Permissions' },
+            ...(isCeo ? [{ id: 'gmail', label: 'Gmail' }] : []),
             { id: 'payroll', label: 'Payroll' },
             ...(isCeo ? [{ id: 'approvals', label: 'Approvals' }] : []),
           ]}
@@ -713,8 +792,109 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
         </div>
       ) : null}
 
+      {sub === 'gmail' && isCeo ? <GmailAdminSection /> : null}
+
       {sub === 'payroll' ? (
         <div className="form-stack">
+          <p className="text-muted">
+            Payroll processing has moved to <strong>HR & Payroll</strong>. This page keeps the Master Job List and
+            role-day rates for costing compatibility.
+          </p>
+          <h2 className="section-title">Master Job List</h2>
+          <p className="text-muted2">
+            Payroll designations (ASO, Security Guard, Sweeper, sweeper 1 / 2, …). Use these names as
+            worker department / designation in Attendance or HR Employee Master.
+          </p>
+          <div className="list payroll-job-list">
+            {payrollJobs.map((job) => {
+              const count = jobWorkerCount.get(job.job_name.trim().toLowerCase()) || 0
+              const editing = editingJobId === job.id
+              return (
+                <article key={job.id} className="card-row surface payroll-job-card">
+                  {editing ? (
+                    <div className="form-stack" style={{ flex: 1, gap: '0.5rem' }}>
+                      <label className="field">
+                        <span className="text-muted">Job name</span>
+                        <input value={editJobName} onChange={(e) => setEditJobName(e.target.value)} />
+                      </label>
+                      <label className="field">
+                        <span className="text-muted">Code</span>
+                        <input value={editJobCode} onChange={(e) => setEditJobCode(e.target.value)} />
+                      </label>
+                      <div className="share-actions">
+                        <button type="button" disabled={busy} onClick={() => void handleSavePayrollJobEdit()}>
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-ghost"
+                          onClick={() => setEditingJobId(null)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <strong>{job.job_name}</strong>
+                        <div className="text-muted">
+                          {count} Job{count === 1 ? '' : 's'}
+                        </div>
+                        <div className="text-muted2 payroll-job-code">{job.job_code}</div>
+                      </div>
+                      <div className="share-actions">
+                        <button
+                          type="button"
+                          className="btn-ghost"
+                          disabled={busy}
+                          onClick={() => {
+                            setEditingJobId(job.id)
+                            setEditJobName(job.job_name)
+                            setEditJobCode(job.job_code)
+                          }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-ghost"
+                          disabled={busy}
+                          onClick={() => void handleDeletePayrollJob(job.id, job.job_name)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </article>
+              )
+            })}
+            {!payrollJobs.length ? <p className="text-muted">No jobs yet</p> : null}
+          </div>
+          <div className="card-row surface row-top">
+            <label className="field" style={{ flex: 1 }}>
+              <span className="text-muted">Add job name</span>
+              <input
+                value={newJobName}
+                onChange={(e) => setNewJobName(e.target.value)}
+                placeholder="e.g. sweeper 1"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    void handleAddPayrollJob()
+                  }
+                }}
+              />
+            </label>
+            <button type="button" className="primary-save" disabled={busy || !newJobName.trim()} onClick={() => void handleAddPayrollJob()}>
+              Add Card
+            </button>
+          </div>
+          <p className="text-muted2">
+            Available Jobs count: {payrollJobs.length}/{PAYROLL_JOB_LIMIT}
+          </p>
+
           <h2 className="section-title">Rates per role / day</h2>
           {roles.map((role) => (
             <div key={role.id} className="card-row surface row-top">

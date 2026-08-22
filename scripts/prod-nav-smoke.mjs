@@ -124,8 +124,8 @@ const tables = await d.locator('.dash-table').count()
 record('inward+machines tables', tables >= 2, { tables })
 await shot(d, 'prod-desktop-dashboard')
 
-for (const name of ['Production', 'Orders', 'Inventory']) {
-  await d.locator('.side-nav').getByRole('button', { name, exact: true }).click()
+for (const name of ['Production', 'Orders & Pending', 'Inventory']) {
+  await d.locator('.side-nav .side-nav-item', { hasText: name }).first().click()
   await d.waitForTimeout(600)
   record(`open ${name}`, (await d.locator('.screen, .app-main, .hub-card').count()) > 0)
 }

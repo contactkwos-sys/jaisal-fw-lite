@@ -1,0 +1,895 @@
+/* Warp Yarn Management — factory-floor typography / readability
+   Hierarchy only: sizes, weights, spacing, contrast. No layout redesign. */
+
+/* ——— Shell: main page title + sidebar when on Warp Yarn ——— */
+
+/* Slightly wider sidebar so 16–17px module labels don’t feel cramped */
+@media (min-width: 900px) {
+  .app-shell[data-screen='warp-yarn'] {
+    --sidebar-w: 18rem;
+  }
+}
+
+.app-shell[data-screen='warp-yarn'] .content-page-title {
+  font-size: clamp(1.75rem, 2.2vw, 2rem); /* 28–32px desktop/tablet */
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  color: var(--text);
+}
+
+.app-shell[data-screen='warp-yarn'] .mobile-topbar-title {
+  font-size: clamp(1.05rem, 3.8vw, 1.25rem); /* readable, avoids clipping */
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  color: var(--text);
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  max-width: min(14rem, 52vw);
+}
+
+.app-shell[data-screen='warp-yarn'] .content-meta {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.app-shell[data-screen='warp-yarn'] .side-nav-item {
+  font-size: 1.02rem; /* ~16.3px */
+  font-weight: 600;
+  line-height: 1.35;
+  padding: 0.65rem 0.7rem;
+  color: var(--text);
+}
+
+.app-shell[data-screen='warp-yarn'] .side-nav-item.active {
+  font-weight: 700;
+}
+
+.app-shell[data-screen='warp-yarn'] .side-sub-item {
+  font-size: 0.97rem; /* ~15.5px */
+  font-weight: 600;
+  line-height: 1.4;
+  padding: 0.48rem 0.6rem;
+  color: var(--text);
+}
+
+.app-shell[data-screen='warp-yarn'] .side-sub-item.active {
+  font-weight: 700;
+}
+
+.app-shell[data-screen='warp-yarn'] .side-nav-list {
+  gap: 0.2rem;
+}
+
+.app-shell[data-screen='warp-yarn'] .side-sub-list {
+  gap: 0.15rem;
+  margin-top: 0.25rem;
+}
+
+.app-shell[data-screen='warp-yarn'] .bottom-nav-item {
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+/* ——— Screen root ——— */
+
+.wym-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  min-height: 0;
+  flex: 1;
+}
+
+/* MODULE TITLE — “Warp Yarn Management” */
+.wym-header h1 {
+  margin: 0.2rem 0 0.25rem;
+  color: var(--teal-deep);
+  font-size: clamp(1.375rem, 2vw, 1.625rem); /* 22–26px */
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.wym-sub {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.wym-screen .yarn-crumb {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.wym-screen .yarn-crumb strong {
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* SECTION HEADINGS — Quick Actions, Search, Filters, etc. */
+.wym-screen .section-title {
+  font-size: 1.1rem; /* ~17.5px */
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--text);
+  margin: 0.5rem 0 0.4rem;
+}
+
+.wym-quick {
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.wym-quick-label {
+  font-size: 1.05rem; /* ~17px — section heading */
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text);
+  line-height: 1.3;
+}
+
+.wym-quick-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+/* QUICK ACTION BUTTONS */
+.wym-quick-row .btn-warp,
+.wym-quick-row .btn-ghost,
+.wym-legacy-links .btn-ghost {
+  font-size: 1.02rem; /* ~16–17px */
+  font-weight: 700;
+  line-height: 1.3;
+  padding: 0.7rem 1rem;
+  min-height: 2.75rem;
+}
+
+.wym-legacy-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+/* TABS */
+.wym-screen .sub-tabs {
+  gap: 0.45rem;
+  margin-top: 0.35rem;
+}
+
+.wym-screen .sub-tab {
+  font-size: 0.97rem; /* ~15.5px */
+  font-weight: 600;
+  line-height: 1.3;
+  padding: 0.55rem 0.85rem;
+  color: var(--text);
+}
+
+.wym-screen .sub-tab.active {
+  font-weight: 700;
+}
+
+/* KPIs — important numbers */
+.wym-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+@media (min-width: 720px) {
+  .wym-kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1100px) {
+  .wym-kpi-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.wym-kpi {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 0.9rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-height: 4.75rem;
+}
+
+.wym-kpi-label {
+  font-size: 0.88rem; /* ~14px */
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text);
+  line-height: 1.3;
+}
+
+.wym-kpi-value {
+  font-size: clamp(1.15rem, 1.8vw, 1.375rem); /* ~18–22px */
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.wym-kpi.tone-info {
+  border-left: 3px solid var(--info);
+  background: linear-gradient(180deg, var(--info-soft), var(--surface));
+}
+.wym-kpi.tone-ok {
+  border-left: 3px solid var(--success);
+  background: linear-gradient(180deg, var(--success-soft), var(--surface));
+}
+.wym-kpi.tone-warn {
+  border-left: 3px solid var(--warning);
+  background: linear-gradient(180deg, var(--warning-soft), var(--surface));
+}
+.wym-kpi.tone-slate {
+  border-left: 3px solid var(--hub-slate);
+  background: linear-gradient(180deg, var(--hub-slate-soft), var(--surface));
+}
+.wym-kpi.tone-warper {
+  border-left: 3px solid #7c3aed;
+  background: linear-gradient(180deg, #f5f3ff, var(--surface));
+}
+
+.wym-overview-grid {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+@media (min-width: 960px) {
+  .wym-overview-grid {
+    grid-template-columns: 1.2fr 1fr;
+  }
+}
+
+.wym-panel {
+  padding: 0.9rem;
+}
+
+.wym-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+/* FILTER LABELS + inputs */
+.wym-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+  gap: 0.65rem;
+  padding: 0.85rem;
+  align-items: end;
+}
+
+.wym-filters .field {
+  font-size: 0.94rem; /* ~15px */
+}
+
+.wym-filters .field > span {
+  font-size: 0.9rem; /* ~14–15px */
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.3;
+}
+
+.wym-filters .field > span.text-muted {
+  color: var(--text);
+}
+
+.wym-filters input,
+.wym-filters select {
+  font-size: 0.94rem; /* ~15px placeholders & values */
+  font-weight: 500;
+  min-height: 2.5rem;
+  padding: 0.55rem 0.7rem;
+}
+
+.wym-filters input::placeholder {
+  font-size: 0.94rem;
+  opacity: 0.75;
+  color: var(--muted);
+}
+
+.wym-filters .wym-clear {
+  align-self: end;
+  height: 2.6rem;
+  font-size: 0.97rem;
+  font-weight: 700;
+  padding: 0.55rem 0.85rem;
+}
+
+/* TABLE — critical for factory users */
+.wym-table-wrap {
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: var(--radius);
+}
+
+.wym-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.94rem; /* ~15px data */
+  min-width: 640px;
+}
+
+.wym-table th,
+.wym-table td {
+  padding: 0.7rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  white-space: nowrap;
+  line-height: 1.35;
+  vertical-align: middle;
+}
+
+.wym-table th {
+  font-size: 0.9rem; /* ~14–15px */
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text);
+  background: var(--surface2);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: 2.75rem;
+}
+
+.wym-table td {
+  font-size: 0.94rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.wym-table td.num,
+.wym-table th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+/* Important values: pipe no, meters, weight, status */
+.wym-table td .wym-pipe-link,
+.wym-pipe-link {
+  font-size: 0.97rem;
+  font-weight: 700;
+}
+
+.wym-table td:has(.wym-badge),
+.wym-table td strong {
+  font-weight: 600;
+}
+
+.wym-row-active {
+  background: var(--info-soft);
+}
+
+.wym-row-diff {
+  background: var(--danger-soft);
+}
+
+.wym-pipe-link {
+  background: none;
+  border: none;
+  color: var(--teal-deep);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.wym-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.55rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.88rem; /* ~14px */
+  font-weight: 700;
+  background: var(--surface2);
+  color: var(--text);
+  line-height: 1.3;
+}
+
+.wym-badge-ok {
+  background: var(--success-soft);
+  color: var(--success);
+}
+.wym-badge-pending {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+.wym-badge-danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.wym-badge-info {
+  background: var(--info-soft);
+  color: var(--info);
+}
+
+.wym-report-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.wym-report-tabs .btn-ghost,
+.wym-report-tabs .btn-warp {
+  font-size: 0.97rem;
+  font-weight: 600;
+  padding: 0.55rem 0.85rem;
+  min-height: 2.5rem;
+}
+
+.wym-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.35);
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.wym-modal {
+  width: min(40rem, 100%);
+  max-height: min(92vh, 54rem);
+  overflow: auto;
+  padding: 1.1rem;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+}
+
+.wym-modal.wide {
+  width: min(64rem, 100%);
+}
+
+.wym-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+.wym-modal-head h2 {
+  margin: 0;
+  font-size: 1.25rem; /* ~20px */
+  font-weight: 700;
+  color: var(--teal-deep);
+  line-height: 1.3;
+}
+
+.wym-modal .field {
+  font-size: 0.94rem;
+}
+
+.wym-modal .field > span,
+.wym-modal .field > span.text-muted {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.wym-modal input,
+.wym-modal select,
+.wym-modal textarea {
+  font-size: 0.94rem;
+  min-height: 2.5rem;
+  padding: 0.55rem 0.7rem;
+}
+
+.wym-modal-actions .btn-warp,
+.wym-modal-actions .btn-ghost,
+.wym-modal-actions button {
+  font-size: 1.02rem;
+  font-weight: 700;
+  padding: 0.65rem 1rem;
+  min-height: 2.65rem;
+}
+
+.wym-form-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.65rem;
+}
+
+@media (min-width: 640px) {
+  .wym-form-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .wym-form-grid .wym-span-2 {
+    grid-column: span 2;
+  }
+}
+
+.wym-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.95rem;
+}
+
+.wym-history-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-bottom: 0.85rem;
+  font-size: 0.94rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.wym-history-meta .num,
+.wym-history-meta strong {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.wym-monthly {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* Responsive: keep hierarchy readable; never drop below factory minimums */
+@media (max-width: 640px) {
+  .wym-header h1 {
+    font-size: 1.375rem; /* 22px floor */
+  }
+
+  .wym-quick-row .btn-warp,
+  .wym-quick-row .btn-ghost {
+    flex: 1 1 calc(50% - 0.55rem);
+    font-size: 1rem; /* 16px */
+    padding: 0.65rem 0.7rem;
+  }
+
+  .wym-table {
+    font-size: 0.9rem; /* 14.4px */
+  }
+
+  .wym-table th {
+    font-size: 0.875rem; /* 14px minimum */
+  }
+
+  .wym-filters .field > span {
+    font-size: 0.875rem;
+  }
+
+  .wym-filters input,
+  .wym-filters select {
+    font-size: 0.9rem;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1024px) {
+  .app-shell[data-screen='warp-yarn'] .content-page-title {
+    font-size: 1.75rem; /* ~28px iPad */
+  }
+
+  .wym-header h1 {
+    font-size: 1.45rem; /* ~23px */
+  }
+}
+
+/* ——— Warp Beam Stock Entry ——— */
+
+.wbs-entry-layout {
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 1100px) {
+  .wbs-entry-layout {
+    grid-template-columns: 1fr 17rem;
+    align-items: start;
+  }
+}
+
+.wbs-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.wbs-form {
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.wbs-form-header .wbs-title {
+  margin: 0;
+  font-size: clamp(1.25rem, 2vw, 1.5rem);
+  font-weight: 800;
+  color: var(--teal-deep);
+}
+
+.wbs-subtitle {
+  margin: 0.15rem 0 0;
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+
+.wbs-top-fields {
+  display: grid;
+  gap: 0.65rem;
+}
+
+@media (min-width: 720px) {
+  .wbs-top-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1000px) {
+  .wbs-top-fields {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.wbs-info-banner {
+  background: var(--info-soft);
+  border: 1px solid var(--info);
+  border-radius: var(--radius);
+  padding: 0.65rem 0.85rem;
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.wbs-notes textarea {
+  min-height: 3rem;
+  resize: vertical;
+}
+
+.wbs-section-heading {
+  margin: 0.25rem 0 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.wbs-machine-grid {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (min-width: 720px) {
+  .wbs-machine-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1100px) {
+  .wbs-machine-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.wbs-machine-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  background: var(--surface-2, #fafbfc);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.wbs-machine-name {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.wbs-machine-code {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.wbs-double-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.wbs-double-value {
+  font-size: 1.15rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--teal-deep);
+  padding: 0.45rem 0.55rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.wbs-save-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.wbs-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+}
+
+.wbs-total-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.wbs-total-label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.wbs-total-value {
+  font-size: clamp(1.35rem, 2.5vw, 1.75rem);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.wbs-total-double {
+  color: var(--teal-deep);
+}
+
+.wbs-save-btn {
+  font-size: 1.1rem;
+  font-weight: 800;
+  padding: 0.85rem 2rem;
+  min-width: 10rem;
+  min-height: 3rem;
+}
+
+.wbs-recent {
+  padding: 0.85rem 1rem;
+}
+
+.wbs-recent-table th,
+.wbs-recent-table td {
+  font-size: 0.88rem;
+}
+
+.wbs-side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.wbs-side-panel {
+  padding: 0.85rem 1rem;
+}
+
+.wbs-item-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 14rem;
+  overflow-y: auto;
+}
+
+.wbs-item-chip {
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 0.45rem 0.6rem;
+  background: var(--surface);
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.wbs-item-chip:hover {
+  border-color: var(--teal);
+  background: var(--info-soft);
+}
+
+.wbs-summary-count {
+  margin: 0 0 0.65rem;
+  font-size: 1rem;
+}
+
+.wbs-summary-meters {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.wbs-summary-meters div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.wbs-summary-meters strong {
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.wbs-summary-hint {
+  margin: 0.65rem 0 0;
+  font-size: 0.82rem;
+}
+
+.wbs-footer {
+  padding: 1rem;
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 720px) {
+  .wbs-footer {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.wbs-how h4,
+.wbs-notes-block h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.wbs-how ol {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+.wbs-notes-block p {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.wbs-machine-status {
+  padding: 0.85rem 1rem;
+}
+
+.wbs-gate-passes {
+  padding: 0.85rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.wbs-gate-passes .section-title {
+  margin-top: 0;
+}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../lib/auth'
 import { todayISO } from '../lib/mutate'
 import { supabase } from '../lib/supabase'
@@ -9,6 +9,10 @@ import {
   computeWeftRow,
   emptyWarp,
   emptyWeft,
+  finalCostAuditLine,
+  finalCostHint,
+  finalCostLabel,
+  finalDesignCostMeterLabel,
   fmtInr,
   fmtMoney,
   fmtQty,
@@ -17,6 +21,7 @@ import {
   type WarpDraft,
   type WeftDraft,
 } from '../lib/designWiseCosting'
+import { syncDinCostingFromLatest } from '../lib/designToOrder'
 
 type Props = { initialDin?: string }
 
@@ -125,8 +130,16 @@ function isDinFilter(value: string | undefined): value is string {
 }
 
 export function DesignWiseCosting({ initialDin = '' }: Props) {
-  const { session, profile, isCeo, isManager } = useAuth()
+  const { session, profile, isCeo, isManager, roleName } = useAuth()
   const canDeleteFinal = isCeo || isManager
+  const role = (roleName || '').trim().toLowerCase()
+  const canViewCosting =
+    isCeo ||
+    isManager ||
+    role === 'md' ||
+    role === 'managing director' ||
+    role === 'owner' ||
+    role.includes('ceo')
 
   const [dinNumber, setDinNumber] = useState(initialDin)
   const [costingDate, setCostingDate] = useState(todayISO())
@@ -153,6 +166,8 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
   const [dragOver, setDragOver] = useState(false)
   const [lengthError, setLengthError] = useState<string | null>(null)
   const [historyError, setHistoryError] = useState<string | null>(null)
+  /** After "Save As New", skip one DIN blur auto-load so the form is not overwritten. */
+  const skipDinAutoloadRef = useRef(false)
 
   useEffect(() => {
     void (async () => {
@@ -347,11 +362,12 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
     [loadById],
   )
 
-  /** Open DIN from Reports / Design register navigation */
+  /** Open DIN from Orders / Reports / Design register navigation */
   useEffect(() => {
     if (!isDinFilter(initialDin)) return
     const din = initialDin.trim()
     setDinNumber(din)
+    setHistoryFilters((f) => ({ ...f, din }))
     void loadExisting(din).catch((e: Error) => setError(e.message))
   }, [initialDin, loadExisting])
 
@@ -528,6 +544,9 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
       }
 
       let costingId = savedId
+      let previousWarpIds: string[] = []
+      let previousWeftIds: string[] = []
+
       if (costingId) {
         const { created_by: _omit, ...updatePayload } = header
         void _omit
@@ -536,8 +555,15 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
           .update(updatePayload)
           .eq('id', costingId)
         if (uErr) throw uErr
-        await supabase.from('design_costing_warp').delete().eq('costing_id', costingId)
-        await supabase.from('design_costing_weft').delete().eq('costing_id', costingId)
+
+        // Capture existing child rows so we can delete them AFTER a successful insert.
+        // Deleting first caused "saved then empty" when re-insert failed (schema / RLS).
+        const [{ data: oldWarps }, { data: oldWefts }] = await Promise.all([
+          supabase.from('design_costing_warp').select('id').eq('costing_id', costingId),
+          supabase.from('design_costing_weft').select('id').eq('costing_id', costingId),
+        ])
+        previousWarpIds = (oldWarps ?? []).map((r) => r.id as string)
+        previousWeftIds = (oldWefts ?? []).map((r) => r.id as string)
       } else {
         const { data, error: iErr } = await supabase
           .from('design_costing')
@@ -587,14 +613,50 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
         if (fErr) throw fErr
       }
 
+      // Only remove previous lines after new lines are stored
+      if (previousWarpIds.length) {
+        const { error: dwErr } = await supabase
+          .from('design_costing_warp')
+          .delete()
+          .in('id', previousWarpIds)
+        if (dwErr) throw dwErr
+      }
+      if (previousWeftIds.length) {
+        const { error: dfErr } = await supabase
+          .from('design_costing_weft')
+          .delete()
+          .in('id', previousWeftIds)
+        if (dfErr) throw dfErr
+      }
+
       if (!asDraft) {
-        await supabase
+        const { error: designErr } = await supabase
           .from('designs')
           .update({
             cost_per_meter: totals.finalCostPerMtr,
             total_cost: totals.finalCostPerMtr,
           })
           .eq('dno', dinNumber.trim())
+        if (designErr) {
+          // Costing itself is saved — surface design-register sync as a soft warning
+          try {
+            await syncDinCostingFromLatest(dinNumber.trim())
+          } catch {
+            /* optional */
+          }
+          setMessage(
+            `Costing saved to DIN ${dinNumber.trim()} · Final ${fmtInr(totals.finalCostPerMtr)}/mtr (design register sync: ${designErr.message})`,
+          )
+          await refreshHistory()
+          return
+        }
+      }
+
+      // Sync snapshot onto Design to Order DIN master when present (same DIN number)
+      try {
+        await syncDinCostingFromLatest(dinNumber.trim())
+      } catch {
+        /* DIN table may not be migrated yet — costing still saved */
       }
 
       await refreshHistory()
@@ -638,11 +700,23 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
     if (match?.colour && !qualityName) setQualityName(match.colour)
   }
 
+  if (!canViewCosting) {
+    return (
+      <div className="screen">
+        <header className="screen-header">
+          <h1>Design-wise Costing</h1>
+          <p className="text-muted">Restricted to CEO / authorized roles.</p>
+        </header>
+        <p className="form-error text-danger">You do not have permission to view Design-wise Costing rates.</p>
+      </div>
+    )
+  }
+
   return (
     <div className="screen dwc-screen">
       <header className="screen-header dwc-header">
         <div>
-          <h1>Design Wise Costing</h1>
+          <h1>Design-wise Costing</h1>
           <p className="text-muted">
             Warp + Weft yarn cost → Total PIC → Weaving charge → Final ₹/meter
           </p>
@@ -658,12 +732,25 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
         <h2 className="section-title">Design Details</h2>
         <div className="dwc-details-row">
           <label className="field">
-            <span className="text-muted">DIN / Design No.</span>
+            <span className="text-muted">DESI / Design No. (formerly DIN)</span>
             <input
               list="dwc-design-list"
               value={dinNumber}
               onChange={(e) => onDinSelect(e.target.value)}
-              onBlur={() => void loadExisting(dinNumber).catch((e: Error) => setError(e.message))}
+              onBlur={() => {
+                if (skipDinAutoloadRef.current) {
+                  skipDinAutoloadRef.current = false
+                  return
+                }
+                // Do not overwrite an in-progress new costing with a prior row for the same DIN
+                if (!savedId) {
+                  const hasDraftLines =
+                    warps.some((r) => r.yarn_name.trim() || n(r.denier) || n(r.tar_ends) || n(r.rate_per_kg)) ||
+                    wefts.some((r) => r.weft_name.trim() || n(r.denier) || n(r.pic) || n(r.rate_per_kg))
+                  if (hasDraftLines) return
+                }
+                void loadExisting(dinNumber).catch((e: Error) => setError(e.message))
+              }}
               placeholder="e.g. JFG1591"
               required
             />
@@ -1123,11 +1210,36 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
             <input className="num dwc-auto" value={fmtMoney(buildup.gstAmount)} readOnly />
           </label>
         </div>
+
+        <div className="dwc-gst-split" aria-label="GST separated from base costing">
+          <div className="dwc-gst-card">
+            <span className="text-muted">Base Cost / Meter</span>
+            <strong className="num">{fmtInr(buildup.afterMuPerMtr)}</strong>
+            <span className="dwc-hint">After MU · GST not included</span>
+          </div>
+          <div className="dwc-gst-card">
+            <span className="text-muted">GST {fmtQty(buildup.gstPercent, 0)}%</span>
+            <strong className="num">{fmtInr(buildup.gstAmount)}</strong>
+            <span className="dwc-hint">Shown separately from base</span>
+          </div>
+          <div className="dwc-gst-card dwc-gst-final">
+            <span className="text-muted">{finalCostLabel(buildup.gstPercent)}</span>
+            <strong className="num">{fmtInr(buildup.finalCostPerMtr)}</strong>
+            <span className="dwc-hint">{finalCostHint(buildup.gstPercent)}</span>
+          </div>
+        </div>
+
         <div className="dwc-final">
           <div>
-            <span>Final Design Cost / Meter</span>
+            <span>{finalDesignCostMeterLabel(buildup.gstPercent)}</span>
             <p className="dwc-final-sub text-muted">
-              Auditable chain · length {fmtQty(buildup.designLengthMtr, 0)} mtr · PIC {fmtQty(buildup.totalPic, 0)}
+              {finalCostAuditLine(
+                buildup.afterMuPerMtr,
+                buildup.gstAmount,
+                buildup.gstPercent,
+                buildup.designLengthMtr,
+                buildup.totalPic,
+              )}
             </p>
           </div>
           <strong className="num">{fmtInr(buildup.finalCostPerMtr)}</strong>
@@ -1156,6 +1268,7 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
           className="dwc-secondary-btn"
           disabled={busy}
           onClick={() => {
+            skipDinAutoloadRef.current = true
             setSavedId(null)
             setStatus('draft')
             setMessage('Editing as new costing — save to create a separate record')
@@ -1190,7 +1303,7 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
           </button>
         </div>
         <p className="text-muted2 dwc-history-lead">
-          Reports → Design Wise Costing · latest first · click DIN to open full costing
+          Design to Order / Reports → Design Wise Costing · latest first · click DESI/DIN to open full costing · Clear Filters if list looks empty
         </p>
         <div className="dwc-filters">
           <label className="field">
