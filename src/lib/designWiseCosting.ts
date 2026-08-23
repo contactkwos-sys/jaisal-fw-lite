@@ -243,9 +243,8 @@ export function computeWeftRow(row: WeftDraft) {
 
 /**
  * Full per-meter costing chain (Jacquard Repair Design).
- * Yarn rows consume on entered length; per-meter yarn cost uses entered length amortization
- * (verified Excel / JFG1558 chain). Wastage card shows usable length & conversion multiplier.
- * Weaving charge = Total Weft PIC × PIC Conversion Rate.
+ * Yarn rows consume on entered length (incl. wastage); per-meter yarn cost divides total yarn
+ * by usable length (100 mtr basis). Weaving charge = Total Weft PIC × PIC Conversion Rate.
  */
 export function computeBuildup(
   warps: WarpDraft[],
@@ -284,7 +283,8 @@ export function computeBuildup(
   const totalYarnAmount = round2(totalWarpAmount + totalWeftAmount)
   const wastage = computeWastageParams(enteredLengthMtr, wastageMtr, wastagePercent)
   const length = wastage.enteredLengthMtr
-  const yarnCostPerMtr = length > 0 ? round2(totalYarnAmount / length) : 0
+  const usable = wastage.usableLengthMtr
+  const yarnCostPerMtr = usable > 0 ? round2(totalYarnAmount / usable) : 0
   const rate = n(picConversionRate)
   const conversionCharge = round2(totalPic * rate)
   const subtotalPerMtr = round2(yarnCostPerMtr + conversionCharge)
@@ -358,7 +358,7 @@ export function computeProfitProjection(
 
 /** Calculation hints for info-icon tooltips (auditable chain). */
 export const CALC_HINTS = {
-  yarnCostPerMtr: 'Total Yarn Amount ÷ Entered Length (yarn consumed on entered meters)',
+  yarnCostPerMtr: 'Total Yarn Amount ÷ Usable Length (yarn on entered mtr, rate on 100 mtr basis)',
   conversionCharge: 'Total PIC × Conversion Rate (₹/PIC)',
   subtotalPerMtr: 'Yarn Cost/Mtr + Conversion / Weaving Charge',
   muAmount: 'Subtotal × MU %',
