@@ -241,8 +241,28 @@ export async function fetchAllRates(): Promise<RateMasterRow[]> {
     .order('category')
     .order('item_name')
     .order('effective_from', { ascending: false })
-  if (error) throw error
+  if (error) {
+    if (error.code === 'PGRST205' || error.message?.includes('rate_master')) {
+      throw new Error('Rate Master tables not found. Run public/migration-rate-master.sql in Supabase SQL editor.')
+    }
+    throw error
+  }
   return (data as RateMasterRow[]) ?? []
+}
+
+export async function rateMasterTablesReady(): Promise<boolean> {
+  const { error } = await supabase.from('rate_master').select('id').limit(1)
+  return !error
+}
+
+function friendlyDbError(error: { message?: string; code?: string; details?: string }): string {
+  if (error.code === 'PGRST205') {
+    return 'Rate Master tables not found. Run public/migration-rate-master.sql in Supabase SQL editor.'
+  }
+  if (error.code === '23503') {
+    return 'Save failed: user session invalid. Please sign out and sign in again.'
+  }
+  return error.message || error.details || 'Database error'
 }
 
 export type RateMasterInput = {
@@ -285,7 +305,7 @@ export async function saveRateMasterEntry(
       .eq('id', existingId)
       .select('*')
       .single()
-    if (error) throw error
+    if (error) throw new Error(friendlyDbError(error))
     return data as RateMasterRow
   }
 
@@ -294,7 +314,7 @@ export async function saveRateMasterEntry(
     .insert({ ...payload, created_by: userId })
     .select('*')
     .single()
-  if (error) throw error
+  if (error) throw new Error(friendlyDbError(error))
   return data as RateMasterRow
 }
 
