@@ -1634,7 +1634,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false }: Props) 
           </label>
           <label className="field dwc-ceo-rate-field">
             <span className="text-muted">
-              CEO Final Selling Rate (₹/Mtr) {isLocked ? '🔒' : ''}
+              Final Sale Rate (₹/Mtr) {isLocked ? '🔒' : ''}
             </span>
             <input
               className="num dwc-ceo-rate"
@@ -1858,6 +1858,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false }: Props) 
                 <th>GST %</th>
                 <th>GST ₹</th>
                 <th>Final ₹/Mtr</th>
+                <th>Final Sale Rate</th>
                 <th>Photo</th>
                 <th>Created By</th>
                 <th>Status</th>
@@ -1867,7 +1868,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false }: Props) 
             <tbody>
               {filteredHistory.length === 0 ? (
                 <tr>
-                  <td colSpan={17} className="text-muted">
+                  <td colSpan={18} className="text-muted">
                     {history.length === 0
                       ? 'No saved costings yet'
                       : 'No costings match the current filters'}
@@ -1940,6 +1941,11 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false }: Props) 
                       <td className="num dwc-emphasis">
                         {row.final_cost_per_mtr != null
                           ? fmtInr(Number(row.final_cost_per_mtr))
+                          : '—'}
+                      </td>
+                      <td className="num dwc-emphasis dwc-selling-rate">
+                        {row.ceo_final_selling_rate != null
+                          ? fmtInr(Number(row.ceo_final_selling_rate))
                           : '—'}
                       </td>
                       <td>

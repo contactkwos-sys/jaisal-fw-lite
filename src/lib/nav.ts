@@ -135,10 +135,10 @@ export const MAIN_MODULES: MainModule[] = [
       },
       {
         id: 'din-costing-view',
-        label: 'DIN Costing (View Only)',
+        label: 'Order to Program',
         screen: 'design-wise-costing',
         filter: 'view-only',
-        hint: 'View DIN preview & CEO finalized selling rate',
+        hint: 'Design preview & CEO final sale rate only',
       },
       {
         id: 'formula-master',

@@ -584,6 +584,24 @@
   font-weight: 700;
 }
 
+.dwc-design-thumb-btn {
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface2);
+  cursor: pointer;
+  overflow: hidden;
+  width: 48px;
+  height: 48px;
+}
+
+.dwc-design-thumb-btn img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
 .dwc-view-note {
   background: var(--surface2);
 }

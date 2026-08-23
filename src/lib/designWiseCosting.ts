@@ -411,6 +411,17 @@ export function fmtInr(v: number): string {
   return `₹${fmtMoney(v)}`
 }
 
+/** CEO-approved sale rate for program/order screens; falls back to calculated final cost. */
+export function finalSaleRate(
+  ceoFinalSellingRate: number | string | null | undefined,
+  finalCostPerMtr?: number | string | null | undefined,
+): number | null {
+  const ceo = n(ceoFinalSellingRate)
+  if (ceo > 0) return round2(ceo)
+  const calc = n(finalCostPerMtr)
+  return calc > 0 ? round2(calc) : null
+}
+
 /** Best-effort parse of OCR / diary text into field hints. */
 export function parseDiaryNumbers(text: string): {
   denier?: string

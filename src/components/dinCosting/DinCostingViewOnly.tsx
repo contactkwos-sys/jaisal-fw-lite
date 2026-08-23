@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { fmtInr, fmtQty } from '../../lib/designWiseCosting'
+import { finalSaleRate, fmtInr, fmtQty } from '../../lib/designWiseCosting'
 
 export type DinCostingViewRow = {
   id: string
@@ -58,30 +58,28 @@ export function DinCostingViewOnly({ rows, onRefresh }: Props) {
     })
   }, [rows, filters])
 
-  const sellingRate = (row: DinCostingViewRow) =>
-    row.ceo_final_selling_rate != null ? row.ceo_final_selling_rate : row.final_cost_per_mtr
+  const saleRate = (row: DinCostingViewRow) =>
+    finalSaleRate(row.ceo_final_selling_rate, row.final_cost_per_mtr)
 
   return (
     <div className="screen dwc-screen dwc-view-only">
       <header className="screen-header dwc-header">
         <div>
-          <h1>DIN Costing (View Only)</h1>
-          <p className="text-muted">
-            Design to Program → View DIN preview &amp; CEO finalized selling rate only
-          </p>
+          <h1>Order to Program</h1>
+          <p className="text-muted">Design preview &amp; CEO final sale rate only — no costing breakdown</p>
         </div>
       </header>
 
       <section className="dwc-panel dwc-view-note">
         <p className="text-muted2">
-          Only CEO can create/edit costing. Design / Program team can view DIN preview and CEO
-          finalized selling rate only.
+          Program team sees design image and CEO-approved final sale rate only. Full costing is available on the CEO
+          dashboard.
         </p>
       </section>
 
       <section className="dwc-panel dwc-history">
         <div className="dwc-panel-head">
-          <h2 className="section-title">Finalized Designs</h2>
+          <h2 className="section-title">Designs Ready for Program</h2>
           <button type="button" className="dwc-secondary-btn" onClick={onRefresh}>
             Refresh
           </button>
@@ -145,23 +143,21 @@ export function DinCostingViewOnly({ rows, onRefresh }: Props) {
                 <th>DIN No.</th>
                 <th>Date</th>
                 <th>Quality</th>
-                <th>Base Length</th>
-                <th>Usable Length</th>
-                <th>DIN Preview</th>
-                <th>CEO Final Selling Rate</th>
+                <th>Design View</th>
+                <th>Final Sale Rate</th>
                 <th>Status</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="text-muted">
-                    No DIN costings found
+                  <td colSpan={7} className="text-muted">
+                    No designs found
                   </td>
                 </tr>
               ) : (
                 filtered.map((row, idx) => {
-                  const rate = sellingRate(row)
+                  const rate = saleRate(row)
                   const finalized = row.status === 'final' || row.is_locked
                   return (
                     <tr key={row.id}>
@@ -169,31 +165,22 @@ export function DinCostingViewOnly({ rows, onRefresh }: Props) {
                       <td className="dwc-din-cell">{row.din_number}</td>
                       <td>{formatDate(row.costing_date)}</td>
                       <td>{row.quality_name || '—'}</td>
-                      <td className="num">
-                        {row.design_length_mtr != null ? fmtQty(Number(row.design_length_mtr), 0) : '—'}
-                      </td>
-                      <td className="num">
-                        {row.usable_length_mtr != null
-                          ? fmtQty(Number(row.usable_length_mtr), 0)
-                          : row.design_length_mtr != null
-                            ? fmtQty(Math.max(Number(row.design_length_mtr) - 10, 0), 0)
-                            : '—'}
-                      </td>
                       <td>
                         {row.diary_image_url ? (
                           <button
                             type="button"
-                            className="dwc-link-btn"
+                            className="dwc-design-thumb-btn"
                             onClick={() => setPreview(row)}
+                            title="View design"
                           >
-                            View Preview
+                            <img src={row.diary_image_url} alt={`Design ${row.din_number}`} />
                           </button>
                         ) : (
                           '—'
                         )}
                       </td>
                       <td className="num dwc-emphasis dwc-selling-rate">
-                        {rate != null ? fmtInr(Number(rate)) : '—'}
+                        {rate != null ? fmtInr(rate) : '—'}
                       </td>
                       <td>
                         <span
@@ -215,7 +202,7 @@ export function DinCostingViewOnly({ rows, onRefresh }: Props) {
         <div className="dwc-preview-modal" role="dialog" aria-modal="true">
           <div className="dwc-preview-card">
             <div className="dwc-preview-head">
-              <h2>DIN Preview — {preview.din_number}</h2>
+              <h2>{preview.din_number} · {preview.quality_name || 'Design'}</h2>
               <button type="button" className="dwc-icon-btn" onClick={() => setPreview(null)}>
                 ✕
               </button>
@@ -228,15 +215,9 @@ export function DinCostingViewOnly({ rows, onRefresh }: Props) {
               )}
               <dl className="dwc-preview-meta">
                 <div>
-                  <dt>Quality</dt>
-                  <dd>{preview.quality_name || '—'}</dd>
-                </div>
-                <div>
-                  <dt>Base Length</dt>
-                  <dd>
-                    {preview.design_length_mtr != null
-                      ? `${fmtQty(Number(preview.design_length_mtr), 0)} mtr`
-                      : '—'}
+                  <dt>Final Sale Rate</dt>
+                  <dd className="dwc-selling-rate">
+                    {saleRate(preview) != null ? fmtInr(Number(saleRate(preview))) : '—'}
                   </dd>
                 </div>
                 <div>
@@ -244,13 +225,9 @@ export function DinCostingViewOnly({ rows, onRefresh }: Props) {
                   <dd>
                     {preview.usable_length_mtr != null
                       ? `${fmtQty(Number(preview.usable_length_mtr), 0)} mtr`
-                      : '—'}
-                  </dd>
-                </div>
-                <div>
-                  <dt>CEO Final Selling Rate</dt>
-                  <dd className="dwc-selling-rate">
-                    {sellingRate(preview) != null ? fmtInr(Number(sellingRate(preview))) : '—'}
+                      : preview.design_length_mtr != null
+                        ? `${fmtQty(Math.max(Number(preview.design_length_mtr) - 10, 0), 0)} mtr`
+                        : '—'}
                   </dd>
                 </div>
               </dl>

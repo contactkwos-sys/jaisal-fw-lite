@@ -13,6 +13,7 @@ import {
   type TodayKpis,
   type TrackingTotals,
 } from '../../lib/programDispatch'
+import { finalSaleRate, fmtInr } from '../../lib/designWiseCosting'
 import { useAuth } from '../../lib/auth'
 import { handleUserError } from '../../lib/userError'
 import { supabase } from '../../lib/supabase'
@@ -34,6 +35,8 @@ type OrderRow = {
   orderDate: string
   remarks: string
   status: string
+  designImageUrl: string | null
+  finalSaleRate: number | null
 }
 
 type Props = {
@@ -90,9 +93,46 @@ export function PdHub({ onGo }: Props) {
       }
     }
 
+    const designNos = [
+      ...new Set(
+        (items ?? [])
+          .map((it: any) => String(it.design_no || '').trim())
+          .filter((d: string) => d && d !== '—'),
+      ),
+    ]
+    const designMeta = new Map<string, { imageUrl: string | null; saleRate: number | null }>()
+    if (designNos.length) {
+      const [{ data: costings }, { data: dins }] = await Promise.all([
+        supabase
+          .from('design_costing')
+          .select('din_number, diary_image_url, ceo_final_selling_rate, final_cost_per_mtr, created_at')
+          .in('din_number', designNos)
+          .order('created_at', { ascending: false }),
+        supabase.from('dins').select('din_number, din_image_url, final_cost_per_mtr').in('din_number', designNos),
+      ])
+      const dinMap = new Map((dins ?? []).map((d) => [d.din_number, d]))
+      for (const c of costings ?? []) {
+        if (designMeta.has(c.din_number)) continue
+        const din = dinMap.get(c.din_number)
+        designMeta.set(c.din_number, {
+          imageUrl: c.diary_image_url || din?.din_image_url || null,
+          saleRate: finalSaleRate(c.ceo_final_selling_rate, c.final_cost_per_mtr ?? din?.final_cost_per_mtr),
+        })
+      }
+      for (const d of dins ?? []) {
+        if (designMeta.has(d.din_number)) continue
+        designMeta.set(d.din_number, {
+          imageUrl: d.din_image_url || null,
+          saleRate: finalSaleRate(null, d.final_cost_per_mtr),
+        })
+      }
+    }
+
     const rows: OrderRow[] = (items ?? []).map((it: any) => {
       const ob = it.order_book || {}
       const party = ob.party_name || '—'
+      const design = it.design_no || '—'
+      const meta = design !== '—' ? designMeta.get(design) : undefined
       return {
         itemId: it.id,
         orderId: ob.id,
@@ -100,7 +140,7 @@ export function PdHub({ onGo }: Props) {
         party,
         partyCode: ob.party_code || '',
         marka: markaMap.get(String(party).toLowerCase()) || suggestMarka(party),
-        design: it.design_no || '—',
+        design,
         quality: it.quality || '—',
         colour: it.colour || '—',
         totalPcs: Number(it.total_pcs || 0),
@@ -109,6 +149,8 @@ export function PdHub({ onGo }: Props) {
         orderDate: ob.order_date || '—',
         remarks: ob.remarks || '',
         status: it.status || ob.status || 'Pending',
+        designImageUrl: meta?.imageUrl ?? null,
+        finalSaleRate: meta?.saleRate ?? null,
       }
     })
     setOrders(rows)
@@ -295,6 +337,8 @@ export function PdHub({ onGo }: Props) {
                   <th>Order No.</th>
                   <th>Party</th>
                   <th>Design</th>
+                  <th>Design View</th>
+                  <th>Final Sale Rate</th>
                   <th>Quality</th>
                   <th>Colour</th>
                   <th>Pcs</th>
@@ -310,6 +354,22 @@ export function PdHub({ onGo }: Props) {
                     <td className="num">{o.orderNo}</td>
                     <td>{o.party}</td>
                     <td>{o.design}</td>
+                    <td>
+                      {o.designImageUrl ? (
+                        <img
+                          className="pd-design-thumb"
+                          src={o.designImageUrl}
+                          alt={`Design ${o.design}`}
+                          width={40}
+                          height={40}
+                        />
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                    <td className="num pd-sale-rate">
+                      {o.finalSaleRate != null ? fmtInr(o.finalSaleRate) : '—'}
+                    </td>
                     <td>{o.quality}</td>
                     <td>{o.colour}</td>
                     <td className="num">{o.totalPcs || '—'}</td>
@@ -327,7 +387,7 @@ export function PdHub({ onGo }: Props) {
                 ))}
                 {!orders.length ? (
                   <tr>
-                    <td colSpan={10} className="text-muted">
+                    <td colSpan={12} className="text-muted">
                       No open orders. Create orders in Orders &amp; Pending → Order Book.
                     </td>
                   </tr>
@@ -346,7 +406,15 @@ export function PdHub({ onGo }: Props) {
               <h3>
                 {selected.orderNo} · {selected.party}
               </h3>
-              <div className="pd-detail-grid">
+              <div className="pd-detail-visual">
+                {selected.designImageUrl ? (
+                  <img
+                    className="pd-design-preview"
+                    src={selected.designImageUrl}
+                    alt={`Design ${selected.design}`}
+                  />
+                ) : null}
+                <div className="pd-detail-grid">
                 <div>
                   <span>Party Code</span>
                   <strong>{selected.partyCode || '—'}</strong>
@@ -358,6 +426,12 @@ export function PdHub({ onGo }: Props) {
                 <div>
                   <span>Design</span>
                   <strong>{selected.design}</strong>
+                </div>
+                <div>
+                  <span>Final Sale Rate</span>
+                  <strong className="num pd-sale-rate">
+                    {selected.finalSaleRate != null ? fmtInr(selected.finalSaleRate) : '—'}
+                  </strong>
                 </div>
                 <div>
                   <span>Quality</span>
@@ -382,6 +456,7 @@ export function PdHub({ onGo }: Props) {
                 <div className="pd-span-2">
                   <span>Remarks</span>
                   <strong>{selected.remarks || '—'}</strong>
+                </div>
                 </div>
               </div>
               <div className="pd-program-form">
