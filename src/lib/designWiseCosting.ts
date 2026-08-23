@@ -115,6 +115,27 @@ export type WeftDraft = {
   rate_per_kg: string
 } & RateRowMeta
 
+export type WastageParams = {
+  enteredLengthMtr: number
+  wastageMtr: number
+  wastagePercent: number
+  usableLengthMtr: number
+  conversionMultiplier: number
+}
+
+export type ProfitProjection = {
+  costPerMtr: number
+  fixedCostPerMtr: number
+  desiredProfitPerMtr: number
+  targetSellingRate: number
+  ceoFinalSellingRate: number
+  productionMeters: number
+  profitPerMtr: number
+  totalProfit: number
+  marginPctOnCost: number
+  marginPctOnSelling: number
+}
+
 export type CostingBuildup = {
   totalWarpWeightKg: number
   totalWeftWeightKg: number
@@ -122,6 +143,12 @@ export type CostingBuildup = {
   totalWarpAmount: number
   totalWeftAmount: number
   totalYarnAmount: number
+  enteredLengthMtr: number
+  wastageMtr: number
+  wastagePercent: number
+  usableLengthMtr: number
+  conversionMultiplier: number
+  /** @deprecated use enteredLengthMtr */
   designLengthMtr: number
   yarnCostPerMtr: number
   totalPic: number
@@ -135,6 +162,26 @@ export type CostingBuildup = {
   gstPercent: number
   gstAmount: number
   finalCostPerMtr: number
+}
+
+/** Compute wastage / usable length from entered production length. */
+export function computeWastageParams(
+  enteredLengthMtr: number,
+  wastageMtr = 10,
+  wastagePercent = 10,
+): WastageParams {
+  const entered = n(enteredLengthMtr)
+  const wastage = n(wastageMtr)
+  const pct = n(wastagePercent)
+  const usable = Math.max(entered - wastage, 0)
+  const multiplier = usable > 0 ? round2(entered / usable) : 0
+  return {
+    enteredLengthMtr: entered,
+    wastageMtr: wastage,
+    wastagePercent: pct,
+    usableLengthMtr: usable,
+    conversionMultiplier: multiplier,
+  }
 }
 
 export function emptyWarp(sr = 1): WarpDraft {
@@ -195,17 +242,20 @@ export function computeWeftRow(row: WeftDraft) {
 }
 
 /**
- * Full per-meter costing chain.
- * Weaving charge = Total Weft PIC × PIC Conversion Rate (not the rate alone).
- * Yarn Cost / Mtr = Total Yarn Amount ÷ Design Length.
+ * Full per-meter costing chain (Jacquard Repair Design).
+ * Yarn rows consume on entered length; per-meter yarn cost uses entered length amortization
+ * (verified Excel / JFG1558 chain). Wastage card shows usable length & conversion multiplier.
+ * Weaving charge = Total Weft PIC × PIC Conversion Rate.
  */
 export function computeBuildup(
   warps: WarpDraft[],
   wefts: WeftDraft[],
-  designLengthMtr: number,
+  enteredLengthMtr: number,
   picConversionRate: number,
   muPercent: number,
   gstPercent: number,
+  wastageMtr = 10,
+  wastagePercent = 10,
 ): CostingBuildup {
   let totalWarpWeightKg = 0
   let totalWeftWeightKg = 0
@@ -232,7 +282,8 @@ export function computeBuildup(
 
   const totalWeightKg = round2(totalWarpWeightKg + totalWeftWeightKg)
   const totalYarnAmount = round2(totalWarpAmount + totalWeftAmount)
-  const length = n(designLengthMtr)
+  const wastage = computeWastageParams(enteredLengthMtr, wastageMtr, wastagePercent)
+  const length = wastage.enteredLengthMtr
   const yarnCostPerMtr = length > 0 ? round2(totalYarnAmount / length) : 0
   const rate = n(picConversionRate)
   const conversionCharge = round2(totalPic * rate)
@@ -252,6 +303,11 @@ export function computeBuildup(
     totalWarpAmount,
     totalWeftAmount,
     totalYarnAmount,
+    enteredLengthMtr: length,
+    wastageMtr: wastage.wastageMtr,
+    wastagePercent: wastage.wastagePercent,
+    usableLengthMtr: wastage.usableLengthMtr,
+    conversionMultiplier: wastage.conversionMultiplier,
     designLengthMtr: length,
     yarnCostPerMtr,
     totalPic,
@@ -265,6 +321,80 @@ export function computeBuildup(
     gstAmount,
     finalCostPerMtr,
   }
+}
+
+/** CEO profit & projection calculator — uses CEO final selling rate when set. */
+export function computeProfitProjection(
+  finalCostPerMtr: number,
+  fixedCostPerMtr: number,
+  desiredProfitPerMtr: number,
+  ceoFinalSellingRate: number,
+  productionMeters: number,
+): ProfitProjection {
+  const cost = n(finalCostPerMtr)
+  const fixed = n(fixedCostPerMtr)
+  const desired = n(desiredProfitPerMtr)
+  const selling = n(ceoFinalSellingRate)
+  const prod = n(productionMeters)
+  const targetSellingRate = round2(cost + fixed + desired)
+  const effectiveSelling = selling > 0 ? selling : targetSellingRate
+  const profitPerMtr = round2(effectiveSelling - cost)
+  const totalProfit = round2(profitPerMtr * prod)
+  const marginPctOnCost = cost > 0 ? round2((profitPerMtr / cost) * 100) : 0
+  const marginPctOnSelling = effectiveSelling > 0 ? round2((profitPerMtr / effectiveSelling) * 100) : 0
+  return {
+    costPerMtr: cost,
+    fixedCostPerMtr: fixed,
+    desiredProfitPerMtr: desired,
+    targetSellingRate,
+    ceoFinalSellingRate: selling,
+    productionMeters: prod,
+    profitPerMtr,
+    totalProfit,
+    marginPctOnCost,
+    marginPctOnSelling,
+  }
+}
+
+/** Calculation hints for info-icon tooltips (auditable chain). */
+export const CALC_HINTS = {
+  yarnCostPerMtr: 'Total Yarn Amount ÷ Entered Length (yarn consumed on entered meters)',
+  conversionCharge: 'Total PIC × Conversion Rate (₹/PIC)',
+  subtotalPerMtr: 'Yarn Cost/Mtr + Conversion / Weaving Charge',
+  muAmount: 'Subtotal × MU %',
+  afterMuPerMtr: 'Subtotal + MU Amount',
+  gstAmount: 'After MU × GST %',
+  finalCostPerMtr: 'After MU + GST Amount',
+  conversionMultiplier: 'Entered Length ÷ Usable Length',
+  totalProfit: '(CEO Final Selling Rate − Cost/Mtr) × Production Meters',
+} as const
+
+/** Role helpers for DIN Costing access */
+export function canEditDinCosting(roleName: string, isCeo: boolean, isManager: boolean): boolean {
+  const r = (roleName || '').trim().toLowerCase()
+  return (
+    isCeo ||
+    isManager ||
+    r === 'md' ||
+    r === 'managing director' ||
+    r === 'owner' ||
+    r.includes('ceo') ||
+    r === 'admin'
+  )
+}
+
+export function canViewDinCosting(roleName: string, isCeo: boolean, isManager: boolean): boolean {
+  if (canEditDinCosting(roleName, isCeo, isManager)) return true
+  const r = (roleName || '').trim().toLowerCase()
+  return (
+    r.includes('program') ||
+    r === 'programmer' ||
+    r === 'program supervisor' ||
+    r === 'production incharge' ||
+    r === 'mill incharge' ||
+    r === 'mill' ||
+    r === 'machine supervisor'
+  )
 }
 
 export function fmtMoney(v: number, digits = 2): string {

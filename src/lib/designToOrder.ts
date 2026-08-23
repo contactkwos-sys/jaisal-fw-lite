@@ -373,7 +373,7 @@ export async function syncDinCostingFromLatest(dinNumber: string): Promise<void>
   const { data: costing } = await supabase
     .from('design_costing')
     .select(
-      'id, costing_date, after_mu_per_mtr, gst_percent, gst_amount, final_cost_per_mtr, status, created_at',
+      'id, costing_date, after_mu_per_mtr, gst_percent, gst_amount, final_cost_per_mtr, ceo_final_selling_rate, status, created_at',
     )
     .eq('din_number', dinNumber)
     .order('created_at', { ascending: false })
@@ -397,7 +397,12 @@ export async function syncDinCostingFromLatest(dinNumber: string): Promise<void>
     base_cost_per_mtr: costing.after_mu_per_mtr != null ? Number(costing.after_mu_per_mtr) : null,
     gst_percent: costing.gst_percent != null ? Number(costing.gst_percent) : null,
     gst_amount: costing.gst_amount != null ? Number(costing.gst_amount) : null,
-    final_cost_per_mtr: costing.final_cost_per_mtr != null ? Number(costing.final_cost_per_mtr) : null,
+    final_cost_per_mtr:
+      costing.ceo_final_selling_rate != null
+        ? Number(costing.ceo_final_selling_rate)
+        : costing.final_cost_per_mtr != null
+          ? Number(costing.final_cost_per_mtr)
+          : null,
     status: completed ? 'Costing Done' : 'Costing Pending',
   })
 }

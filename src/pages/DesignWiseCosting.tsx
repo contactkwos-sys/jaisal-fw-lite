@@ -4,15 +4,18 @@ import { todayISO } from '../lib/mutate'
 import { supabase } from '../lib/supabase'
 import {
   CALC_FACTOR,
+  CALC_HINTS,
+  canEditDinCosting,
+  canViewDinCosting,
   computeBuildup,
+  computeProfitProjection,
   computeWarpRow,
   computeWeftRow,
+  computeWastageParams,
   emptyWarp,
   emptyWeft,
   finalCostAuditLine,
   finalCostHint,
-  finalCostLabel,
-  finalDesignCostMeterLabel,
   fmtInr,
   fmtMoney,
   fmtQty,
@@ -21,6 +24,8 @@ import {
   type WarpDraft,
   type WeftDraft,
 } from '../lib/designWiseCosting'
+import { fetchFormulaMaster, FORMULA_DEFAULTS } from '../lib/formulaMaster'
+import { DinCostingViewOnly, CalcInfo, type DinCostingViewRow } from '../components/dinCosting/DinCostingViewOnly'
 import { syncDinCostingFromLatest } from '../lib/designToOrder'
 import {
   fetchAllRates,
@@ -30,7 +35,7 @@ import {
   type RateMasterRow,
 } from '../lib/rateMaster'
 
-type Props = { initialDin?: string }
+type Props = { initialDin?: string; viewOnly?: boolean }
 
 type DesignOpt = { id: string; dno: string; colour: string | null }
 
@@ -49,6 +54,9 @@ type CostingHistoryRow = {
   gst_percent: number | null
   gst_amount: number | null
   final_cost_per_mtr: number | null
+  ceo_final_selling_rate: number | null
+  usable_length_mtr: number | null
+  is_locked: boolean | null
   diary_image_url: string | null
   status: string | null
   created_at: string | null
@@ -78,7 +86,7 @@ const EMPTY_FILTERS: HistoryFilters = {
 }
 
 const HISTORY_SELECT =
-  'id, din_number, quality_name, costing_date, design_length_mtr, yarn_cost_per_mtr, total_pic, pic_conversion_rate, conversion_charge, mu_percent, after_mu_per_mtr, gst_percent, gst_amount, final_cost_per_mtr, diary_image_url, status, created_at, updated_at, created_by, updated_by'
+  'id, din_number, quality_name, costing_date, design_length_mtr, usable_length_mtr, yarn_cost_per_mtr, total_pic, pic_conversion_rate, conversion_charge, mu_percent, after_mu_per_mtr, gst_percent, gst_amount, final_cost_per_mtr, ceo_final_selling_rate, diary_image_url, status, is_locked, created_at, updated_at, created_by, updated_by'
 
 /**
  * Diary OCR: best-effort via dynamic `tesseract.js` import.
@@ -136,17 +144,11 @@ function isDinFilter(value: string | undefined): value is string {
   return true
 }
 
-export function DesignWiseCosting({ initialDin = '' }: Props) {
+export function DesignWiseCosting({ initialDin = '', viewOnly = false }: Props) {
   const { session, profile, isCeo, isManager, roleName } = useAuth()
   const canDeleteFinal = isCeo || isManager
-  const role = (roleName || '').trim().toLowerCase()
-  const canViewCosting =
-    isCeo ||
-    isManager ||
-    role === 'md' ||
-    role === 'managing director' ||
-    role === 'owner' ||
-    role.includes('ceo')
+  const canEdit = canEditDinCosting(roleName || '', isCeo, isManager)
+  const canView = canViewDinCosting(roleName || '', isCeo, isManager)
 
   const [dinNumber, setDinNumber] = useState(initialDin)
   const [costingDate, setCostingDate] = useState(todayISO())
@@ -160,6 +162,14 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
   const [picConversionRate, setPicConversionRate] = useState('0.45')
   const [muPercent, setMuPercent] = useState('0')
   const [gstPercent, setGstPercent] = useState('0')
+  const [wastageMtr, setWastageMtr] = useState('10')
+  const [wastagePercent, setWastagePercent] = useState('10')
+  const [ceoFinalSellingRate, setCeoFinalSellingRate] = useState('')
+  const [fixedCostPerMtr, setFixedCostPerMtr] = useState('')
+  const [desiredProfitPerMtr, setDesiredProfitPerMtr] = useState('')
+  const [productionMeters, setProductionMeters] = useState('')
+  const [isLocked, setIsLocked] = useState(false)
+  const [formulaDefaults, setFormulaDefaults] = useState(FORMULA_DEFAULTS)
   const [savedId, setSavedId] = useState<string | null>(null)
   const [status, setStatus] = useState<'draft' | 'final'>('draft')
   const [history, setHistory] = useState<CostingHistoryRow[]>([])
@@ -176,6 +186,23 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
   /** After "Save As New", skip one DIN blur auto-load so the form is not overwritten. */
   const skipDinAutoloadRef = useRef(false)
   const [masterRates, setMasterRates] = useState<RateMasterRow[]>([])
+
+  useEffect(() => {
+    void fetchFormulaMaster()
+      .then((cfg) => {
+        setFormulaDefaults({
+          calc_factor: cfg.calc_factor,
+          default_base_length_mtr: cfg.default_base_length_mtr,
+          default_wastage_mtr: cfg.default_wastage_mtr,
+          default_wastage_percent: cfg.default_wastage_percent,
+          default_usable_length_mtr: cfg.default_usable_length_mtr,
+        })
+        if (!designLength) setDesignLength(String(cfg.default_base_length_mtr))
+        setWastageMtr(String(cfg.default_wastage_mtr))
+        setWastagePercent(String(cfg.default_wastage_percent))
+      })
+      .catch(() => setFormulaDefaults(FORMULA_DEFAULTS))
+  }, [])
 
   useEffect(() => {
     void fetchAllRates()
@@ -263,9 +290,25 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
         n(picConversionRate),
         n(muPercent),
         n(gstPercent),
+        n(wastageMtr),
+        n(wastagePercent),
       ),
-    [warps, wefts, designLength, picConversionRate, muPercent, gstPercent],
+    [warps, wefts, designLength, picConversionRate, muPercent, gstPercent, wastageMtr, wastagePercent],
   )
+
+  const profit = useMemo(
+    () =>
+      computeProfitProjection(
+        buildup.finalCostPerMtr,
+        n(fixedCostPerMtr),
+        n(desiredProfitPerMtr),
+        n(ceoFinalSellingRate),
+        n(productionMeters),
+      ),
+    [buildup.finalCostPerMtr, fixedCostPerMtr, desiredProfitPerMtr, ceoFinalSellingRate, productionMeters],
+  )
+
+  const isReadOnly = !canEdit || isLocked
 
   const refreshHistory = useCallback(async () => {
     setHistoryError(null)
@@ -342,9 +385,21 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
     setCostingDate(String(header.costing_date || todayISO()))
     setDiaryUrl((header.diary_image_url as string | null) || null)
     setStatus(header.status === 'final' ? 'final' : 'draft')
+    setIsLocked(Boolean(header.is_locked))
 
     const lengthVal = header.design_length_mtr
     setDesignLength(lengthVal != null && lengthVal !== '' ? String(lengthVal) : '')
+
+    setWastageMtr(String(header.wastage_mtr ?? formulaDefaults.default_wastage_mtr))
+    setWastagePercent(String(header.wastage_percent ?? formulaDefaults.default_wastage_percent))
+    setCeoFinalSellingRate(
+      header.ceo_final_selling_rate != null ? String(header.ceo_final_selling_rate) : '',
+    )
+    setFixedCostPerMtr(header.fixed_cost_per_mtr != null ? String(header.fixed_cost_per_mtr) : '')
+    setDesiredProfitPerMtr(
+      header.desired_profit_per_mtr != null ? String(header.desired_profit_per_mtr) : '',
+    )
+    setProductionMeters(header.production_meters != null ? String(header.production_meters) : '')
 
     // Prefer dedicated rate column; legacy rows stored rate in conversion_charge
     const rate =
@@ -356,7 +411,7 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
     setPicConversionRate(String(rate ?? 0.45))
     setMuPercent(String(header.mu_percent ?? 0))
     setGstPercent(String(header.gst_percent ?? 0))
-  }, [])
+  }, [formulaDefaults.default_wastage_mtr, formulaDefaults.default_wastage_percent])
 
   const loadById = useCallback(
     async (id: string, quiet = false) => {
@@ -493,6 +548,13 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
     setPicConversionRate('0.45')
     setMuPercent('0')
     setGstPercent('0')
+    setWastageMtr(String(formulaDefaults.default_wastage_mtr))
+    setWastagePercent(String(formulaDefaults.default_wastage_percent))
+    setCeoFinalSellingRate('')
+    setFixedCostPerMtr('')
+    setDesiredProfitPerMtr('')
+    setProductionMeters('')
+    setIsLocked(false)
     setSavedId(null)
     setStatus('draft')
     setLengthError(null)
@@ -577,7 +639,32 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
     return true
   }
 
-  async function persist(asDraft: boolean) {
+  async function logAudit(
+    costingId: string,
+    action: string,
+    fieldName?: string,
+    previousValue?: string,
+    newValue?: string,
+    reason?: string,
+  ) {
+    try {
+      await supabase.from('design_costing_audit').insert({
+        costing_id: costingId,
+        din_number: dinNumber.trim(),
+        action,
+        field_name: fieldName || null,
+        previous_value: previousValue ?? null,
+        new_value: newValue ?? null,
+        reason: reason || null,
+        changed_by: session?.user?.id || null,
+        changed_by_name: profile?.full_name || null,
+      })
+    } catch {
+      /* audit must not block save */
+    }
+  }
+
+  async function persist(asDraft: boolean, finalize = false) {
     if (!validateBeforeSave()) return
     setBusy(true)
     setError(null)
@@ -590,18 +677,32 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
         n(picConversionRate),
         n(muPercent),
         n(gstPercent),
+        n(wastageMtr),
+        n(wastagePercent),
       )
-      const nextStatus: 'draft' | 'final' = asDraft ? 'draft' : 'final'
+      const profitTotals = computeProfitProjection(
+        totals.finalCostPerMtr,
+        n(fixedCostPerMtr),
+        n(desiredProfitPerMtr),
+        n(ceoFinalSellingRate),
+        n(productionMeters),
+      )
       const userId = session?.user?.id || null
-      const header = {
+      const prevSellingRate = ceoFinalSellingRate
+      const baseHeader = {
         din_number: dinNumber.trim(),
         quality_name: qualityName.trim() || null,
         costing_date: costingDate,
         diary_image_url: diaryUrl,
-        design_length_mtr: totals.designLengthMtr,
+        design_length_mtr: totals.enteredLengthMtr,
+        wastage_mtr: totals.wastageMtr,
+        wastage_percent: totals.wastagePercent,
+        usable_length_mtr: totals.usableLengthMtr,
+        conversion_multiplier: totals.conversionMultiplier,
         pic_conversion_rate: totals.picConversionRate,
         conversion_charge: totals.conversionCharge,
         mu_percent: totals.muPercent,
+        mu_amount: totals.muAmount,
         gst_percent: totals.gstPercent,
         gst_amount: totals.gstAmount,
         total_pic: totals.totalPic,
@@ -615,11 +716,26 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
         subtotal_per_mtr: totals.subtotalPerMtr,
         after_mu_per_mtr: totals.afterMuPerMtr,
         final_cost_per_mtr: totals.finalCostPerMtr,
-        status: nextStatus,
+        ceo_final_selling_rate: n(ceoFinalSellingRate) || null,
+        fixed_cost_per_mtr: n(fixedCostPerMtr) || null,
+        desired_profit_per_mtr: n(desiredProfitPerMtr) || null,
+        production_meters: n(productionMeters) || null,
+        total_profit: profitTotals.totalProfit,
+        margin_pct_on_cost: profitTotals.marginPctOnCost,
+        margin_pct_on_selling: profitTotals.marginPctOnSelling,
+        status: finalize ? 'final' : asDraft ? 'draft' : status,
+        is_locked: finalize ? true : isLocked,
         updated_by: userId,
         updated_at: new Date().toISOString(),
         created_by: userId,
       }
+      const header = finalize
+        ? {
+            ...baseHeader,
+            finalized_by: userId,
+            finalized_at: new Date().toISOString(),
+          }
+        : baseHeader
 
       let costingId = savedId
       let previousWarpIds: string[] = []
@@ -660,7 +776,8 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
         setSavedId(costingId)
       }
 
-      setStatus(nextStatus)
+      setStatus(finalize ? 'final' : asDraft ? 'draft' : status)
+      if (finalize) setIsLocked(true)
 
       const warpPayload = warps.map((row, i) => ({
         costing_id: costingId,
@@ -711,7 +828,28 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
         if (dfErr) throw dfErr
       }
 
-      if (!asDraft) {
+      if (finalize && costingId) {
+        await logAudit(costingId, 'finalize', 'status', status, 'final')
+        if (n(prevSellingRate) > 0) {
+          await logAudit(
+            costingId,
+            'rate_change',
+            'ceo_final_selling_rate',
+            undefined,
+            ceoFinalSellingRate,
+          )
+        }
+      } else if (costingId && n(ceoFinalSellingRate) > 0) {
+        await logAudit(
+          costingId,
+          asDraft ? 'save_draft' : 'save',
+          'ceo_final_selling_rate',
+          undefined,
+          ceoFinalSellingRate,
+        )
+      }
+
+      if (!asDraft || finalize) {
         const { error: designErr } = await supabase
           .from('designs')
           .update({
@@ -743,9 +881,11 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
 
       await refreshHistory()
       setMessage(
-        asDraft
-          ? `Draft saved · Final ${fmtInr(totals.finalCostPerMtr)}/mtr`
-          : `Costing saved to DIN ${dinNumber.trim()} · Final ${fmtInr(totals.finalCostPerMtr)}/mtr`,
+        finalize
+          ? `Costing finalized & locked · CEO rate ${fmtInr(n(ceoFinalSellingRate) || totals.finalCostPerMtr)}/mtr`
+          : asDraft
+            ? `Draft saved · Calculated ${fmtInr(totals.finalCostPerMtr)}/mtr`
+            : `Costing saved to DIN ${dinNumber.trim()} · Calculated ${fmtInr(totals.finalCostPerMtr)}/mtr`,
       )
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed')
@@ -782,30 +922,49 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
     if (match?.colour && !qualityName) setQualityName(match.colour)
   }
 
-  if (!canViewCosting) {
+  if (!canView) {
     return (
       <div className="screen">
         <header className="screen-header">
-          <h1>Design-wise Costing</h1>
-          <p className="text-muted">Restricted to CEO / authorized roles.</p>
+          <h1>DIN Costing</h1>
+          <p className="text-muted">Restricted access.</p>
         </header>
-        <p className="form-error text-danger">You do not have permission to view Design-wise Costing rates.</p>
+        <p className="form-error text-danger">You do not have permission to view DIN Costing.</p>
       </div>
     )
   }
+
+  if (viewOnly || !canEdit) {
+    const viewRows: DinCostingViewRow[] = history.map((row) => ({
+      id: row.id,
+      din_number: row.din_number,
+      quality_name: row.quality_name,
+      costing_date: row.costing_date,
+      design_length_mtr: row.design_length_mtr,
+      usable_length_mtr: row.usable_length_mtr,
+      ceo_final_selling_rate: row.ceo_final_selling_rate,
+      final_cost_per_mtr: row.final_cost_per_mtr,
+      diary_image_url: row.diary_image_url,
+      status: row.status,
+      is_locked: row.is_locked,
+    }))
+    return <DinCostingViewOnly rows={viewRows} onRefresh={() => void refreshHistory()} />
+  }
+
+  const wastageDisplay = computeWastageParams(n(designLength), n(wastageMtr), n(wastagePercent))
 
   return (
     <div className="screen dwc-screen">
       <header className="screen-header dwc-header">
         <div>
-          <h1>Design-wise Costing</h1>
+          <h1>DIN Costing (Jacquard Repair Design)</h1>
           <p className="text-muted">
-            Warp + Weft yarn cost → Total PIC → Weaving charge → Final ₹/meter
+            CEO Dashboard → Warp + Weft yarn cost → Total PIC → Weaving charge → Final ₹/meter (100 mtr basis)
           </p>
         </div>
         {savedId ? (
           <span className={`dwc-status-chip dwc-status-${status}`}>
-            {status === 'final' ? 'Finalized' : 'Draft'}
+            {isLocked ? 'Finalized · Locked' : status === 'final' ? 'Finalized' : 'Draft'}
           </span>
         ) : null}
       </header>
@@ -873,6 +1032,59 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
             {lengthError ? <span className="dwc-inline-error">{lengthError}</span> : null}
           </label>
         </div>
+        <div className="dwc-length-summary">
+          <div>
+            <span className="text-muted">Entered Length</span>
+            <strong className="num">{fmtQty(wastageDisplay.enteredLengthMtr, 0)} Mtr</strong>
+          </div>
+          <div>
+            <span className="text-muted">Wastage (Lossage)</span>
+            <strong className="num">
+              {fmtQty(wastageDisplay.wastageMtr, 0)} Mtr ({fmtQty(wastageDisplay.wastagePercent, 0)}%)
+            </strong>
+            <span className="dwc-fixed-tag">Fixed</span>
+          </div>
+          <div className="dwc-usable-highlight">
+            <span className="text-muted">Usable Length for Costing</span>
+            <strong className="num">{fmtQty(wastageDisplay.usableLengthMtr, 0)} Mtr</strong>
+            <span className="dwc-auto-tag">Auto</span>
+          </div>
+        </div>
+      </section>
+
+      <section className="dwc-panel dwc-wastage-card">
+        <h2 className="section-title">Wastage / Lossage Adjustment</h2>
+        <div className="dwc-wastage-grid">
+          <div>
+            <span className="text-muted">Entered Production Length</span>
+            <strong className="num">{fmtQty(wastageDisplay.enteredLengthMtr, 0)} Mtr</strong>
+          </div>
+          <div>
+            <span className="text-muted">Wastage</span>
+            <strong className="num">{fmtQty(wastageDisplay.wastageMtr, 0)} Mtr</strong>
+          </div>
+          <div>
+            <span className="text-muted">Lossage</span>
+            <strong className="num">{fmtQty(wastageDisplay.wastagePercent, 0)}%</strong>
+          </div>
+          <div className="dwc-usable-highlight">
+            <span className="text-muted">Usable Length for Costing</span>
+            <strong className="num">{fmtQty(wastageDisplay.usableLengthMtr, 0)} Mtr</strong>
+          </div>
+          <div>
+            <span className="text-muted">
+              Conversion Multiplier <CalcInfo hint={CALC_HINTS.conversionMultiplier} />
+            </span>
+            <strong className="num">
+              {fmtQty(wastageDisplay.enteredLengthMtr, 0)} ÷ {fmtQty(wastageDisplay.usableLengthMtr, 0)} ={' '}
+              {fmtQty(wastageDisplay.conversionMultiplier, 2)}
+            </strong>
+          </div>
+        </div>
+        <p className="text-muted2 dwc-wastage-note">
+          Yarn consumption is calculated on entered {fmtQty(wastageDisplay.enteredLengthMtr, 0)} mtr. Per-meter
+          costing uses entered-length amortization; wastage shown for audit.
+        </p>
       </section>
 
       <section className="dwc-panel">
@@ -1270,12 +1482,14 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
       </section>
 
       <section className="dwc-panel dwc-buildup">
-        <h2 className="section-title">Per Meter Costing Buildup</h2>
+        <h2 className="section-title">Per Meter Costing Buildup (100 mtr basis)</h2>
         <div className="dwc-buildup-grid">
           <label className="field">
-            <span className="text-muted">Yarn Cost / Mtr</span>
+            <span className="text-muted">
+              Yarn Cost / Mtr <CalcInfo hint={CALC_HINTS.yarnCostPerMtr} />
+            </span>
             <input className="num dwc-auto" value={fmtMoney(buildup.yarnCostPerMtr)} readOnly />
-            <span className="dwc-hint">Total Yarn Amount ÷ Design Length</span>
+            <span className="dwc-hint">Total Yarn Amount ÷ Entered Length</span>
           </label>
           <label className="field">
             <span className="text-muted">Total Weft PIC</span>
@@ -1293,12 +1507,16 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
             />
           </label>
           <label className="field">
-            <span className="text-muted">Conversion / Weaving Charge (₹)</span>
+            <span className="text-muted">
+              Conversion / Weaving Charge (₹) <CalcInfo hint={CALC_HINTS.conversionCharge} />
+            </span>
             <input className="num dwc-auto" value={fmtMoney(buildup.conversionCharge)} readOnly />
             <span className="dwc-hint">Total PIC × PIC Conversion Rate</span>
           </label>
           <label className="field">
-            <span className="text-muted">Subtotal</span>
+            <span className="text-muted">
+              Subtotal <CalcInfo hint={CALC_HINTS.subtotalPerMtr} />
+            </span>
             <input className="num dwc-auto" value={fmtMoney(buildup.subtotalPerMtr)} readOnly />
             <span className="dwc-hint">Yarn Cost/Mtr + Weaving Charge</span>
           </label>
@@ -1314,9 +1532,13 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
             />
           </label>
           <label className="field">
-            <span className="text-muted">After MU</span>
+            <span className="text-muted">
+              After MU <CalcInfo hint={CALC_HINTS.afterMuPerMtr} />
+            </span>
             <input className="num dwc-auto" value={fmtMoney(buildup.afterMuPerMtr)} readOnly />
-            <span className="dwc-hint">MU amount {fmtInr(buildup.muAmount)}</span>
+            <span className="dwc-hint">
+              MU amount {fmtInr(buildup.muAmount)} <CalcInfo hint={CALC_HINTS.muAmount} />
+            </span>
           </label>
           <label className="field">
             <span className="text-muted">GST %</span>
@@ -1330,14 +1552,16 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
             />
           </label>
           <label className="field">
-            <span className="text-muted">GST Amount</span>
+            <span className="text-muted">
+              GST Amount <CalcInfo hint={CALC_HINTS.gstAmount} />
+            </span>
             <input className="num dwc-auto" value={fmtMoney(buildup.gstAmount)} readOnly />
           </label>
         </div>
 
         <div className="dwc-gst-split" aria-label="GST separated from base costing">
           <div className="dwc-gst-card">
-            <span className="text-muted">Base Cost / Meter</span>
+            <span className="text-muted">Base Cost / Mtr (Excl. GST)</span>
             <strong className="num">{fmtInr(buildup.afterMuPerMtr)}</strong>
             <span className="dwc-hint">After MU · GST not included</span>
           </div>
@@ -1347,7 +1571,9 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
             <span className="dwc-hint">Shown separately from base</span>
           </div>
           <div className="dwc-gst-card dwc-gst-final">
-            <span className="text-muted">{finalCostLabel(buildup.gstPercent)}</span>
+            <span className="text-muted">
+              Final Cost / Mtr (Incl. GST) <CalcInfo hint={CALC_HINTS.finalCostPerMtr} />
+            </span>
             <strong className="num">{fmtInr(buildup.finalCostPerMtr)}</strong>
             <span className="dwc-hint">{finalCostHint(buildup.gstPercent)}</span>
           </div>
@@ -1355,13 +1581,13 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
 
         <div className="dwc-final">
           <div>
-            <span>{finalDesignCostMeterLabel(buildup.gstPercent)}</span>
+            <span>Final Design Cost / Meter (Calculated)</span>
             <p className="dwc-final-sub text-muted">
               {finalCostAuditLine(
                 buildup.afterMuPerMtr,
                 buildup.gstAmount,
                 buildup.gstPercent,
-                buildup.designLengthMtr,
+                buildup.usableLengthMtr,
                 buildup.totalPic,
               )}
             </p>
@@ -1370,22 +1596,136 @@ export function DesignWiseCosting({ initialDin = '' }: Props) {
         </div>
       </section>
 
+      <section className="dwc-panel dwc-profit-panel">
+        <h2 className="section-title">Profit &amp; Target Calculator (CEO Only)</h2>
+        <div className="dwc-buildup-grid">
+          <label className="field">
+            <span className="text-muted">Cost / Meter (Calculated)</span>
+            <input className="num dwc-auto" value={fmtMoney(profit.costPerMtr)} readOnly />
+          </label>
+          <label className="field">
+            <span className="text-muted">Fixed Cost / Meter</span>
+            <input
+              className="num"
+              type="number"
+              min="0"
+              step="any"
+              value={fixedCostPerMtr}
+              disabled={isReadOnly}
+              onChange={(e) => setFixedCostPerMtr(e.target.value)}
+            />
+          </label>
+          <label className="field">
+            <span className="text-muted">Desired Profit / Meter</span>
+            <input
+              className="num"
+              type="number"
+              min="0"
+              step="any"
+              value={desiredProfitPerMtr}
+              disabled={isReadOnly}
+              onChange={(e) => setDesiredProfitPerMtr(e.target.value)}
+            />
+          </label>
+          <label className="field">
+            <span className="text-muted">Target / Suggested Selling Rate</span>
+            <input className="num dwc-auto" value={fmtMoney(profit.targetSellingRate)} readOnly />
+          </label>
+          <label className="field dwc-ceo-rate-field">
+            <span className="text-muted">
+              CEO Final Selling Rate (₹/Mtr) {isLocked ? '🔒' : ''}
+            </span>
+            <input
+              className="num dwc-ceo-rate"
+              type="number"
+              min="0"
+              step="any"
+              value={ceoFinalSellingRate}
+              disabled={isLocked}
+              onChange={(e) => setCeoFinalSellingRate(e.target.value)}
+              placeholder={fmtMoney(buildup.finalCostPerMtr)}
+            />
+          </label>
+          <label className="field">
+            <span className="text-muted">Production (Meters)</span>
+            <input
+              className="num"
+              type="number"
+              min="0"
+              step="any"
+              value={productionMeters}
+              disabled={isReadOnly}
+              onChange={(e) => setProductionMeters(e.target.value)}
+            />
+          </label>
+          <label className="field">
+            <span className="text-muted">Profit / Meter</span>
+            <input className="num dwc-auto" value={fmtMoney(profit.profitPerMtr)} readOnly />
+          </label>
+          <label className="field">
+            <span className="text-muted">
+              Total Profit <CalcInfo hint={CALC_HINTS.totalProfit} />
+            </span>
+            <input className="num dwc-auto dwc-emphasis" value={fmtMoney(profit.totalProfit)} readOnly />
+          </label>
+          <label className="field">
+            <span className="text-muted">Margin % on Cost</span>
+            <input className="num dwc-auto" value={fmtQty(profit.marginPctOnCost)} readOnly />
+          </label>
+          <label className="field">
+            <span className="text-muted">Margin % on Selling</span>
+            <input className="num dwc-auto" value={fmtQty(profit.marginPctOnSelling)} readOnly />
+          </label>
+        </div>
+        {n(ceoFinalSellingRate) > 0 ? (
+          <div className="dwc-ceo-final-banner">
+            <span>CEO Final Selling Rate</span>
+            <strong className="num">{fmtInr(n(ceoFinalSellingRate))}</strong>
+            {isLocked ? <span className="dwc-lock-tag">🔒 Locked</span> : null}
+          </div>
+        ) : null}
+      </section>
+
       <div className="dwc-actions">
         <button
           type="button"
-          className="btn-warp"
+          className="dwc-secondary-btn"
           disabled={busy || uploading}
+          onClick={() => resetForm(Boolean(dinNumber))}
+        >
+          Reset
+        </button>
+        <button
+          type="button"
+          className="btn-warp"
+          disabled={busy || uploading || isReadOnly}
           onClick={() => void persist(true)}
         >
           Save Draft
         </button>
         <button
           type="button"
-          className="primary-save"
+          className="dwc-secondary-btn"
           disabled={busy || uploading}
+          onClick={() => setMessage('Recalculated — review updated values below')}
+        >
+          Recalculate
+        </button>
+        <button
+          type="button"
+          className="primary-save"
+          disabled={busy || uploading || isLocked}
           onClick={() => void persist(false)}
         >
-          Save Costing to DIN
+          Save Costing
+        </button>
+        <button
+          type="button"
+          className="dwc-finalize-btn"
+          disabled={busy || uploading || isLocked || !savedId}
+          onClick={() => void persist(false, true)}
+        >
+          Finalize Costing
         </button>
         <button
           type="button"

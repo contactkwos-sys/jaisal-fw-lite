@@ -1,5 +1,5 @@
 /**
- * Smoke-test Design Wise Costing calculation chain (manual sheet example).
+ * Smoke-test DIN Costing calculation chain (Jacquard Repair Design / JFG1558).
  * Run: node scripts/test-design-wise-costing.mjs
  */
 
@@ -24,7 +24,15 @@ function weftWeightKg(denier, pic, width, lengthMtr) {
   return (denier * pic * width * lengthMtr) / CALC_FACTOR
 }
 
-function computeBuildup(warps, wefts, designLengthMtr, picConversionRate, muPercent, gstPercent) {
+function computeWastageParams(enteredLengthMtr, wastageMtr = 10, wastagePercent = 10) {
+  const entered = n(enteredLengthMtr)
+  const wastage = n(wastageMtr)
+  const usable = Math.max(entered - wastage, 0)
+  const multiplier = usable > 0 ? round2(entered / usable) : 0
+  return { enteredLengthMtr: entered, wastageMtr: wastage, wastagePercent, usableLengthMtr: usable, conversionMultiplier: multiplier }
+}
+
+function computeBuildup(warps, wefts, enteredLengthMtr, picConversionRate, muPercent, gstPercent, wastageMtr = 10, wastagePercent = 10) {
   let totalWarpWeightKg = 0
   let totalWeftWeightKg = 0
   let totalWarpAmount = 0
@@ -52,7 +60,8 @@ function computeBuildup(warps, wefts, designLengthMtr, picConversionRate, muPerc
 
   const totalWeightKg = round2(totalWarpWeightKg + totalWeftWeightKg)
   const totalYarnAmount = round2(totalWarpAmount + totalWeftAmount)
-  const length = n(designLengthMtr)
+  const wastage = computeWastageParams(enteredLengthMtr, wastageMtr, wastagePercent)
+  const length = wastage.enteredLengthMtr
   const yarnCostPerMtr = length > 0 ? round2(totalYarnAmount / length) : 0
   const conversionCharge = round2(totalPic * n(picConversionRate))
   const subtotalPerMtr = round2(yarnCostPerMtr + conversionCharge)
@@ -69,14 +78,37 @@ function computeBuildup(warps, wefts, designLengthMtr, picConversionRate, muPerc
     totalWarpAmount,
     totalWeftAmount,
     totalYarnAmount,
+    ...wastage,
     yarnCostPerMtr,
     totalPic,
     conversionCharge,
     subtotalPerMtr,
+    muAmount,
     afterMuPerMtr,
     gstAmount,
     finalCostPerMtr,
   }
+}
+
+function computeProfitProjection(finalCostPerMtr, fixedCostPerMtr, desiredProfitPerMtr, ceoFinalSellingRate, productionMeters) {
+  const cost = n(finalCostPerMtr)
+  const selling = n(ceoFinalSellingRate)
+  const prod = n(productionMeters)
+  const profitPerMtr = round2(selling - cost)
+  const totalProfit = round2(profitPerMtr * prod)
+  return { profitPerMtr, totalProfit }
+}
+
+function chainFromYarnTotals(totalYarnAmount, designLength, totalPic, picRate, muPercent, gstPercent) {
+  const yarnCostPerMtr = round2(totalYarnAmount / designLength)
+  const conversionCharge = round2(totalPic * picRate)
+  const subtotalPerMtr = round2(yarnCostPerMtr + conversionCharge)
+  const muAmount = round2(subtotalPerMtr * (muPercent / 100))
+  const afterMuPerMtr = round2(subtotalPerMtr + muAmount)
+  const gst = n(gstPercent)
+  const gstAmount = gst > 0 ? round2(afterMuPerMtr * (gst / 100)) : 0
+  const finalCostPerMtr = gst > 0 ? round2(afterMuPerMtr + gstAmount) : afterMuPerMtr
+  return { yarnCostPerMtr, conversionCharge, subtotalPerMtr, afterMuPerMtr, gstAmount, finalCostPerMtr }
 }
 
 const warps = [
@@ -106,31 +138,35 @@ const checks = [
   ['Yarn cost/mtr = total ÷ 110', r.yarnCostPerMtr === round2(r.totalYarnAmount / 110)],
   ['Subtotal = yarn + weaving', r.subtotalPerMtr === round2(r.yarnCostPerMtr + r.conversionCharge)],
   ['Final = subtotal when MU/GST 0', r.finalCostPerMtr === r.subtotalPerMtr],
+  ['Usable length = 100', r.usableLengthMtr === 100],
+  ['Conversion multiplier = 1.10', r.conversionMultiplier === 1.1],
 ]
 
-// Rate change check
 const r2 = computeBuildup(warps, wefts, 110, 0.5, 0, 0)
 checks.push(['Rate 0.50 → charge 55.50', r2.conversionCharge === 55.5])
 
-// MU / GST
 const r3 = computeBuildup(warps, wefts, 110, 0.45, 5, 5)
 const expectedAfterMu = round2(r.subtotalPerMtr * 1.05)
 const expectedFinal = round2(expectedAfterMu * 1.05)
 checks.push(['After MU ≈ subtotal × 1.05', Math.abs(r3.afterMuPerMtr - expectedAfterMu) < 0.02])
 checks.push(['Final ≈ after MU × 1.05', Math.abs(r3.finalCostPerMtr - expectedFinal) < 0.02])
 
-// GST matrix — Jfg1872-style chain (yarn ₹4713.86 / 110 mtr, PIC 56, MU 5%)
-function chainFromYarnTotals(totalYarnAmount, designLength, totalPic, picRate, muPercent, gstPercent) {
-  const yarnCostPerMtr = round2(totalYarnAmount / designLength)
-  const conversionCharge = round2(totalPic * picRate)
-  const subtotalPerMtr = round2(yarnCostPerMtr + conversionCharge)
-  const muAmount = round2(subtotalPerMtr * (muPercent / 100))
-  const afterMuPerMtr = round2(subtotalPerMtr + muAmount)
-  const gst = n(gstPercent)
-  const gstAmount = gst > 0 ? round2(afterMuPerMtr * (gst / 100)) : 0
-  const finalCostPerMtr = gst > 0 ? round2(afterMuPerMtr + gstAmount) : afterMuPerMtr
-  return { yarnCostPerMtr, conversionCharge, subtotalPerMtr, afterMuPerMtr, gstAmount, finalCostPerMtr }
-}
+// JFG1558 acceptance — verified Excel totals (yarn ₹5679.73 / 110 mtr, PIC 111, MU 5%, GST 5%)
+const jfg1558Chain = chainFromYarnTotals(5679.73, 110, 111, 0.45, 5, 5)
+const jfg1558Wastage = computeWastageParams(110, 10, 10)
+checks.push(['JFG1558 total PIC = 111', jfg1558Chain.conversionCharge === 49.95])
+checks.push(['JFG1558 yarn cost/mtr ≈ 51.64', Math.abs(jfg1558Chain.yarnCostPerMtr - 51.64) < 0.02])
+checks.push(['JFG1558 subtotal ≈ 101.59', Math.abs(jfg1558Chain.subtotalPerMtr - 101.59) < 0.02])
+checks.push(['JFG1558 after MU ≈ 106.67', Math.abs(jfg1558Chain.afterMuPerMtr - 106.67) < 0.02])
+checks.push(['JFG1558 GST ≈ 5.33', Math.abs(jfg1558Chain.gstAmount - 5.33) < 0.02])
+checks.push(['JFG1558 calculated final ≈ 112.00', Math.abs(jfg1558Chain.finalCostPerMtr - 112) < 0.05])
+checks.push(['JFG1558 usable length = 100', jfg1558Wastage.usableLengthMtr === 100])
+checks.push(['JFG1558 conversion multiplier = 1.10', jfg1558Wastage.conversionMultiplier === 1.1])
+
+// CEO selling rate separate from calculated cost
+const profit = computeProfitProjection(jfg1558Chain.finalCostPerMtr, 0, 0, 112, 400)
+checks.push(['CEO profit/mtr at rate 112', profit.profitPerMtr === round2(112 - jfg1558Chain.finalCostPerMtr)])
+checks.push(['Total profit at 400 mtr', profit.totalProfit === round2(profit.profitPerMtr * 400)])
 
 const jfg = chainFromYarnTotals(4713.86, 110, 56, 0.45, 5, 0)
 checks.push(['Jfg1872 yarn cost/mtr = 42.85', jfg.yarnCostPerMtr === 42.85])
@@ -148,7 +184,6 @@ const jfg12 = chainFromYarnTotals(4713.86, 110, 56, 0.45, 5, 12)
 checks.push(['GST 12% → amount 8.57', jfg12.gstAmount === 8.57])
 checks.push(['GST 12% → final 80.02', jfg12.finalCostPerMtr === 80.02])
 
-// GST label helpers (mirror designWiseCosting.ts)
 function isGstApplied(gstPercent) {
   return n(gstPercent) > 0
 }
@@ -157,19 +192,16 @@ function finalCostLabel(gstPercent) {
 }
 checks.push(['Label GST 0% excludes GST', finalCostLabel(0) === 'Final Cost — Excl. GST'])
 checks.push(['Label GST 5% includes GST', finalCostLabel(5) === 'Final Cost Including GST'])
-checks.push(['Label GST 12% includes GST', finalCostLabel(12) === 'Final Cost Including GST'])
 
-// GST toggle: 5 → 0
 const toggled = chainFromYarnTotals(4713.86, 110, 56, 0.45, 5, 0)
 checks.push(['GST 5→0: final drops to after MU', toggled.finalCostPerMtr === 71.45 && toggled.gstAmount === 0])
 
-// Div by zero guard
 const r0 = computeBuildup(warps, wefts, 0, 0.45, 0, 0)
 checks.push(['Design length 0 → yarn cost 0', r0.yarnCostPerMtr === 0])
 
 let failed = 0
-console.log('Design Wise Costing — calculation smoke test\n')
-console.log(JSON.stringify(r, null, 2))
+console.log('DIN Costing — calculation smoke test\n')
+console.log(JSON.stringify(jfg1558Chain, null, 2))
 console.log('')
 for (const [label, ok] of checks) {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}`)

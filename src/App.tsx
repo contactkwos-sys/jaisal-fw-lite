@@ -32,6 +32,7 @@ import { SampleJobCard } from './pages/SampleJobCard'
 import { SampleRegister } from './pages/SampleRegister'
 import { BeamRemainingReport } from './pages/BeamRemainingReport'
 import { DesignWiseCosting } from './pages/DesignWiseCosting'
+import { FormulaMasterScreen } from './screens/FormulaMasterScreen'
 import { DesignCatalogScreen } from './screens/DesignCatalogScreen'
 import { CrmCustomersScreen } from './screens/CrmCustomersScreen'
 import { CashBookScreen } from './screens/CashBookScreen'
@@ -318,8 +319,10 @@ function AuthenticatedApp() {
       {tab === 'beam-remaining' ? <BeamRemainingReport /> : null}
       {tab === 'design-wise-costing' ? (
         <DesignWiseCosting
+          viewOnly={filter === 'view-only'}
           initialDin={
             filter &&
+            filter !== 'view-only' &&
             ![
               'reports',
               'orders',
@@ -356,6 +359,7 @@ function AuthenticatedApp() {
       {tab === 'dto-followup' ? <DtoFollowupScreen /> : null}
       {tab === 'dto-reports' ? <DtoReportsScreen onNavigate={go} /> : null}
       {tab === 'rate-master' ? <RateMasterScreen /> : null}
+      {tab === 'formula-master' ? <FormulaMasterScreen /> : null}
     </AppShell>
   )
 }
