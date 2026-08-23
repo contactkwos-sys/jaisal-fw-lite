@@ -53,6 +53,7 @@ export type AppScreen =
   | 'ceo-pin-management'
   | 'order-entry'
   | 'daily-pending-work'
+  | 'notebook'
   | 'placeholder'
 
 export type MainModuleId =
@@ -71,6 +72,7 @@ export type MainModuleId =
   | 'reports'
   | 'masters'
   | 'settings'
+  | 'utilities'
 
 export type NavTarget = {
   screen: AppScreen
@@ -680,6 +682,21 @@ export const MAIN_MODULES: MainModule[] = [
     items: [],
   },
   {
+    id: 'utilities',
+    label: 'More',
+    icon: 'utilities',
+    screen: 'module-hub',
+    hasHub: true,
+    items: [
+      {
+        id: 'notebook',
+        label: 'Notebook',
+        screen: 'notebook',
+        hint: 'Digital Factory Notebook — type or photo notes',
+      },
+    ],
+  },
+  {
     id: 'settings',
     label: 'Settings',
     icon: 'settings',
@@ -748,6 +765,7 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   'ceo-pin-management': 'CEO PIN Management',
   'order-entry': 'Order Entry',
   'daily-pending-work': 'Daily Pending Work',
+  notebook: 'Digital Factory Notebook',
   'dto-intake': 'DESIGN Intake',
   'dto-sample-job': 'Sample Job Card',
   'dto-tracking': 'Sample Tracking',
@@ -834,6 +852,7 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
     return 'orders'
   }
   if (screen === 'daily-pending-work') return 'daily-pending-work'
+  if (screen === 'notebook') return 'utilities'
   if (screen === 'costing' || screen === 'loan-tracker' || screen === 'geb-readings') return 'reports'
   if (screen === 'maintenance' || screen === 'maint-material') return 'maintenance'
   if (screen === 'parties' || screen === 'crm' || screen === 'item-master') return 'masters'
@@ -939,6 +958,7 @@ export function titleFor(screen: AppScreen, sub?: string, moduleId?: MainModuleI
     }
     return labels[sub || 'today'] || 'Daily Pending Work'
   }
+  if (screen === 'notebook') return 'MY NOTEBOOK'
   if (screen === 'maintenance') {
     const labels: Record<string, string> = {
       overview: 'Machine Overview',
@@ -950,6 +970,7 @@ export function titleFor(screen: AppScreen, sub?: string, moduleId?: MainModuleI
       history: 'Service History',
       spares: 'Spare Parts',
       contacts: 'Contacts Directory',
+      notes: 'Notes',
       reports: 'Maintenance Reports',
       repair: 'Repair Out / In',
     }

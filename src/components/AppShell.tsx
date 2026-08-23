@@ -144,6 +144,14 @@ const ICONS: Record<string, ReactNode> = {
       />
     </svg>
   ),
+  utilities: (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="nav-ico">
+      <path
+        fill="currentColor"
+        d="M6 2h12a2 2 0 0 1 2 2v16l-7-3-7 3V4a2 2 0 0 1 2-2zm1 4v2h10V6H7zm0 4v2h7v-2H7zm0 4v2h10v-2H7z"
+      />
+    </svg>
+  ),
 }
 
 export function AppShell({ active, sub, filter, activeModule, onNavigate, children }: Props) {

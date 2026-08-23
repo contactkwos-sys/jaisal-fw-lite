@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ShareActions } from '../components/ShareActions'
 import { SubTabs } from '../components/SubTabs'
+import { MachineNotesPanel } from './NotebookScreen'
 import { useAuth } from '../lib/auth'
 import { MACHINES } from '../lib/database.types'
 import {
@@ -59,6 +60,7 @@ export type MwmSub =
   | 'spares'
   | 'contacts'
   | 'reports'
+  | 'notes'
   | 'repair-legacy'
 
 type Props = {
@@ -76,6 +78,7 @@ const SUBS: Array<{ id: MwmSub; label: string }> = [
   { id: 'history', label: 'History' },
   { id: 'spares', label: 'Spare Parts' },
   { id: 'contacts', label: 'Contacts' },
+  { id: 'notes', label: 'Notes' },
   { id: 'reports', label: 'Reports' },
 ]
 
@@ -95,6 +98,7 @@ function normalizeSub(raw?: string): MwmSub {
     spares: 'spares',
     'spare-parts': 'spares',
     contacts: 'contacts',
+    notes: 'notes',
     reports: 'reports',
     'maint-reports': 'reports',
     'repair-legacy': 'repair-legacy',
@@ -1823,6 +1827,22 @@ export function MachineWiseMaintenanceScreen({ initialSub, filter, onNavigate }:
               </tbody>
             </table>
           </div>
+          {selectedMachine || histFilter.machine ? (
+            <MachineNotesPanel machineId={selectedMachine || histFilter.machine || ''} />
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* ---------- MACHINE NOTES ---------- */}
+      {sub === 'notes' ? (
+        <div>
+          <div className="mwm-filter-bar no-print surface">
+            <label className="field"><span className="text-muted">Machine</span>
+              <select value={selectedMachine || MACHINES[0]} onChange={(e) => setSelectedMachine(e.target.value)}>
+                {MACHINES.map((m) => <option key={m} value={m}>{machineLabel(m)}</option>)}
+              </select></label>
+          </div>
+          <MachineNotesPanel machineId={selectedMachine || MACHINES[0]} />
         </div>
       ) : null}
 
