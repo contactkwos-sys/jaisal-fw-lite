@@ -13,6 +13,7 @@ import {
   gstLabel,
   historyForItem,
   latestRateForItem,
+  rateMasterTablesReady,
   saveRateMasterEntry,
   updateRateMasterConfig,
   type RateCategory,
@@ -21,6 +22,7 @@ import {
 } from '../lib/rateMaster'
 
 type Tab = 'warp' | 'weft'
+type FormMode = 'add' | 'version'
 
 type FormState = {
   category: RateCategory
@@ -68,10 +70,14 @@ export function RateMasterScreen() {
   const [modalOpen, setModalOpen] = useState(false)
   const [historyItem, setHistoryItem] = useState<string | null>(null)
   const [form, setForm] = useState<FormState>(EMPTY_FORM('warp'))
-  const [editSourceId, setEditSourceId] = useState<string | null>(null)
+  const [formMode, setFormMode] = useState<FormMode>('add')
+  const [migrationHint, setMigrationHint] = useState(false)
 
   const load = useCallback(async () => {
     setError(null)
+    const ready = await rateMasterTablesReady()
+    setMigrationHint(!ready)
+    if (!ready) return
     const [config, allRates] = await Promise.all([fetchRateMasterConfig(), fetchAllRates()])
     setDefaultGst(String(config.default_gst_percent ?? 5))
     setDefaultFreight(String(config.default_freight_per_kg ?? 2.25))
@@ -115,6 +121,31 @@ export function RateMasterScreen() {
     return calcEffectiveRate(basic, gst, freight)
   }, [form])
 
+  const formCatalogue = form.category === 'warp' ? WARP_CATALOGUE : WEFT_CATALOGUE
+
+  function resetFormState(category: RateCategory = tab) {
+    setForm({
+      ...EMPTY_FORM(category),
+      gst_percent: defaultGst,
+      freight_per_kg: defaultFreight,
+      category,
+    })
+    setFormMode('add')
+  }
+
+  function applyCatalogueItem(itemName: string, category: RateCategory) {
+    const cat = category === 'warp' ? WARP_CATALOGUE : WEFT_CATALOGUE
+    const item = cat.find((i) => i.item_name === itemName)
+    setForm((f) => ({
+      ...f,
+      category,
+      item_name: itemName,
+      denier: item?.denier || '',
+      supplier_name:
+        item && 'supplier_name' in item ? String((item as { supplier_name?: string }).supplier_name || '') : '',
+    }))
+  }
+
   function openAdd(category: RateCategory, preset?: Partial<FormState>) {
     setForm({
       ...EMPTY_FORM(category),
@@ -123,7 +154,7 @@ export function RateMasterScreen() {
       ...preset,
       category,
     })
-    setEditSourceId(null)
+    setFormMode('add')
     setModalOpen(true)
   }
 
@@ -139,8 +170,13 @@ export function RateMasterScreen() {
       freight_per_kg: r ? String(r.freight_per_kg) : defaultFreight,
       effective_from: todayISO(),
     })
-    setEditSourceId(r?.id ?? null)
+    setFormMode('version')
     setModalOpen(true)
+  }
+
+  function closeModal() {
+    setModalOpen(false)
+    resetFormState(tab)
   }
 
   async function saveDefaults() {
@@ -193,9 +229,8 @@ export function RateMasterScreen() {
         effective_from: form.effective_from,
       }
       await saveRateMasterEntry(input, session?.user?.id ?? null)
-      void editSourceId
-      setModalOpen(false)
-      setMessage(`Rate saved for ${form.item_name} (effective ${formatDisplayDate(form.effective_from)})`)
+      closeModal()
+      setMessage(`Rate saved for ${input.item_name} (effective ${formatDisplayDate(form.effective_from)})`)
       await load()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to save rate')
@@ -232,6 +267,13 @@ export function RateMasterScreen() {
           <p className="text-muted">Date-wise warp &amp; weft yarn rates — linked to Design-wise Costing</p>
         </div>
       </header>
+
+      {migrationHint ? (
+        <div className="rm-info-banner" style={{ borderColor: '#e0a800', background: '#fff8e6' }}>
+          <strong>Database setup required.</strong> Run <code>public/migration-rate-master.sql</code> in Supabase SQL
+          editor, then refresh this page.
+        </div>
+      ) : null}
 
       {error ? <p className="form-error text-danger">{error}</p> : null}
       {message ? <p className="form-ok text-sage">{message}</p> : null}
@@ -430,17 +472,24 @@ export function RateMasterScreen() {
       </div>
 
       {modalOpen ? (
-        <div className="rm-modal-backdrop" onClick={() => setModalOpen(false)}>
+        <div className="rm-modal-backdrop" onClick={closeModal}>
           <div className="rm-modal" onClick={(e) => e.stopPropagation()}>
             <div className="rm-modal-head">
-              <h2>{editSourceId ? 'New Rate Version' : 'Add New Rate'}</h2>
+              <h2>{formMode === 'version' ? 'New Rate Version' : 'Add New Rate'}</h2>
             </div>
             <div className="rm-modal-body">
               <label>
                 <span>Category</span>
                 <select
                   value={form.category}
-                  onChange={(e) => setForm((f) => ({ ...f, category: e.target.value as RateCategory }))}
+                  onChange={(e) => {
+                    const category = e.target.value as RateCategory
+                    if (formMode === 'add') {
+                      setForm((f) => ({ ...f, category, item_name: '', denier: '', supplier_name: '' }))
+                    } else {
+                      setForm((f) => ({ ...f, category }))
+                    }
+                  }}
                 >
                   <option value="warp">Warp</option>
                   <option value="weft">Weft</option>
@@ -448,16 +497,21 @@ export function RateMasterScreen() {
               </label>
               <label>
                 <span>Item / Variety *</span>
-                <input
-                  value={form.item_name}
-                  onChange={(e) => setForm((f) => ({ ...f, item_name: e.target.value }))}
-                  list="rm-item-list"
-                />
-                <datalist id="rm-item-list">
-                  {[...WARP_CATALOGUE, ...WEFT_CATALOGUE].map((i) => (
-                    <option key={i.item_name} value={i.item_name} />
-                  ))}
-                </datalist>
+                {formMode === 'add' ? (
+                  <select
+                    value={form.item_name}
+                    onChange={(e) => applyCatalogueItem(e.target.value, form.category)}
+                  >
+                    <option value="">— Select item / variety —</option>
+                    {formCatalogue.map((i) => (
+                      <option key={i.item_name} value={i.item_name}>
+                        {i.item_name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input value={form.item_name} readOnly />
+                )}
               </label>
               <label>
                 <span>Denier / Spec</span>
@@ -531,7 +585,7 @@ export function RateMasterScreen() {
               </div>
             </div>
             <div className="rm-modal-foot">
-              <button type="button" className="dwc-secondary-btn" onClick={() => setModalOpen(false)}>
+              <button type="button" className="dwc-secondary-btn" onClick={closeModal}>
                 Cancel
               </button>
               <button type="button" className="primary-save" disabled={busy || !canEdit} onClick={() => void saveRate()}>
