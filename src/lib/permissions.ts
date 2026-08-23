@@ -25,6 +25,7 @@ const CEO_MODULES: MainModuleId[] = [
   'reports',
   'masters',
   'settings',
+  'utilities',
 ]
 
 const MANAGER_MODULES: MainModuleId[] = CEO_MODULES.filter((m) => m !== 'dashboard')
@@ -36,7 +37,7 @@ const ROLE_DEFAULTS: Record<string, MainModuleId[]> = {
   'managing director': CEO_MODULES,
   owner: CEO_MODULES,
   manager: MANAGER_MODULES,
-  'machine supervisor': ['production', 'program-dispatch', 'inventory', 'warp-yarn', 'maintenance', 'daily-pending-work', 'reports'],
+  'machine supervisor': ['production', 'program-dispatch', 'inventory', 'warp-yarn', 'maintenance', 'daily-pending-work', 'utilities', 'reports'],
   salesman: ['design-to-order', 'orders', 'masters', 'reports', 'cash-book'],
   'checker & dispatch': ['production', 'program-dispatch', 'inventory', 'security'],
   'program supervisor': ['production', 'program-dispatch', 'orders', 'reports', 'design-to-order'],
@@ -52,6 +53,7 @@ const ROLE_DEFAULTS: Record<string, MainModuleId[]> = {
     'maintenance',
     'daily-pending-work',
     'design-to-order',
+    'utilities',
   ],
   mill: [
     'production',
@@ -65,12 +67,13 @@ const ROLE_DEFAULTS: Record<string, MainModuleId[]> = {
     'maintenance',
     'daily-pending-work',
     'design-to-order',
+    'utilities',
   ],
   'store incharge': ['inventory', 'warp-yarn', 'cash-book', 'reports', 'security'],
   store: ['inventory', 'warp-yarn', 'cash-book', 'reports'],
   'production incharge': ['production', 'program-dispatch', 'orders', 'reports', 'design-to-order'],
   programmer: ['production', 'program-dispatch', 'orders', 'reports', 'design-to-order'],
-  operator: ['production', 'program-dispatch'],
+  operator: ['production', 'program-dispatch', 'utilities'],
   security: ['security', 'inventory', 'warp-yarn', 'hr-payroll'],
   account: ['cash-book', 'hr-payroll', 'reports', 'masters', 'security'],
   admin: ['cash-book', 'hr-payroll', 'reports', 'masters', 'security', 'settings'],

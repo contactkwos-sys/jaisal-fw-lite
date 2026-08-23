@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { InputModePanel } from '../components/InputModePanel'
+import { PurchasePhotosPanel } from './NotebookScreen'
 import { SubTabs } from '../components/SubTabs'
 import { useAuth } from '../lib/auth'
 import type { RepairingTracker } from '../lib/database.types'
@@ -1137,6 +1138,15 @@ export function PurchaseScreen({ initialSub }: Props) {
                 <a href={String(detail.detail.photo_url)} target="_blank" rel="noreferrer">
                   Open photo
                 </a>
+              ) : null}
+              {detail.type === 'General' ? (
+                <PurchasePhotosPanel purchaseType="general" purchaseId={detail.id} />
+              ) : null}
+              {detail.type === 'Weft' ? (
+                <PurchasePhotosPanel purchaseType="weft" purchaseId={detail.id} />
+              ) : null}
+              {detail.type === 'Maint In' ? (
+                <PurchasePhotosPanel purchaseType="maint_in" purchaseId={detail.id} />
               ) : null}
             </article>
           ) : null}

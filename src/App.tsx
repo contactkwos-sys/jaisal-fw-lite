@@ -61,6 +61,7 @@ import { ItemMasterScreen } from './screens/ItemMasterScreen'
 import { CeoPinManagementScreen } from './screens/CeoPinManagementScreen'
 import { OrderEntryScreen } from './screens/OrderEntryScreen'
 import { DailyPendingWorkScreen } from './screens/DailyPendingWorkScreen'
+import { NotebookScreen } from './screens/NotebookScreen'
 import { ModulePinGate } from './components/ModulePinGate'
 import { isModuleUnlocked } from './lib/ceoPinManagement'
 
@@ -246,6 +247,9 @@ function AuthenticatedApp() {
       ) : null}
       {tab === 'daily-pending-work' ? (
         <DailyPendingWorkScreen initialTab={(sub as 'today' | 'all' | 'carry' | 'reports') || 'today'} />
+      ) : null}
+      {tab === 'notebook' ? (
+        <NotebookScreen initialSub={sub} initialMachine={filter?.startsWith('M') ? filter : undefined} />
       ) : null}
       {tab === 'orders-pending' ? <OrdersPendingScreen /> : null}
       {tab === 'program-dispatch' ? (

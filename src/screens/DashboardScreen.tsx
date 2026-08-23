@@ -10,6 +10,7 @@ import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import { ApprovalsWidget } from '../components/ApprovalsWidget'
 import { PendingOrdersWidget } from './OrdersPendingScreen'
+import { NotebookDashboardWidget } from './NotebookScreen'
 import { inr, loadDashboardPnLCards } from '../lib/dailyCosting'
 
 type Props = {
@@ -450,6 +451,7 @@ export function DashboardScreen({ onNavigate }: Props) {
     { label: 'Warp Yarn Management', screen: 'warp-yarn', sub: 'overview', module: 'warp-yarn' },
     { label: 'Attendance & Payroll', screen: 'hr-payroll', sub: 'dashboard', module: 'hr-payroll' },
     { label: 'Machine-wise Maintenance', screen: 'maintenance', sub: 'overview', module: 'maintenance' },
+    { label: 'Factory Notebook', screen: 'notebook', module: 'utilities' },
     { label: 'Security / Inward', screen: 'security-inventory', sub: 'dashboard', module: 'security' },
   ]
 
@@ -743,6 +745,8 @@ export function DashboardScreen({ onNavigate }: Props) {
           <PendingOrdersWidget />
         </div>
       ) : null}
+
+      {isCeo ? <NotebookDashboardWidget onNavigate={onNavigate} /> : null}
 
       {isCeo ? (
         <section className="dash-stock-edit">
