@@ -24,6 +24,10 @@ import {
   todayISO,
   updateFilledPipe,
   canEditFilledPipe,
+  canDeleteFilledPipe,
+  deleteFilledPipe,
+  normalizePipeNoInput,
+  nextPipeNo,
   type FilledPipeEntryInput,
   type FilledPipeEntryType,
   type WarpPipe,
@@ -47,6 +51,7 @@ type Props = {
 }
 
 const EMPTY_FORM = (): FilledPipeEntryInput => ({
+  pipe_no: '',
   entry_date: todayISO(),
   entry_type: 'Receive from Warper',
   yarn_quality: WARP_CATALOGUE[0].item_name,
@@ -143,18 +148,13 @@ export function FilledPipeGodownTab({
   }, [])
 
   useEffect(() => {
-    void supabase
-      .from('warp_pipes')
-      .select('pipe_no')
-      .order('pipe_no', { ascending: false })
-      .limit(1)
-      .then(({ data }) => {
-        const last = data?.[0]?.pipe_no
-        const m = String(last || '').match(/^BP-(\d+)$/i)
-        const next = m ? Number(m[1]) + 1 : 1
-        setNextPipePreview(`BP-${String(next).padStart(5, '0')}`)
-      })
+    void nextPipeNo(supabase).then(setNextPipePreview).catch(() => setNextPipePreview('BP-00001'))
   }, [godownStock.length])
+
+  const displayPipeNo = useMemo(() => {
+    if (form.pipe_no?.trim()) return normalizePipeNoInput(form.pipe_no, nextPipePreview)
+    return nextPipePreview
+  }, [form.pipe_no, nextPipePreview])
 
   useEffect(() => {
     applyRateLookup(form.yarn_quality, form.yarn_specification, form.entry_date, form.manual_rate_override)
@@ -185,6 +185,37 @@ export function FilledPipeGodownTab({
       else resetForm()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed')
+    }
+  }
+
+  async function handleDelete(pipe: WarpPipe) {
+    if (!window.confirm(`Delete pipe ${pipe.pipe_no}? This cannot be undone.`)) return
+    setSaving(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const result = await applyEditDeleteOrQueue({
+        isCeo,
+        createdAt: pipe.created_at,
+        tableName: 'warp_pipes',
+        recordId: pipe.id,
+        action: 'delete',
+        requestedBy: userName,
+        newData: { id: pipe.id },
+        apply: async () => {
+          await deleteFilledPipe(supabase, pipe.id)
+        },
+      })
+      await onSaved()
+      setMessage(
+        result === 'applied'
+          ? `Pipe ${pipe.pipe_no} deleted.`
+          : `Delete queued for CEO approval · ${pipe.pipe_no}`,
+      )
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Delete failed')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -231,7 +262,7 @@ export function FilledPipeGodownTab({
         <header className="fpg-entry-header">
           <div>
             <h2 className="section-title">Filled Pipe Entry</h2>
-            <p className="text-muted fpg-subtitle">Direct entry into Godown stock · pipe number auto-generated</p>
+            <p className="text-muted fpg-subtitle">Direct entry into Godown stock · enter pipe number or leave blank to auto-generate</p>
           </div>
           <div className="fpg-quick-links">
             <button type="button" className="btn-ghost btn-sm" onClick={onReceiveWarper}>
@@ -271,7 +302,15 @@ export function FilledPipeGodownTab({
           </label>
           <label className="field">
             <span>Pipe No.</span>
-            <input readOnly value={nextPipePreview} className="fpg-readonly" />
+            <input
+              value={form.pipe_no}
+              onChange={(e) => setForm({ ...form, pipe_no: e.target.value })}
+              placeholder={nextPipePreview}
+              title="Enter pipe number (e.g. 1, 10, BP-00015). Leave blank to auto-generate."
+            />
+            <span className="text-muted" style={{ fontSize: '0.8rem' }}>
+              Next auto: {nextPipePreview} · Type 1–15 for existing stock
+            </span>
           </label>
           <label className="field">
             <span>Yarn Quality</span>
@@ -446,7 +485,7 @@ export function FilledPipeGodownTab({
           <dl className="fpg-summary-grid">
             <div>
               <dt>Pipe No.</dt>
-              <dd>{nextPipePreview}</dd>
+              <dd>{displayPipeNo}</dd>
             </div>
             <div>
               <dt>Quality</dt>
@@ -563,8 +602,10 @@ export function FilledPipeGodownTab({
                       <WarpRecordActions
                         busy={busy || saving}
                         canEdit={canEditFilledPipe(p)}
+                        canDelete={canDeleteFilledPipe(p)}
                         onView={() => onPipeClick(p)}
                         onEdit={() => setEditPipe(p)}
+                        onDelete={() => void handleDelete(p)}
                       />
                     </td>
                   </tr>

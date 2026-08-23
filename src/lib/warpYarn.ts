@@ -190,6 +190,7 @@ export type WarpYarnFilters = {
 }
 
 export type FilledPipeEntryInput = {
+  pipe_no?: string
   entry_date: string
   entry_type: FilledPipeEntryType
   yarn_quality: string
@@ -440,6 +441,14 @@ export async function nextPipeNo(client: SupabaseClient): Promise<string> {
   return `BP-${String(max + 1).padStart(5, '0')}`
 }
 
+/** Normalize manual pipe number — digits become BP-00001 style; otherwise save as entered. */
+export function normalizePipeNoInput(raw: string, autoFallback: string): string {
+  const trimmed = raw.trim()
+  if (!trimmed) return autoFallback
+  if (/^\d+$/.test(trimmed)) return `BP-${trimmed.padStart(5, '0')}`
+  return trimmed.toUpperCase()
+}
+
 export async function saveFilledPipeEntry(
   client: SupabaseClient,
   input: FilledPipeEntryInput,
@@ -454,9 +463,10 @@ export async function saveFilledPipeEntry(
     throw new Error('Warper name required for Receive from Warper')
   }
 
-  const pipeNo = await nextPipeNo(client)
+  const autoNo = await nextPipeNo(client)
+  const pipeNo = normalizePipeNoInput(input.pipe_no || '', autoNo)
   const { data: dup } = await client.from('warp_pipes').select('id').eq('pipe_no', pipeNo).maybeSingle()
-  if (dup) throw new Error(`Pipe number ${pipeNo} already exists`)
+  if (dup) throw new Error(`Pipe number ${pipeNo} already exists — choose a different number`)
 
   const fields = meterFields(Number(input.meter), Number(input.multiplier), 0)
   const location = composeGodownLocation(input.godown_name, input.rack, input.bay)
@@ -493,7 +503,13 @@ export async function saveFilledPipeEntry(
   }
 
   const { data, error } = await client.from('warp_pipes').insert(payload).select('*').single()
-  if (error) throw error
+  if (error) {
+    if (error.code === 'PGRST204' || error.message?.includes('amount')) {
+      throw new Error('Database columns missing. Run public/migration-filled-pipe-godown-entry.sql in Supabase.')
+    }
+    if (error.code === '23505') throw new Error(`Pipe number ${pipeNo} already exists`)
+    throw new Error(error.message || 'Save failed')
+  }
   const pipe = data as WarpPipe
 
   const txnType = entryTypeToTxnType(input.entry_type)
@@ -607,6 +623,7 @@ export function buildStockRemark(stockLabel: string, remarks: string): string {
 export function pipeToFilledPipeInput(pipe: WarpPipe): FilledPipeEntryInput {
   const { stock_label, remarks } = parseStockRemark(pipe.remarks)
   return {
+    pipe_no: pipe.pipe_no,
     entry_date: pipe.entry_date || pipe.created_at?.slice(0, 10) || todayISO(),
     entry_type: (pipe.entry_type as FilledPipeEntryType) || 'Manual Stock Entry',
     yarn_quality: pipe.yarn_quality || '',
@@ -1030,6 +1047,21 @@ export async function updateWarperJob(
 
 export function canEditFilledPipe(pipe: WarpPipe): boolean {
   return pipe.status === 'FILLED_GODOWN'
+}
+
+export function canDeleteFilledPipe(pipe: WarpPipe): boolean {
+  return pipe.status === 'FILLED_GODOWN' && Number(pipe.used_meter) === 0
+}
+
+export async function deleteFilledPipe(client: SupabaseClient, pipeId: string): Promise<void> {
+  const { data: pipe, error: fetchErr } = await client.from('warp_pipes').select('*').eq('id', pipeId).maybeSingle()
+  if (fetchErr) throw new Error(fetchErr.message || 'Unable to load pipe')
+  if (!pipe) throw new Error('Pipe not found')
+  if (!canDeleteFilledPipe(pipe as WarpPipe)) {
+    throw new Error('Only unused godown pipes can be deleted. Use edit to adjust details.')
+  }
+  const { error } = await client.from('warp_pipes').delete().eq('id', pipeId)
+  if (error) throw new Error(error.message || 'Delete failed')
 }
 
 export function canEditEmptyPipe(pipe: WarpPipe): boolean {
