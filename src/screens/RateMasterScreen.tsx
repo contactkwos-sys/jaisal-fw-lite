@@ -68,6 +68,7 @@ export function RateMasterScreen() {
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
+  const [modalError, setModalError] = useState<string | null>(null)
   const [historyItem, setHistoryItem] = useState<string | null>(null)
   const [form, setForm] = useState<FormState>(EMPTY_FORM('warp'))
   const [formMode, setFormMode] = useState<FormMode>('add')
@@ -155,6 +156,7 @@ export function RateMasterScreen() {
       category,
     })
     setFormMode('add')
+    setModalError(null)
     setModalOpen(true)
   }
 
@@ -171,11 +173,13 @@ export function RateMasterScreen() {
       effective_from: todayISO(),
     })
     setFormMode('version')
+    setModalError(null)
     setModalOpen(true)
   }
 
   function closeModal() {
     setModalOpen(false)
+    setModalError(null)
     resetFormState(tab)
   }
 
@@ -203,19 +207,20 @@ export function RateMasterScreen() {
   async function saveRate() {
     if (!canEdit) return
     if (!form.item_name.trim()) {
-      setError('Item / Variety is required')
+      setModalError('Item / Variety is required')
       return
     }
     const basic = Number(form.basic_rate)
     if (!Number.isFinite(basic) || basic < 0) {
-      setError('Basic Rate must be a non-negative number')
+      setModalError('Basic Rate must be a non-negative number')
       return
     }
     if (!form.effective_from) {
-      setError('Effective From date is required')
+      setModalError('Effective From date is required')
       return
     }
     setBusy(true)
+    setModalError(null)
     setError(null)
     try {
       const input: RateMasterInput = {
@@ -233,7 +238,7 @@ export function RateMasterScreen() {
       setMessage(`Rate saved for ${input.item_name} (effective ${formatDisplayDate(form.effective_from)})`)
       await load()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to save rate')
+      setModalError(e instanceof Error ? e.message : 'Failed to save rate')
     } finally {
       setBusy(false)
     }
@@ -376,8 +381,8 @@ export function RateMasterScreen() {
           <table className="rm-table">
             <thead>
               <tr>
-                <th>S.R.</th>
-                <th>Item / Variety</th>
+                <th className="rm-sticky-col">S.R.</th>
+                <th className="rm-sticky-col rm-sticky-col-2">Item / Variety</th>
                 <th>Denier</th>
                 <th>Supplier</th>
                 <th className="num">Basic Rate (₹/kg)</th>
@@ -395,8 +400,8 @@ export function RateMasterScreen() {
                 const calc = r ? calcEffectiveRate(r.basic_rate, r.gst_percent, r.freight_per_kg) : null
                 return (
                   <tr key={row.item_name}>
-                    <td className="num">{row.sr}</td>
-                    <td>
+                    <td className="num rm-sticky-col">{row.sr}</td>
+                    <td className="rm-sticky-col rm-sticky-col-2">
                       <strong>{row.item_name}</strong>
                     </td>
                     <td>{row.denier || '—'}</td>
@@ -414,16 +419,16 @@ export function RateMasterScreen() {
                         {canEdit ? (
                           <button
                             type="button"
-                            className="rm-icon-btn"
+                            className="rm-action-btn"
                             title="Add / update rate"
                             onClick={() => openEdit(row)}
                           >
-                            ✎
+                            Edit
                           </button>
                         ) : null}
                         <button
                           type="button"
-                          className="rm-icon-btn"
+                          className="rm-action-btn"
                           title="View history"
                           onClick={() => setHistoryItem(row.item_name)}
                         >
@@ -432,11 +437,11 @@ export function RateMasterScreen() {
                         {canEdit && r ? (
                           <button
                             type="button"
-                            className="rm-icon-btn danger"
+                            className="rm-action-btn rm-action-btn-danger"
                             title="Deactivate rate"
                             onClick={() => void deleteRate(r.id, row.item_name)}
                           >
-                            ✕
+                            Delete
                           </button>
                         ) : null}
                       </div>
@@ -478,6 +483,7 @@ export function RateMasterScreen() {
               <h2>{formMode === 'version' ? 'New Rate Version' : 'Add New Rate'}</h2>
             </div>
             <div className="rm-modal-body">
+              {modalError ? <p className="form-error text-danger rm-modal-error">{modalError}</p> : null}
               <label>
                 <span>Category</span>
                 <select
@@ -585,11 +591,11 @@ export function RateMasterScreen() {
               </div>
             </div>
             <div className="rm-modal-foot">
-              <button type="button" className="dwc-secondary-btn" onClick={closeModal}>
+              <button type="button" className="rm-btn-cancel" onClick={closeModal}>
                 Cancel
               </button>
-              <button type="button" className="primary-save" disabled={busy || !canEdit} onClick={() => void saveRate()}>
-                Save Rate
+              <button type="button" className="rm-btn-save" disabled={busy || !canEdit} onClick={() => void saveRate()}>
+                {busy ? 'Saving…' : 'Save Rate'}
               </button>
             </div>
           </div>
