@@ -1082,8 +1082,9 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false }: Props) 
           </div>
         </div>
         <p className="text-muted2 dwc-wastage-note">
-          Yarn consumption is calculated on entered {fmtQty(wastageDisplay.enteredLengthMtr, 0)} mtr. Per-meter
-          costing uses entered-length amortization; wastage shown for audit.
+          Yarn consumption on entered {fmtQty(wastageDisplay.enteredLengthMtr, 0)} mtr (incl.{' '}
+          {fmtQty(wastageDisplay.wastagePercent, 0)}% wastage). Per-meter rate on{' '}
+          {fmtQty(wastageDisplay.usableLengthMtr, 0)} mtr usable basis.
         </p>
       </section>
 
@@ -1489,7 +1490,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false }: Props) 
               Yarn Cost / Mtr <CalcInfo hint={CALC_HINTS.yarnCostPerMtr} />
             </span>
             <input className="num dwc-auto" value={fmtMoney(buildup.yarnCostPerMtr)} readOnly />
-            <span className="dwc-hint">Total Yarn Amount ÷ Entered Length</span>
+            <span className="dwc-hint">Total Yarn Amount ÷ Usable Length ({fmtQty(buildup.usableLengthMtr, 0)} mtr)</span>
           </label>
           <label className="field">
             <span className="text-muted">Total Weft PIC</span>
