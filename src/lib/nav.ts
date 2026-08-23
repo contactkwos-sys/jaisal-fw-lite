@@ -22,6 +22,7 @@ export type AppScreen =
   | 'sample-register'
   | 'beam-remaining'
   | 'design-wise-costing'
+  | 'formula-master'
   | 'design-catalog'
   | 'crm'
   | 'cash-book'
@@ -126,9 +127,22 @@ export const MAIN_MODULES: MainModule[] = [
       { id: 'din-intake', label: 'DESIGN Intake', screen: 'dto-intake', hint: 'DESIGN Inbox · Upload · Photo · Email' },
       {
         id: 'din-costing',
-        label: 'Design-wise Costing',
+        label: 'DIN Costing',
         screen: 'design-wise-costing',
-        hint: 'Canonical Design-wise Costing engine (CEO)',
+        hint: 'Jacquard Repair Design costing — full edit (CEO)',
+      },
+      {
+        id: 'din-costing-view',
+        label: 'DIN Costing (View Only)',
+        screen: 'design-wise-costing',
+        filter: 'view-only',
+        hint: 'View DIN preview & CEO finalized selling rate',
+      },
+      {
+        id: 'formula-master',
+        label: 'Formula Master',
+        screen: 'formula-master',
+        hint: 'Fixed calc factor, base length, wastage defaults',
       },
       {
         id: 'rate-master',
@@ -501,9 +515,9 @@ export const MAIN_MODULES: MainModule[] = [
     items: [
       {
         id: 'design-costing',
-        label: 'Design-wise Costing',
+        label: 'DIN Costing',
         screen: 'design-wise-costing',
-        hint: 'Same Design-wise Costing engine (deep link)',
+        hint: 'Jacquard Repair Design costing (deep link)',
       },
       {
         id: 'prod-report',
@@ -716,7 +730,8 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   'sample-job-card': 'Sample Job Card (LEGACY)',
   'sample-register': 'Sample Register (Archive)',
   'beam-remaining': 'Beam Remaining',
-  'design-wise-costing': 'Design-wise Costing',
+  'design-wise-costing': 'DIN Costing',
+  'formula-master': 'Formula Master',
   'rate-master': 'Rate Master',
   'design-catalog': 'Design Catalog',
   crm: 'CRM',
@@ -791,7 +806,8 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
     screen === 'dto-promotion' ||
     screen === 'dto-followup' ||
     screen === 'dto-reports' ||
-    screen === 'rate-master'
+    screen === 'rate-master' ||
+    screen === 'formula-master'
   ) {
     return 'design-to-order'
   }

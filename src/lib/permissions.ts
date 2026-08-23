@@ -117,6 +117,21 @@ const SECURITY_SUBS: Partial<Record<MainModuleId, string[]>> = {
   'hr-payroll': ['hr-attendance', 'hr-dash'],
 }
 
+/** Design to Program — DIN Costing view-only (no rates / formula master) */
+const PROGRAM_SUBS: Partial<Record<MainModuleId, string[]>> = {
+  'design-to-order': [
+    'din-intake',
+    'din-costing-view',
+    'sample-job',
+    'sample-tracking',
+    'order-booking',
+    'order-status',
+    'sample-promotion',
+    'followup',
+    'dto-reports',
+  ],
+}
+
 /** Salesman — Design to Order without costing rates */
 const SALESMAN_SUBS: Partial<Record<MainModuleId, string[]>> = {
   'design-to-order': [
@@ -196,6 +211,14 @@ export function getDefaultPermissions(roleName: string): ModulePermission[] {
     if (isOperator && OPERATOR_SUBS[moduleId]) subIds = OPERATOR_SUBS[moduleId]
     if (isSecurity && SECURITY_SUBS[moduleId]) subIds = SECURITY_SUBS[moduleId]
     if (n === 'salesman' && SALESMAN_SUBS[moduleId]) subIds = SALESMAN_SUBS[moduleId]
+    const isProgram =
+      n.includes('program') ||
+      n === 'programmer' ||
+      n === 'program supervisor' ||
+      n === 'production incharge' ||
+      n === 'mill incharge' ||
+      n === 'mill'
+    if (isProgram && PROGRAM_SUBS[moduleId]) subIds = PROGRAM_SUBS[moduleId]
     if (isManager) subIds = undefined
     return { moduleId, subIds }
   })
@@ -219,12 +242,32 @@ export function canAccessSub(roleName: string, moduleId: MainModuleId, subId: st
   const n = normalizeRole(roleName)
   if (n === 'ceo' || n === 'md' || n === 'managing director' || n === 'owner') return true
   if (n === 'manager' && moduleId === 'dashboard') return false
-  // Design-wise Costing is CEO / MD / Owner / Manager only
+  // DIN Costing full edit — CEO / MD / Owner / Manager only
   if (
-    (subId === 'din-costing' || subId === 'design-costing' || subId === 'rate-master') &&
-    !(n === 'manager' || n.includes('ceo') || n === 'md' || n.includes('director') || n === 'owner')
+    (subId === 'din-costing' || subId === 'design-costing' || subId === 'rate-master' || subId === 'formula-master') &&
+    !(n === 'manager' || n.includes('ceo') || n === 'md' || n.includes('director') || n === 'owner' || n === 'admin')
   ) {
     return false
+  }
+  // DIN Costing view-only — Design / Program roles
+  if (subId === 'din-costing-view') {
+    const isProgram =
+      n.includes('program') ||
+      n === 'programmer' ||
+      n === 'program supervisor' ||
+      n === 'production incharge' ||
+      n === 'mill incharge' ||
+      n === 'mill' ||
+      n === 'machine supervisor'
+  return (
+      isProgram ||
+      n === 'manager' ||
+      n.includes('ceo') ||
+      n === 'md' ||
+      n.includes('director') ||
+      n === 'owner' ||
+      n === 'admin'
+    )
   }
   const perm = getPermissionsForRole(roleName).find((p) => p.moduleId === moduleId)
   if (!perm) return false

@@ -487,3 +487,170 @@
     flex-direction: column;
   }
 }
+
+/* DIN Costing — wastage, profit, view-only, finalize */
+
+.dwc-length-summary,
+.dwc-wastage-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.dwc-wastage-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.dwc-usable-highlight strong {
+  color: var(--teal-deep);
+  font-size: 1.15rem;
+}
+
+.dwc-fixed-tag,
+.dwc-auto-tag,
+.dwc-lock-tag {
+  display: inline-block;
+  margin-left: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  background: var(--surface2);
+  color: var(--muted);
+}
+
+.dwc-wastage-card {
+  border-left: 3px solid var(--teal);
+}
+
+.dwc-wastage-note {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.dwc-calc-info {
+  cursor: help;
+  color: var(--teal-deep);
+  font-size: 0.85rem;
+  margin-left: 0.2rem;
+}
+
+.dwc-profit-panel {
+  border: 1px solid color-mix(in srgb, var(--teal) 25%, var(--line));
+}
+
+.dwc-ceo-rate {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.dwc-ceo-final-banner {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  background: color-mix(in srgb, #2d8a4e 12%, var(--surface));
+  border: 1px solid color-mix(in srgb, #2d8a4e 35%, var(--line));
+  border-radius: var(--radius);
+}
+
+.dwc-ceo-final-banner strong {
+  font-size: 1.35rem;
+  color: #2d8a4e;
+}
+
+.dwc-finalize-btn {
+  background: #2d8a4e;
+  color: #fff;
+  border: 1px solid #2d8a4e;
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 1.1rem;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.dwc-finalize-btn:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.dwc-finalize-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dwc-view-only .dwc-selling-rate {
+  color: #2d8a4e;
+  font-weight: 700;
+}
+
+.dwc-view-note {
+  background: var(--surface2);
+}
+
+.dwc-preview-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: grid;
+  place-items: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.dwc-preview-card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  max-width: 640px;
+  width: 100%;
+  max-height: 90vh;
+  overflow: auto;
+  box-shadow: var(--shadow-lg);
+}
+
+.dwc-preview-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.dwc-preview-body {
+  padding: 1rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.dwc-preview-body img {
+  width: 100%;
+  max-height: 360px;
+  object-fit: contain;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.dwc-preview-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.dwc-preview-meta dt {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.dwc-preview-meta dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+@media (max-width: 900px) {
+  .dwc-length-summary,
+  .dwc-wastage-grid,
+  .dwc-preview-meta {
+    grid-template-columns: 1fr;
+  }
+}
