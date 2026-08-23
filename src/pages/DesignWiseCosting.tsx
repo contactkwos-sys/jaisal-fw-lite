@@ -308,7 +308,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false }: Props) 
     [buildup.finalCostPerMtr, fixedCostPerMtr, desiredProfitPerMtr, ceoFinalSellingRate, productionMeters],
   )
 
-  const isReadOnly = !canEdit || isLocked || status === 'final'
+  const isReadOnly = !canEdit || isLocked
 
   const refreshHistory = useCallback(async () => {
     setHistoryError(null)
