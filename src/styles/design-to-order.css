@@ -813,3 +813,66 @@
     width: 100%;
   }
 }
+
+
+/* DESIGN Intake — Design Costing (after photo upload) */
+.dto-costing-block {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.dto-costing-meta {
+  margin-bottom: 0.25rem;
+}
+
+.dto-costing-table-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  overflow-x: auto;
+}
+
+.dto-costing-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.dto-costing-table th,
+.dto-costing-table td {
+  border: 1px solid var(--line);
+  padding: 0.35rem 0.4rem;
+  vertical-align: top;
+  background: var(--surface);
+}
+
+.dto-costing-table th {
+  background: var(--surface2);
+  text-align: left;
+  font-weight: 600;
+}
+
+.dto-costing-table input {
+  width: 100%;
+  min-width: 4.5rem;
+}
+
+.dto-costing-table small {
+  display: block;
+  margin-top: 0.2rem;
+  line-height: 1.2;
+}
+
+.dto-costing-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 1.5rem;
+  padding: 0.65rem 0.75rem;
+  background: var(--surface2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+}

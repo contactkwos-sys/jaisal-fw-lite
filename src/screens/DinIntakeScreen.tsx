@@ -1,17 +1,30 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { DinIntakeCostingPanel } from '../components/DinIntakeCostingPanel'
 import { GmailImportPanel } from '../components/GmailImportPanel'
 import { GmailManageModal } from '../components/GmailManageModal'
 import { ImageLightbox } from '../components/ImageLightbox'
 import { useAuth } from '../lib/auth'
+import {
+  applyWarpItemFromMaster,
+  emptyIntakeCostingDraft,
+  intakeDraftHasYarn,
+  loadExistingCostingForDin,
+  loadIntakeCostingDefaults,
+  saveIntakeCostingDraft,
+  type IntakeCostingDraft,
+} from '../lib/dinIntakeCosting'
 import {
   createDin,
   DIN_INTAKE_EMAIL,
   emptyMatchingDraft,
   fetchWarpYarnOptions,
   previewNextDinNumber,
+  syncDinCostingFromLatest,
   uploadDinImage,
   type DinMatchingDraft,
 } from '../lib/designToOrder'
+import { canEditDinCosting, canViewDinCosting } from '../lib/designWiseCosting'
+import type { RateMasterRow } from '../lib/rateMaster'
 import {
   fetchGmailStatus,
   linkGmailImportToDin,
@@ -36,7 +49,9 @@ type GmailSourceMeta = {
 }
 
 export function DinIntakeScreen({ onNavigate }: Props) {
-  const { session, profile } = useAuth()
+  const { session, profile, isCeo, isManager, roleName } = useAuth()
+  const canWriteCosting = canEditDinCosting(roleName || '', isCeo, isManager)
+  const canReadCosting = canViewDinCosting(roleName || '', isCeo, isManager)
   const [dinNumber, setDinNumber] = useState('')
   const [receivedDate, setReceivedDate] = useState(todayISO())
   const [designName, setDesignName] = useState('')
@@ -56,6 +71,9 @@ export function DinIntakeScreen({ onNavigate }: Props) {
   const [dragOver, setDragOver] = useState(false)
   const [busy, setBusy] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [masterRates, setMasterRates] = useState<RateMasterRow[]>([])
+  const [costingDraft, setCostingDraft] = useState<IntakeCostingDraft>(emptyIntakeCostingDraft())
+  const [costingReady, setCostingReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const cameraRef = useRef<HTMLInputElement>(null)
@@ -71,14 +89,18 @@ export function DinIntakeScreen({ onNavigate }: Props) {
   }, [])
 
   const refresh = useCallback(async () => {
-    const [next, warps, partyRows] = await Promise.all([
+    const [next, warps, partyRows, costingBoot] = await Promise.all([
       previewNextDinNumber(),
       fetchWarpYarnOptions(),
       supabase.from('party_master').select('party_name').order('party_name').limit(400),
+      loadIntakeCostingDefaults(),
     ])
     setDinNumber(next)
     setWarpOptions(warps)
     setParties((partyRows.data ?? []).map((p) => String(p.party_name)).filter(Boolean))
+    setMasterRates(costingBoot.rates)
+    setCostingDraft(costingBoot.draft)
+    setCostingReady(true)
     await refreshGmail()
   }, [refreshGmail])
 
@@ -87,6 +109,38 @@ export function DinIntakeScreen({ onNavigate }: Props) {
       setError(handleUserError('DinIntake', e, 'Unable to load design intake. Please try again.')),
     )
   }, [refresh])
+
+  useEffect(() => {
+    if (!imageUrl || !dinNumber.trim() || !costingReady) return
+    let cancelled = false
+    void loadExistingCostingForDin(dinNumber)
+      .then((existing) => {
+        if (cancelled || !existing) return
+        setCostingDraft(existing)
+      })
+      .catch(() => {
+        /* keep defaults when no prior costing */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [imageUrl, dinNumber, costingReady])
+
+  useEffect(() => {
+    if (!imageUrl || !canWriteCosting) return
+    const warpName = commonWarp === 'Other' ? warpOther.trim() : commonWarp.trim()
+    if (!warpName) return
+    setCostingDraft((prev) => {
+      const first = prev.warps[0]
+      if (!first || first.yarn_name.trim()) return prev
+      const filled = applyWarpItemFromMaster(first, warpName, masterRates, prev.costingDate)
+      const withLength =
+        !filled.length_mtr && prev.designLength
+          ? { ...filled, length_mtr: prev.designLength }
+          : filled
+      return { ...prev, warps: [withLength, ...prev.warps.slice(1)] }
+    })
+  }, [imageUrl, commonWarp, warpOther, masterRates, canWriteCosting])
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -207,7 +261,20 @@ export function DinIntakeScreen({ onNavigate }: Props) {
         await linkGmailImportToDin(gmailMeta.importId, din.id)
       }
 
-      setMessage(`Saved ${din.din_number}`)
+      let costingNote = ''
+      if (canWriteCosting && intakeDraftHasYarn(costingDraft) && !costingDraft.isLocked) {
+        await saveIntakeCostingDraft({
+          dinNumber: din.din_number,
+          qualityName: designName || din.din_number,
+          diaryImageUrl: imageUrl,
+          draft: costingDraft,
+          userId: session?.user?.id || null,
+        })
+        await syncDinCostingFromLatest(din.din_number)
+        costingNote = ' · costing draft saved'
+      }
+
+      setMessage(`Saved ${din.din_number}${costingNote}`)
       onNavigate({ screen: 'dto-hub', module: 'design-to-order' })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed')
@@ -493,6 +560,23 @@ export function DinIntakeScreen({ onNavigate }: Props) {
             </div>
           ))}
         </div>
+
+
+        {imageUrl && canReadCosting ? (
+          <DinIntakeCostingPanel
+            draft={costingDraft}
+            rates={masterRates}
+            canWrite={canWriteCosting}
+            onChange={setCostingDraft}
+            onOpenFullCosting={() =>
+              onNavigate({
+                screen: 'design-wise-costing',
+                module: 'design-to-order',
+                filter: dinNumber.trim() || undefined,
+              })
+            }
+          />
+        ) : null}
 
         <div className="dto-form-actions">
           <span className="text-muted">Logged in as {profile?.full_name || 'User'}</span>

@@ -34,6 +34,7 @@ import {
   lookupRate,
   type RateMasterRow,
 } from '../lib/rateMaster'
+import { rateMasterItemNames } from '../lib/dinIntakeCosting'
 
 type Props = { initialDin?: string; viewOnly?: boolean }
 
@@ -1002,6 +1003,17 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false }: Props) 
                 </option>
               ))}
             </datalist>
+            <datalist id="dwc-warp-rate-items">
+              {rateMasterItemNames(masterRates, 'warp').map((name) => (
+                <option key={name} value={name} />
+              ))}
+            </datalist>
+            <datalist id="dwc-weft-rate-items">
+              {rateMasterItemNames(masterRates, 'weft').map((name) => (
+                <option key={name} value={name} />
+              ))}
+            </datalist>
+
           </label>
           <label className="field">
             <span className="text-muted">Date</span>
@@ -1152,12 +1164,20 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false }: Props) 
                     <td className="num">{idx + 1}</td>
                     <td>
                       <input
+                        list="dwc-warp-rate-items"
                         value={row.yarn_name}
-                        onChange={(e) =>
+                        disabled={isReadOnly}
+                        placeholder="Item from Rate Master"
+                        onChange={(e) => {
+                          const name = e.target.value
                           setWarps((prev) =>
-                            prev.map((r) => (r.key === row.key ? { ...r, yarn_name: e.target.value } : r)),
+                            prev.map((r) => {
+                              if (r.key !== row.key) return r
+                              const updated = { ...r, yarn_name: name }
+                              return applyWarpRateFromMaster(updated)
+                            }),
                           )
-                        }
+                        }}
                         onBlur={() =>
                           setWarps((prev) =>
                             prev.map((r) => (r.key === row.key ? applyWarpRateFromMaster(r) : r)),
@@ -1172,6 +1192,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false }: Props) 
                         min="0"
                         step="any"
                         value={row.denier}
+                        disabled={isReadOnly}
                         onChange={(e) =>
                           setWarps((prev) =>
                             prev.map((r) => (r.key === row.key ? { ...r, denier: e.target.value } : r)),
@@ -1186,6 +1207,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false }: Props) 
                         min="0"
                         step="any"
                         value={row.tar_ends}
+                        disabled={isReadOnly}
                         onChange={(e) =>
                           setWarps((prev) =>
                             prev.map((r) => (r.key === row.key ? { ...r, tar_ends: e.target.value } : r)),
@@ -1200,6 +1222,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false }: Props) 
                         min="0"
                         step="any"
                         value={row.length_mtr}
+                        disabled={isReadOnly}
                         onChange={(e) =>
                           setWarps((prev) =>
                             prev.map((r) => (r.key === row.key ? { ...r, length_mtr: e.target.value } : r)),
@@ -1220,6 +1243,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false }: Props) 
                         min="0"
                         step="any"
                         value={row.rate_per_kg}
+                        disabled={isReadOnly}
                         onChange={(e) =>
                           setWarps((prev) =>
                             prev.map((r) =>
@@ -1310,12 +1334,20 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false }: Props) 
                     <td className="num">{idx + 1}</td>
                     <td>
                       <input
+                        list="dwc-weft-rate-items"
                         value={row.weft_name}
-                        onChange={(e) =>
+                        disabled={isReadOnly}
+                        placeholder="Item from Rate Master"
+                        onChange={(e) => {
+                          const name = e.target.value
                           setWefts((prev) =>
-                            prev.map((r) => (r.key === row.key ? { ...r, weft_name: e.target.value } : r)),
+                            prev.map((r) => {
+                              if (r.key !== row.key) return r
+                              const updated = { ...r, weft_name: name }
+                              return applyWeftRateFromMaster(updated)
+                            }),
                           )
-                        }
+                        }}
                         onBlur={() =>
                           setWefts((prev) =>
                             prev.map((r) => (r.key === row.key ? applyWeftRateFromMaster(r) : r)),
@@ -1330,6 +1362,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false }: Props) 
                         min="0"
                         step="any"
                         value={row.denier}
+                        disabled={isReadOnly}
                         onChange={(e) =>
                           setWefts((prev) =>
                             prev.map((r) => (r.key === row.key ? { ...r, denier: e.target.value } : r)),
@@ -1344,6 +1377,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false }: Props) 
                         min="0"
                         step="any"
                         value={row.pic}
+                        disabled={isReadOnly}
                         onChange={(e) =>
                           setWefts((prev) =>
                             prev.map((r) => (r.key === row.key ? { ...r, pic: e.target.value } : r)),
@@ -1358,6 +1392,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false }: Props) 
                         min="0"
                         step="any"
                         value={row.width}
+                        disabled={isReadOnly}
                         onChange={(e) =>
                           setWefts((prev) =>
                             prev.map((r) => (r.key === row.key ? { ...r, width: e.target.value } : r)),
@@ -1372,6 +1407,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false }: Props) 
                         min="0"
                         step="any"
                         value={row.length_mtr}
+                        disabled={isReadOnly}
                         onChange={(e) =>
                           setWefts((prev) =>
                             prev.map((r) => (r.key === row.key ? { ...r, length_mtr: e.target.value } : r)),
@@ -1392,6 +1428,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false }: Props) 
                         min="0"
                         step="any"
                         value={row.rate_per_kg}
+                        disabled={isReadOnly}
                         onChange={(e) =>
                           setWefts((prev) =>
                             prev.map((r) =>
@@ -1504,6 +1541,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false }: Props) 
               min="0"
               step="any"
               value={picConversionRate}
+              disabled={isReadOnly}
               onChange={(e) => setPicConversionRate(e.target.value)}
             />
           </label>
@@ -1529,6 +1567,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false }: Props) 
               min="0"
               step="any"
               value={muPercent}
+              disabled={isReadOnly}
               onChange={(e) => setMuPercent(e.target.value)}
             />
           </label>
@@ -1549,6 +1588,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false }: Props) 
               min="0"
               step="any"
               value={gstPercent}
+              disabled={isReadOnly}
               onChange={(e) => setGstPercent(e.target.value)}
             />
           </label>
