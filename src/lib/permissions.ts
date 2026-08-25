@@ -127,11 +127,13 @@ const PROGRAM_SUBS: Partial<Record<MainModuleId, string[]>> = {
     'din-costing-view',
     'sample-job',
     'sample-tracking',
+    'sample-promotion',
+    'order-to-program',
     'order-booking',
     'order-status',
-    'sample-promotion',
-    'followup',
+    'program-to-machine',
     'dto-reports',
+    'followup',
   ],
 }
 
@@ -141,11 +143,13 @@ const SALESMAN_SUBS: Partial<Record<MainModuleId, string[]>> = {
     'din-intake',
     'sample-job',
     'sample-tracking',
+    'sample-promotion',
+    'order-to-program',
     'order-booking',
     'order-status',
-    'sample-promotion',
-    'followup',
+    'program-to-machine',
     'dto-reports',
+    'followup',
   ],
 }
 

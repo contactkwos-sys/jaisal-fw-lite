@@ -65,7 +65,7 @@ export function DinCostingViewOnly({ rows, onRefresh }: Props) {
     <div className="screen dwc-screen dwc-view-only">
       <header className="screen-header dwc-header">
         <div>
-          <h1>Order to Program</h1>
+          <h1>Program Rate View</h1>
           <p className="text-muted">Design preview &amp; CEO final sale rate only — no costing breakdown</p>
         </div>
       </header>

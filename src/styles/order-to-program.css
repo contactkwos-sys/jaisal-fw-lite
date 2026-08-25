@@ -1,0 +1,379 @@
+/* Order to Program (Machine-wise) — Sales & Production */
+
+.otp-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.otp-eyebrow {
+  margin: 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted, #64748b);
+}
+
+.otp-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.otp-header h1 {
+  margin: 0.15rem 0;
+  font-size: clamp(1.25rem, 2.5vw, 1.65rem);
+}
+
+.otp-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.otp-stepper {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.otp-stepper button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--line, #dbe3ee);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--surface, #fff);
+  color: var(--text, #0f172a);
+  cursor: pointer;
+  text-align: left;
+}
+
+.otp-stepper button.is-active {
+  border-color: var(--blue, #1d4ed8);
+  background: #eff6ff;
+  color: #1e3a8a;
+  box-shadow: 0 0 0 1px #bfdbfe;
+}
+
+.otp-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 999px;
+  background: #e2e8f0;
+  font-weight: 700;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
+.otp-stepper button.is-active .otp-step-num {
+  background: #1d4ed8;
+  color: #fff;
+}
+
+.otp-step-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.otp-section {
+  padding: 1rem;
+}
+
+.otp-order-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(16rem, 0.8fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.otp-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.otp-form-grid .field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.otp-form-grid .field > span,
+.otp-design-preview h3 {
+  font-size: 0.8rem;
+  color: var(--text-muted, #64748b);
+  font-weight: 600;
+}
+
+.otp-form-grid input,
+.otp-form-grid select,
+.otp-section input,
+.otp-section select {
+  min-height: 44px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--line, #dbe3ee);
+  border-radius: var(--radius-sm, 8px);
+  padding: 0.5rem 0.65rem;
+  background: #fff;
+  font-size: 1rem;
+}
+
+.otp-span-2 {
+  grid-column: 1 / -1;
+}
+
+.otp-design-preview {
+  border: 1px solid var(--line, #dbe3ee);
+  border-radius: var(--radius-sm, 8px);
+  padding: 0.85rem;
+  background: #f8fafc;
+}
+
+.otp-preview-img {
+  width: 100%;
+  max-height: 180px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--line, #dbe3ee);
+}
+
+.otp-meta {
+  margin: 0.75rem 0 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.otp-meta > div {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr);
+  gap: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.otp-meta dt {
+  color: var(--text-muted, #64748b);
+}
+
+.otp-meta dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.otp-totals {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin: 1rem 0;
+}
+
+.otp-totals > div {
+  border: 1px solid var(--line, #dbe3ee);
+  border-radius: var(--radius-sm, 8px);
+  padding: 0.75rem 0.85rem;
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.otp-totals strong {
+  font-size: 1.15rem;
+}
+
+.otp-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0.5rem 0 0.65rem;
+}
+
+.otp-hint {
+  margin: 0 0 0.65rem;
+  font-size: 0.85rem;
+}
+
+.otp-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.otp-table-wrap table {
+  min-width: 640px;
+}
+
+.otp-table-wrap tr.is-selected {
+  background: #eff6ff;
+}
+
+.otp-footer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.otp-footer-actions button,
+.otp-header-actions button,
+.otp-stepper button,
+.otp-report-kinds button {
+  min-height: 44px;
+}
+
+.otp-program-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(14rem, 0.7fr);
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.otp-program-summary {
+  border: 1px solid var(--line, #dbe3ee);
+  border-radius: var(--radius-sm, 8px);
+  padding: 0.85rem;
+  background: #f8fafc;
+  align-self: start;
+}
+
+.otp-full-btn {
+  width: 100%;
+  margin-top: 0.85rem;
+}
+
+.otp-jobcard {
+  margin-top: 1rem;
+  padding: 1rem;
+}
+
+.otp-jobcard-body {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.otp-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.6rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background: #e2e8f0;
+  color: #334155;
+  white-space: nowrap;
+}
+
+.otp-badge-ok { background: #dcfce7; color: #166534; }
+.otp-badge-prog { background: #dbeafe; color: #1e40af; }
+.otp-badge-pending { background: #fef3c7; color: #92400e; }
+.otp-badge-dispatch { background: #ede9fe; color: #5b21b6; }
+
+.otp-report-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.75rem 0;
+}
+
+.otp-report-kinds button {
+  border: 1px solid var(--line, #dbe3ee);
+  background: #fff;
+  border-radius: 999px;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.otp-report-kinds button.is-active {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: #fff;
+}
+
+.btn-wa {
+  background: #16a34a;
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm, 8px);
+  padding: 0.55rem 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-wa:hover { background: #15803d; }
+
+.dto-nav-sections {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.dto-nav-section {
+  border: 1px solid var(--line, #dbe3ee);
+  border-radius: var(--radius-sm, 8px);
+  padding: 0.65rem 0.75rem;
+  background: var(--surface, #fff);
+}
+
+.dto-nav-section h3 {
+  margin: 0 0 0.45rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted, #64748b);
+}
+
+@media (max-width: 960px) {
+  .otp-order-grid,
+  .otp-program-split {
+    grid-template-columns: 1fr;
+  }
+
+  .otp-totals {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .otp-step-label {
+    font-size: 0.75rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .otp-stepper {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .otp-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .otp-totals {
+    grid-template-columns: 1fr;
+  }
+
+  .otp-meta > div {
+    grid-template-columns: 1fr;
+  }
+
+  /* Mobile: matching rows as stacked cards feel via denser inputs */
+  .otp-table-wrap table {
+    min-width: 520px;
+  }
+}

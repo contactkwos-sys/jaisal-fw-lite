@@ -43,6 +43,7 @@ export type AppScreen =
   | 'dto-promotion'
   | 'dto-followup'
   | 'dto-reports'
+  | 'order-to-program'
   | 'rate-master'
   | 'hr-payroll'
   | 'program-dispatch'
@@ -126,19 +127,13 @@ export const MAIN_MODULES: MainModule[] = [
     screen: 'dto-hub',
     mobileNav: true,
     items: [
+      // —— SECTION A: Design Module (master) ——
       { id: 'din-intake', label: 'DESIGN Intake', screen: 'dto-intake', hint: 'DESIGN Inbox · Upload · Photo · Email' },
       {
         id: 'din-costing',
         label: 'DIN Costing',
         screen: 'design-wise-costing',
         hint: 'Jacquard Repair Design costing — full edit (CEO)',
-      },
-      {
-        id: 'din-costing-view',
-        label: 'Order to Program',
-        screen: 'design-wise-costing',
-        filter: 'view-only',
-        hint: 'Design preview & CEO final sale rate only',
       },
       {
         id: 'formula-master',
@@ -154,11 +149,50 @@ export const MAIN_MODULES: MainModule[] = [
       },
       { id: 'sample-job', label: 'Sample Job Card', screen: 'dto-sample-job', hint: 'Issue sample cards from DESIGN' },
       { id: 'sample-tracking', label: 'Sample Tracking', screen: 'dto-tracking', hint: 'Produce · receive · approve matching' },
-      { id: 'order-booking', label: 'Customer Order', screen: 'dto-order-booking', hint: 'Customer fabric order from DESIGN' },
-      { id: 'order-status', label: 'Order Status', screen: 'dto-order-status', hint: 'Pending & status tracking' },
-      { id: 'sample-promotion', label: 'Customer Promotion', screen: 'dto-promotion', hint: 'Share approved matching' },
+      { id: 'sample-promotion', label: 'Sample Promotion', screen: 'dto-promotion', hint: 'Share approved matching' },
+      {
+        id: 'din-costing-view',
+        label: 'Program Rate View',
+        screen: 'design-wise-costing',
+        filter: 'view-only',
+        hint: 'Design preview & CEO final sale rate only (no costing edit)',
+      },
+      // —— SECTION B: Sales & Production ——
+      {
+        id: 'order-to-program',
+        label: 'Order to Program',
+        screen: 'order-to-program',
+        hint: 'Customer Order → Status → Program to Machine → Reports',
+      },
+      {
+        id: 'order-booking',
+        label: 'Customer Order',
+        screen: 'order-to-program',
+        filter: 'order-entry',
+        hint: 'Matching-wise customer fabric order from DESIGN',
+      },
+      {
+        id: 'order-status',
+        label: 'Order Status',
+        screen: 'order-to-program',
+        filter: 'order-status',
+        hint: 'Order → Program → Production → Dispatch status',
+      },
+      {
+        id: 'program-to-machine',
+        label: 'Program to Machine',
+        screen: 'order-to-program',
+        filter: 'program',
+        hint: 'Machine · auto warp · matching recipe · job card',
+      },
+      {
+        id: 'dto-reports',
+        label: 'Reports & Status',
+        screen: 'order-to-program',
+        filter: 'reports',
+        hint: 'Order / matching / machine / dispatch reports',
+      },
       { id: 'followup', label: 'Order Follow-up', screen: 'dto-followup', hint: 'Party follow-ups' },
-      { id: 'dto-reports', label: 'DESIGN Reports', screen: 'dto-reports', hint: 'Design to Order reports' },
     ],
   },
   {
@@ -453,7 +487,8 @@ export const MAIN_MODULES: MainModule[] = [
       {
         id: 'customer-order-entry',
         label: 'Customer Order Entry',
-        screen: 'dto-order-booking',
+        screen: 'order-to-program',
+        filter: 'order-entry',
         hint: 'Book customer fabric order from approved DESIGN',
       },
       {
@@ -466,7 +501,8 @@ export const MAIN_MODULES: MainModule[] = [
       {
         id: 'order-status',
         label: 'Order Status',
-        screen: 'dto-order-status',
+        screen: 'order-to-program',
+        filter: 'order-status',
         hint: 'Pending & live customer order status',
       },
       {
@@ -479,8 +515,9 @@ export const MAIN_MODULES: MainModule[] = [
       {
         id: 'customer-reports',
         label: 'Customer Order Reports',
-        screen: 'dto-reports',
-        hint: 'Design to Order & customer order reports',
+        screen: 'order-to-program',
+        filter: 'reports',
+        hint: 'Order / matching / machine / dispatch reports',
       },
       {
         id: 'order-adjustment',
@@ -771,9 +808,10 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   'dto-tracking': 'Sample Tracking',
   'dto-order-booking': 'Customer Order',
   'dto-order-status': 'Order Status',
-  'dto-promotion': 'Customer Promotion',
+  'dto-promotion': 'Sample Promotion',
   'dto-followup': 'Order Follow-up',
-  'dto-reports': 'DESIGN Reports',
+  'dto-reports': 'Reports & Status',
+  'order-to-program': 'Order to Program',
   'hr-payroll': 'HR & Payroll',
   'program-dispatch': 'Program & Dispatch',
   'machine-wise-production': 'Machine-wise Production',
@@ -824,6 +862,7 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
     screen === 'dto-promotion' ||
     screen === 'dto-followup' ||
     screen === 'dto-reports' ||
+    screen === 'order-to-program' ||
     screen === 'rate-master' ||
     screen === 'formula-master'
   ) {
@@ -880,6 +919,13 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
 
 export function titleFor(screen: AppScreen, sub?: string, moduleId?: MainModuleId, filter?: string): string {
   if (screen === 'module-hub' && moduleId) return moduleById(moduleId).label
+  if (screen === 'order-to-program') {
+    if (filter === 'order-entry') return 'Customer Order'
+    if (filter === 'order-status') return 'Order Status'
+    if (filter === 'program') return 'Program to Machine'
+    if (filter === 'reports') return 'Reports & Status'
+    return 'Order to Program'
+  }
   if (screen === 'hr-payroll') {
     const labels: Record<string, string> = {
       dashboard: 'HR & Payroll Dashboard',
