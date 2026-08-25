@@ -156,18 +156,43 @@ export async function loadDesignForOrder(dinNumber: string): Promise<DesignForOr
   const trimmed = dinNumber.trim()
   if (!trimmed) return null
 
-  const [din, costingBundle, costingHeader] = await Promise.all([
-    fetchDinByNumber(trimmed),
-    loadCostingWeftsForDin(trimmed),
-    supabase
+  let costingHeader: {
+    data: Array<{
+      id: string
+      din_number: string
+      quality_name: string | null
+      diary_image_url: string | null
+      ceo_final_selling_rate?: number | null
+      final_cost_per_mtr: number | null
+      design_length_mtr: number | null
+      status: string | null
+      created_at: string
+    }> | null
+    error: { message: string } | null
+  }
+
+  const primary = await supabase
+    .from('design_costing')
+    .select(
+      'id, din_number, quality_name, diary_image_url, ceo_final_selling_rate, final_cost_per_mtr, design_length_mtr, status, created_at',
+    )
+    .eq('din_number', trimmed)
+    .order('created_at', { ascending: false })
+    .limit(5)
+
+  if (primary.error && /ceo_final_selling_rate|column .* does not exist/i.test(primary.error.message)) {
+    const fallback = await supabase
       .from('design_costing')
-      .select(
-        'id, din_number, quality_name, diary_image_url, ceo_final_selling_rate, final_cost_per_mtr, design_length_mtr, status, created_at',
-      )
+      .select('id, din_number, quality_name, diary_image_url, final_cost_per_mtr, design_length_mtr, status, created_at')
       .eq('din_number', trimmed)
       .order('created_at', { ascending: false })
-      .limit(5),
-  ])
+      .limit(5)
+    costingHeader = fallback
+  } else {
+    costingHeader = primary
+  }
+
+  const [din, costingBundle] = await Promise.all([fetchDinByNumber(trimmed), loadCostingWeftsForDin(trimmed)])
 
   if (costingHeader.error) throw costingHeader.error
 

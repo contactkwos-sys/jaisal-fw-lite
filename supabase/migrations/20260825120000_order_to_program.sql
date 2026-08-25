@@ -3,6 +3,7 @@
 
 -- ---------- Order header extensions ----------
 alter table public.order_book
+  add column if not exists din_id uuid references public.dins(id) on delete set null,
   add column if not exists item_name text,
   add column if not exists delivery_within_days integer,
   add column if not exists discount_amount numeric default 0,
@@ -12,7 +13,9 @@ alter table public.order_book
   add column if not exists design_preview_url text,
   add column if not exists total_order_meter numeric default 0,
   add column if not exists total_amount numeric default 0,
-  add column if not exists net_amount numeric default 0;
+  add column if not exists net_amount numeric default 0,
+  add column if not exists delivery_requirement text,
+  add column if not exists payment_terms text;
 
 alter table public.order_book_items
   add column if not exists matching_name text,
