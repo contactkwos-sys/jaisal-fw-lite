@@ -61,11 +61,11 @@ export function DesignToOrderHub({ onNavigate }: Props) {
 
   const matchings = detail?.din_matchings?.slice().sort((a, b) => a.matching_no - b.matching_no) || []
 
-  const quick = [
+  const quickDesign = [
     { id: 'intake', label: 'DESIGN Intake', onClick: () => onNavigate({ screen: 'dto-intake', module: 'design-to-order' }) },
     {
       id: 'costing',
-      label: 'Design-wise Costing',
+      label: 'DIN Costing',
       onClick: () =>
         onNavigate({
           screen: 'design-wise-costing',
@@ -89,29 +89,37 @@ export function DesignToOrderHub({ onNavigate }: Props) {
       onClick: () => onNavigate({ screen: 'dto-tracking', filter: detail?.id, module: 'design-to-order' }),
     },
     {
-      id: 'book',
-      label: 'Customer Order',
-      onClick: () => onNavigate({ screen: 'dto-order-booking', filter: detail?.din_number, module: 'design-to-order' }),
-    },
-    {
-      id: 'status',
-      label: 'Order Status',
-      onClick: () => onNavigate({ screen: 'dto-order-status', module: 'design-to-order' }),
-    },
-    {
       id: 'promo',
       label: 'Sample Promotion',
       onClick: () => onNavigate({ screen: 'dto-promotion', filter: detail?.id, module: 'design-to-order' }),
     },
+  ]
+
+  const quickSales = [
     {
-      id: 'follow',
-      label: 'Follow-up',
-      onClick: () => onNavigate({ screen: 'dto-followup', module: 'design-to-order' }),
+      id: 'otp',
+      label: 'Order to Program',
+      onClick: () => onNavigate({ screen: 'order-to-program', filter: detail?.din_number, module: 'design-to-order' }),
+    },
+    {
+      id: 'book',
+      label: 'Customer Order',
+      onClick: () => onNavigate({ screen: 'order-to-program', filter: 'order-entry', module: 'design-to-order' }),
+    },
+    {
+      id: 'status',
+      label: 'Order Status',
+      onClick: () => onNavigate({ screen: 'order-to-program', filter: 'order-status', module: 'design-to-order' }),
+    },
+    {
+      id: 'program',
+      label: 'Program to Machine',
+      onClick: () => onNavigate({ screen: 'order-to-program', filter: 'program', module: 'design-to-order' }),
     },
     {
       id: 'reports',
-      label: 'Reports',
-      onClick: () => onNavigate({ screen: 'dto-reports', module: 'design-to-order' }),
+      label: 'Reports & Status',
+      onClick: () => onNavigate({ screen: 'order-to-program', filter: 'reports', module: 'design-to-order' }),
     },
   ]
 
@@ -121,10 +129,17 @@ export function DesignToOrderHub({ onNavigate }: Props) {
         <div>
           <h1>Design to Order</h1>
           <p className="text-muted">
-            DESIGN (formerly DIN) · Design-wise Costing · Sample · Customer Order · Dispatch tracking
+            Design Module (Intake · Costing · Rate · Sample) · Sales &amp; Production (Order → Program → Reports)
           </p>
         </div>
         <div className="dto-header-actions">
+          <button
+            type="button"
+            className="btn-warp"
+            onClick={() => onNavigate({ screen: 'order-to-program', module: 'design-to-order' })}
+          >
+            Order to Program
+          </button>
           <button
             type="button"
             className="primary-save"
@@ -135,7 +150,16 @@ export function DesignToOrderHub({ onNavigate }: Props) {
         </div>
       </header>
 
-      <DtoQuickNav items={quick} />
+      <div className="dto-nav-sections">
+        <div className="dto-nav-section">
+          <h3>Section A — Design Module</h3>
+          <DtoQuickNav items={quickDesign} />
+        </div>
+        <div className="dto-nav-section">
+          <h3>Section B — Sales &amp; Production</h3>
+          <DtoQuickNav items={quickSales} />
+        </div>
+      </div>
 
       {error ? <p className="form-error">{error}</p> : null}
 
@@ -284,7 +308,7 @@ export function DesignToOrderHub({ onNavigate }: Props) {
                 type="button"
                 className="primary-save"
                 onClick={() =>
-                  onNavigate({ screen: 'dto-order-booking', filter: detail.din_number, module: 'design-to-order' })
+                  onNavigate({ screen: 'order-to-program', filter: 'order-entry', module: 'design-to-order' })
                 }
               >
                 Create Order
@@ -376,7 +400,7 @@ export function DesignToOrderHub({ onNavigate }: Props) {
                 type="button"
                 className="link-btn"
                 onClick={() =>
-                  onNavigate({ screen: 'dto-order-booking', filter: detail.din_number, module: 'design-to-order' })
+                  onNavigate({ screen: 'order-to-program', filter: 'order-entry', module: 'design-to-order' })
                 }
               >
                 Customer Order

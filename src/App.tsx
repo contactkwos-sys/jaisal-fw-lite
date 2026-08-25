@@ -47,11 +47,9 @@ import { DesignToOrderHub } from './screens/DesignToOrderHub'
 import { DinIntakeScreen } from './screens/DinIntakeScreen'
 import { DtoSampleJobScreen } from './screens/DtoSampleJobScreen'
 import { DtoSampleTrackingScreen } from './screens/DtoSampleTrackingScreen'
-import { DtoOrderBookingScreen } from './screens/DtoOrderBookingScreen'
-import { DtoOrderStatusScreen } from './screens/DtoOrderStatusScreen'
+import { OrderToProgramScreen } from './screens/OrderToProgramScreen'
 import { DtoSamplePromotionScreen } from './screens/DtoSamplePromotionScreen'
 import { DtoFollowupScreen } from './screens/DtoFollowupScreen'
-import { DtoReportsScreen } from './screens/DtoReportsScreen'
 import { RateMasterScreen } from './screens/RateMasterScreen'
 import { HrPayrollScreen } from './screens/HrPayrollScreen'
 import { ProgramDispatchScreen } from './screens/ProgramDispatchScreen'
@@ -354,14 +352,31 @@ function AuthenticatedApp() {
       {tab === 'dto-sample-job' ? <DtoSampleJobScreen onNavigate={go} initialDinId={filter} /> : null}
       {tab === 'dto-tracking' ? <DtoSampleTrackingScreen onNavigate={go} initialDinId={filter} /> : null}
       {tab === 'dto-order-booking' ? (
-        <DtoOrderBookingScreen onNavigate={go} initialDinNumber={filter} />
+        <OrderToProgramScreen onNavigate={go} initialStep="order-entry" initialDinNumber={filter} />
       ) : null}
-      {tab === 'dto-order-status' ? <DtoOrderStatusScreen onNavigate={go} /> : null}
+      {tab === 'dto-order-status' ? (
+        <OrderToProgramScreen onNavigate={go} initialStep="order-status" />
+      ) : null}
+      {tab === 'order-to-program' ? (
+        <OrderToProgramScreen
+          onNavigate={go}
+          initialStep={
+            filter === 'order-entry' || filter === 'order-status' || filter === 'program' || filter === 'reports'
+              ? filter
+              : 'order-entry'
+          }
+          initialDinNumber={
+            filter && !['order-entry', 'order-status', 'program', 'reports', 'view-only'].includes(filter)
+              ? filter
+              : undefined
+          }
+        />
+      ) : null}
       {tab === 'dto-promotion' ? (
         <DtoSamplePromotionScreen onNavigate={go} initialDinId={filter} />
       ) : null}
       {tab === 'dto-followup' ? <DtoFollowupScreen /> : null}
-      {tab === 'dto-reports' ? <DtoReportsScreen onNavigate={go} /> : null}
+      {tab === 'dto-reports' ? <OrderToProgramScreen onNavigate={go} initialStep="reports" /> : null}
       {tab === 'rate-master' ? <RateMasterScreen /> : null}
       {tab === 'formula-master' ? <FormulaMasterScreen /> : null}
     </AppShell>
