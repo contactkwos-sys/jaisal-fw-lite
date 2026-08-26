@@ -11,7 +11,7 @@ import {
   type MainModuleId,
   type NavTarget,
 } from '../lib/nav'
-import { canAccessModule, canAccessSub } from '../lib/permissions'
+import { canAccessModule, canAccessSub, isSalesmanRole } from '../lib/permissions'
 import { todayISO } from '../lib/mutate'
 
 type Props = {
@@ -69,6 +69,14 @@ const ICONS: Record<string, ReactNode> = {
       <path
         fill="currentColor"
         d="M4 4h7v7H4V4zm9 0h7v4h-7V4zM4 13h7v7H4v-7zm9 2h3v2h-3v-2zm4 0h3v5h-7v-2h4v-3zm-4 3h3v2h-3v-2z"
+      />
+    </svg>
+  ),
+  'order-to-program': (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="nav-ico">
+      <path
+        fill="currentColor"
+        d="M3 5h18v2H3V5zm0 4h14v2H3V9zm0 4h18v2H3v-2zm0 4h10v2H3v-2zm14-1l4 3-4 3v-6z"
       />
     </svg>
   ),
@@ -164,7 +172,10 @@ export function AppShell({ active, sub, filter, activeModule, onNavigate, childr
   const roleName = authRoleName || (isCeo ? 'CEO' : 'User')
   const userName = profile?.full_name || roleName
 
-  const modules = MAIN_MODULES.filter((m) => canAccessModule(roleName, m.id))
+  const modules = MAIN_MODULES.filter((m) => {
+    if (isSalesmanRole(roleName) && m.id === 'design-to-order') return false
+    return canAccessModule(roleName, m.id)
+  })
 
   useEffect(() => {
     setExpanded(activeModule)
@@ -242,19 +253,26 @@ export function AppShell({ active, sub, filter, activeModule, onNavigate, childr
 
         <nav className="side-nav" aria-label="Main">
           <ul className="side-nav-list">
-            {modules.map((mod) => {
+            {modules.map((mod, idx) => {
               const isActive = activeModule === mod.id
               const isOpen = expanded === mod.id
               const visibleItems = mod.items.filter((item) => canAccessSub(roleName, mod.id, item.id))
+              const prevGroup = idx > 0 ? modules[idx - 1]?.navGroup : undefined
+              const showGroupLabel = Boolean(mod.navGroup && mod.navGroup !== prevGroup)
               return (
                 <li key={mod.id} className={isActive ? 'side-nav-group active' : 'side-nav-group'}>
+                  {showGroupLabel ? (
+                    <div className="side-nav-group-label" role="presentation">
+                      {mod.navGroup}
+                    </div>
+                  ) : null}
                   <button
                     type="button"
                     className={isActive ? 'side-nav-item active' : 'side-nav-item'}
                     aria-current={isActive && !mod.hasHub ? 'page' : undefined}
                     onClick={() => openModule(mod.id)}
                   >
-                    <span className="side-nav-ico">{ICONS[mod.icon]}</span>
+                    <span className="side-nav-ico">{ICONS[mod.icon] || ICONS.orders}</span>
                     <span className="side-nav-label">{mod.label}</span>
                   </button>
                   {visibleItems.length && (isOpen || isActive) ? (

@@ -266,7 +266,7 @@ export function RateMasterScreen() {
       <header className="screen-header">
         <div>
           <p className="text-muted" style={{ margin: 0, fontSize: '0.9rem' }}>
-            Home › Design to Order › Rate Master
+            Home › Design Master › Rate Master
           </p>
           <h1>Rate Master</h1>
           <p className="text-muted">Date-wise warp &amp; weft yarn rates — linked to Design-wise Costing</p>

@@ -10,6 +10,7 @@
 
 import { supabase } from './supabase'
 import { round2 } from './designWiseCosting'
+import { assertDesignMasterWrite } from './permissions'
 
 export type RateCategory = 'warp' | 'weft'
 
@@ -222,6 +223,7 @@ export async function updateRateMasterConfig(
   patch: Partial<Pick<RateMasterConfig, 'default_gst_percent' | 'default_freight_per_kg'>>,
   userId: string | null,
 ): Promise<void> {
+  await assertDesignMasterWrite()
   const { error } = await supabase
     .from('rate_master_config')
     .update({
@@ -281,6 +283,7 @@ export async function saveRateMasterEntry(
   userId: string | null,
   existingId?: string,
 ): Promise<RateMasterRow> {
+  await assertDesignMasterWrite()
   const calc = calcEffectiveRate(input.basic_rate, input.gst_percent, input.freight_per_kg)
   const payload = {
     category: input.category,
@@ -320,6 +323,7 @@ export async function saveRateMasterEntry(
 
 /** Soft-delete — preserves history */
 export async function deactivateRate(id: string, userId: string | null): Promise<void> {
+  await assertDesignMasterWrite()
   const { error } = await supabase
     .from('rate_master')
     .update({ is_active: false, updated_by: userId, updated_at: new Date().toISOString() })

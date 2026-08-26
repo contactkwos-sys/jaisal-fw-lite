@@ -30,13 +30,17 @@ export const DEFAULT_ADD_WEIGHT_PCT = 2
 export const ITEM_NAME_OPTIONS = ['Curtain Fabric', 'Fabric', 'Others'] as const
 
 export const OTP_STEPS = [
-  { id: 'order-entry', label: 'Order Entry' },
+  { id: 'dashboard', label: 'Dashboard' },
+  { id: 'order-entry', label: 'Customer Order' },
   { id: 'order-status', label: 'Order Status' },
   { id: 'program', label: 'Program to Machine' },
   { id: 'reports', label: 'Reports & Status' },
 ] as const
 
 export type OtpStepId = (typeof OTP_STEPS)[number]['id']
+
+/** Nav / salesman menu — four operational sections (dashboard is landing only) */
+export const OTP_MENU_STEPS = OTP_STEPS.filter((s) => s.id !== 'dashboard')
 
 export const ORDER_STATUS_FLOW = [
   'ORDER RECEIVED',
@@ -482,7 +486,11 @@ export async function saveCustomerOrder(input: SaveCustomerOrderInput): Promise<
   if (iErr) throw iErr
 
   if (input.dinId) {
-    await supabase.from('dins').update({ status: 'Order Booked' }).eq('id', input.dinId)
+    const { error: dinErr } = await supabase.rpc('mark_din_order_booked', { p_din_id: input.dinId })
+    if (dinErr) {
+      // Fallback when RPC not yet migrated — ignore RLS denial for salesman
+      await supabase.from('dins').update({ status: 'Order Booked' }).eq('id', input.dinId)
+    }
   }
 
   return { orderId: data.id, orderNo: data.order_no || orderNo }
@@ -803,6 +811,36 @@ export async function loadOrderStatusRows(limit = 200): Promise<OrderStatusRow[]
       netAmount: Number(o.net_amount) || 0,
     }
   })
+}
+
+export type OtpDashboardStats = {
+  pendingOrders: number
+  todaysOrders: number
+  programPending: number
+  productionPending: number
+  readyForDispatch: number
+  dispatched: number
+}
+
+export async function loadOtpDashboardStats(): Promise<OtpDashboardStats> {
+  const rows = await loadOrderStatusRows(300)
+  const today = todayISO()
+  return {
+    pendingOrders: rows.filter((r) =>
+      /RECEIVED|CONFIRMED|PROGRAM PENDING|PENDING/i.test(r.overallStatus),
+    ).length,
+    todaysOrders: rows.filter((r) => r.orderDate === today).length,
+    programPending: rows.filter((r) =>
+      /PROGRAM PENDING|RECEIVED|CONFIRMED/i.test(r.programStatus || r.overallStatus),
+    ).length,
+    productionPending: rows.filter(
+      (r) =>
+        r.programStatus === 'PROGRAM CREATED' &&
+        !/COMPLETE|DISPATCHED/i.test(r.productionStatus || ''),
+    ).length,
+    readyForDispatch: rows.filter((r) => /READY FOR DISPATCH|CHECKING/i.test(r.overallStatus)).length,
+    dispatched: rows.filter((r) => /DISPATCHED/i.test(r.dispatchStatus || r.overallStatus)).length,
+  }
 }
 
 export type ReportFilters = {

@@ -2,6 +2,7 @@
 
 import { supabase } from './supabase'
 import { todayISO } from './mutate'
+import { assertDesignMasterWrite } from './permissions'
 
 export const DIN_STATUSES = [
   'DIN Received',
@@ -242,6 +243,7 @@ export async function createDin(input: {
   created_by?: string | null
   matchings?: DinMatchingDraft[]
 }): Promise<DinWithMatchings> {
+  await assertDesignMasterWrite()
   const din_number = input.din_number || (await previewNextDinNumber())
   const { data, error } = await supabase
     .from('dins')
@@ -313,6 +315,7 @@ export async function updateDin(
     >
   >,
 ): Promise<void> {
+  await assertDesignMasterWrite()
   const { error } = await supabase
     .from('dins')
     .update({ ...patch, updated_at: new Date().toISOString() })
@@ -321,6 +324,7 @@ export async function updateDin(
 }
 
 export async function upsertDinMatchings(dinId: string, matchings: DinMatchingDraft[]): Promise<void> {
+  await assertDesignMasterWrite()
   await supabase.from('din_matchings').delete().eq('din_id', dinId)
   if (!matchings.length) {
     await updateDin(dinId, { matching_count: 0 })
@@ -365,6 +369,7 @@ export async function updateMatching(
     >
   >,
 ): Promise<void> {
+  await assertDesignMasterWrite()
   const { error } = await supabase.from('din_matchings').update(patch).eq('id', id)
   if (error) throw error
 }
@@ -437,6 +442,7 @@ export async function createDinSampleCard(input: {
   design_image_url?: string | null
   created_by?: string | null
 }): Promise<DinSampleCard> {
+  await assertDesignMasterWrite()
   const card_no = await nextSampleCardNo()
 
   // Also create/link a sample_job_cards row so Sample Register stays in sync

@@ -1,6 +1,7 @@
 /** DIN Costing Formula Master — fixed parameters (CEO/Admin editable) */
 
 import { supabase } from './supabase'
+import { assertDesignMasterWrite } from './permissions'
 
 export type FormulaMasterConfig = {
   id: string
@@ -41,6 +42,7 @@ export async function updateFormulaMaster(
   patch: Partial<Omit<FormulaMasterConfig, 'id' | 'updated_by' | 'updated_at'>>,
   userId: string | null,
 ): Promise<void> {
+  await assertDesignMasterWrite()
   const current = await fetchFormulaMaster()
   const payload = {
     calc_factor: patch.calc_factor ?? current.calc_factor,

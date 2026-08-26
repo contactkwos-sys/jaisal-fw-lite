@@ -10,7 +10,7 @@ import {
   type MainModuleId,
   type NavTarget,
 } from './lib/nav'
-import { firstAllowedLanding } from './lib/permissions'
+import { firstAllowedLanding, DESIGN_MASTER_SCREENS, isSalesmanRole } from './lib/permissions'
 import { AdminScreen } from './screens/AdminScreen'
 import { AttendanceScreen } from './screens/AttendanceScreen'
 import { CostingScreen } from './screens/CostingScreen'
@@ -50,6 +50,7 @@ import { DtoSampleTrackingScreen } from './screens/DtoSampleTrackingScreen'
 import { OrderToProgramScreen } from './screens/OrderToProgramScreen'
 import { DtoSamplePromotionScreen } from './screens/DtoSamplePromotionScreen'
 import { DtoFollowupScreen } from './screens/DtoFollowupScreen'
+import { DtoReportsScreen } from './screens/DtoReportsScreen'
 import { RateMasterScreen } from './screens/RateMasterScreen'
 import { HrPayrollScreen } from './screens/HrPayrollScreen'
 import { ProgramDispatchScreen } from './screens/ProgramDispatchScreen'
@@ -86,7 +87,7 @@ function AuthenticatedApp() {
     const landing = firstAllowedLanding(roleName || (isCeo ? 'CEO' : 'User'))
     setTab(landing.screen)
     setSub(landing.sub)
-    setFilter(landing.module === landing.sub ? landing.module : undefined)
+    setFilter(landing.filter ?? (landing.module === landing.sub ? landing.module : undefined))
     setActiveModule(landing.module)
   }, [session, loading, roleName, isCeo])
 
@@ -97,10 +98,22 @@ function AuthenticatedApp() {
       const landing = firstAllowedLanding('Manager')
       setTab(landing.screen)
       setSub(landing.sub)
-      setFilter(landing.module === landing.sub ? landing.module : undefined)
+      setFilter(landing.filter ?? (landing.module === landing.sub ? landing.module : undefined))
       setActiveModule(landing.module)
     }
   }, [session, isManager, isCeo, tab, activeModule])
+
+  // Hard-block Salesman from Design Master screens
+  useEffect(() => {
+    if (!session || !isSalesmanRole(roleName || '')) return
+    if (DESIGN_MASTER_SCREENS.has(tab) || activeModule === 'design-to-order') {
+      const landing = firstAllowedLanding('Salesman')
+      setTab(landing.screen)
+      setSub(landing.sub)
+      setFilter(landing.filter ?? 'dashboard')
+      setActiveModule(landing.module)
+    }
+  }, [session, roleName, tab, activeModule])
 
   if (loading) {
     return (
@@ -136,6 +149,15 @@ function AuthenticatedApp() {
       return
     }
     if (t.screen === 'ceo-pin-management' && !isCeo) {
+      return
+    }
+    // Salesman cannot open Design Master
+    if (
+      isSalesmanRole(roleName || '') &&
+      (t.module === 'design-to-order' ||
+        t.hub === 'design-to-order' ||
+        DESIGN_MASTER_SCREENS.has(t.screen))
+    ) {
       return
     }
     const nextScreen = t.screen
@@ -361,12 +383,17 @@ function AuthenticatedApp() {
         <OrderToProgramScreen
           onNavigate={go}
           initialStep={
-            filter === 'order-entry' || filter === 'order-status' || filter === 'program' || filter === 'reports'
+            filter === 'order-entry' ||
+            filter === 'order-status' ||
+            filter === 'program' ||
+            filter === 'reports' ||
+            filter === 'dashboard'
               ? filter
-              : 'order-entry'
+              : 'dashboard'
           }
           initialDinNumber={
-            filter && !['order-entry', 'order-status', 'program', 'reports', 'view-only'].includes(filter)
+            filter &&
+            !['order-entry', 'order-status', 'program', 'reports', 'dashboard', 'view-only'].includes(filter)
               ? filter
               : undefined
           }
@@ -376,7 +403,7 @@ function AuthenticatedApp() {
         <DtoSamplePromotionScreen onNavigate={go} initialDinId={filter} />
       ) : null}
       {tab === 'dto-followup' ? <DtoFollowupScreen /> : null}
-      {tab === 'dto-reports' ? <OrderToProgramScreen onNavigate={go} initialStep="reports" /> : null}
+      {tab === 'dto-reports' ? <DtoReportsScreen onNavigate={go} /> : null}
       {tab === 'rate-master' ? <RateMasterScreen /> : null}
       {tab === 'formula-master' ? <FormulaMasterScreen /> : null}
     </AppShell>

@@ -12,12 +12,16 @@ import type { NavTarget } from '../lib/nav'
 
 type Props = { onNavigate: (t: NavTarget) => void }
 
+/**
+ * DESIGN MASTER — Design / Technical team & management only.
+ * Sales/Production (Customer Order → Program) lives in Order to Program module.
+ */
 export function DesignToOrderHub({ onNavigate }: Props) {
   const [dins, setDins] = useState<DinWithMatchings[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [detail, setDetail] = useState<DinWithMatchings | null>(null)
   const [q, setQ] = useState('')
-  const [tab, setTab] = useState<'matchings' | 'job' | 'order' | 'timeline'>('matchings')
+  const [tab, setTab] = useState<'matchings' | 'job' | 'timeline'>('matchings')
   const [stats, setStats] = useState({
     activeDins: 0,
     sampleUnderDev: 0,
@@ -62,16 +66,21 @@ export function DesignToOrderHub({ onNavigate }: Props) {
   const matchings = detail?.din_matchings?.slice().sort((a, b) => a.matching_no - b.matching_no) || []
 
   const quickDesign = [
-    { id: 'intake', label: 'DESIGN Intake', onClick: () => onNavigate({ screen: 'dto-intake', module: 'design-to-order' }) },
+    { id: 'intake', label: 'Design Intake', onClick: () => onNavigate({ screen: 'dto-intake', module: 'design-to-order' }) },
     {
       id: 'costing',
-      label: 'DIN Costing',
+      label: 'DIN / Design Costing',
       onClick: () =>
         onNavigate({
           screen: 'design-wise-costing',
           filter: detail?.din_number,
           module: 'design-to-order',
         }),
+    },
+    {
+      id: 'formula',
+      label: 'Formula Master',
+      onClick: () => onNavigate({ screen: 'formula-master', module: 'design-to-order' }),
     },
     {
       id: 'rate-master',
@@ -93,33 +102,10 @@ export function DesignToOrderHub({ onNavigate }: Props) {
       label: 'Sample Promotion',
       onClick: () => onNavigate({ screen: 'dto-promotion', filter: detail?.id, module: 'design-to-order' }),
     },
-  ]
-
-  const quickSales = [
-    {
-      id: 'otp',
-      label: 'Order to Program',
-      onClick: () => onNavigate({ screen: 'order-to-program', filter: detail?.din_number, module: 'design-to-order' }),
-    },
-    {
-      id: 'book',
-      label: 'Customer Order',
-      onClick: () => onNavigate({ screen: 'order-to-program', filter: 'order-entry', module: 'design-to-order' }),
-    },
-    {
-      id: 'status',
-      label: 'Order Status',
-      onClick: () => onNavigate({ screen: 'order-to-program', filter: 'order-status', module: 'design-to-order' }),
-    },
-    {
-      id: 'program',
-      label: 'Program to Machine',
-      onClick: () => onNavigate({ screen: 'order-to-program', filter: 'program', module: 'design-to-order' }),
-    },
     {
       id: 'reports',
-      label: 'Reports & Status',
-      onClick: () => onNavigate({ screen: 'order-to-program', filter: 'reports', module: 'design-to-order' }),
+      label: 'Design Reports',
+      onClick: () => onNavigate({ screen: 'dto-reports', module: 'design-to-order' }),
     },
   ]
 
@@ -127,19 +113,12 @@ export function DesignToOrderHub({ onNavigate }: Props) {
     <div className="screen dto-screen">
       <header className="screen-header dto-header">
         <div>
-          <h1>Design to Order</h1>
+          <h1>Design Master</h1>
           <p className="text-muted">
-            Design Module (Intake · Costing · Rate · Sample) · Sales &amp; Production (Order → Program → Reports)
+            Design / Technical module — Intake · DIN Costing · Formula · Rate · Sample · Reports
           </p>
         </div>
         <div className="dto-header-actions">
-          <button
-            type="button"
-            className="btn-warp"
-            onClick={() => onNavigate({ screen: 'order-to-program', module: 'design-to-order' })}
-          >
-            Order to Program
-          </button>
           <button
             type="button"
             className="primary-save"
@@ -152,12 +131,8 @@ export function DesignToOrderHub({ onNavigate }: Props) {
 
       <div className="dto-nav-sections">
         <div className="dto-nav-section">
-          <h3>Section A — Design Module</h3>
+          <h3>Design Module</h3>
           <DtoQuickNav items={quickDesign} />
-        </div>
-        <div className="dto-nav-section">
-          <h3>Section B — Sales &amp; Production</h3>
-          <DtoQuickNav items={quickSales} />
         </div>
       </div>
 
@@ -169,9 +144,7 @@ export function DesignToOrderHub({ onNavigate }: Props) {
             ['Active DINs', stats.activeDins],
             ['Sample Under Dev', stats.sampleUnderDev],
             ['Approved Matches', stats.approvedMatches],
-            ['Pending Orders', String(stats.pendingOrders).padStart(2, '0')],
-            ['Total Order Value', fmtInrIn(stats.totalOrderValue).replace('₹', '')],
-            ['Dispatched (MT)', Math.round(stats.dispatchedMt)],
+            ['Costing Done', dins.filter((d) => /costing done|approved/i.test(d.status)).length],
           ] as const
         ).map(([label, value]) => (
           <div key={label} className="dto-kpi surface">
@@ -181,7 +154,7 @@ export function DesignToOrderHub({ onNavigate }: Props) {
         ))}
       </section>
 
-      <div className="dto-main-grid">
+      <div className="dto-main-grid dto-main-grid-single">
         <section className="surface dto-table-panel">
           <div className="dto-panel-head">
             <h2 className="section-title">Recent DINs</h2>
@@ -193,7 +166,7 @@ export function DesignToOrderHub({ onNavigate }: Props) {
             />
           </div>
           {filtered.length === 0 ? (
-            <DtoEmpty>No DESIGN records yet. Start with DESIGN Intake.</DtoEmpty>
+            <DtoEmpty>No DESIGN records yet. Start with Design Intake.</DtoEmpty>
           ) : (
             <div className="table-wrap">
               <table className="data-table dto-table">
@@ -242,26 +215,6 @@ export function DesignToOrderHub({ onNavigate }: Props) {
             </div>
           )}
         </section>
-
-        <aside className="dto-side-col">
-          <section className="surface dto-summary">
-            <h2 className="section-title">Order Summary</h2>
-            <div className="dto-summary-rows">
-              <div>
-                <span className="text-muted">Total Orders</span>
-                <strong className="num">{fmtInrIn(stats.totalOrderValue)}</strong>
-              </div>
-              <div>
-                <span className="text-muted">Delivered</span>
-                <strong className="num">0</strong>
-              </div>
-              <div>
-                <span className="text-muted">Balance</span>
-                <strong className="num">{fmtInrIn(stats.totalOrderValue)}</strong>
-              </div>
-            </div>
-          </section>
-        </aside>
       </div>
 
       {detail ? (
@@ -308,10 +261,10 @@ export function DesignToOrderHub({ onNavigate }: Props) {
                 type="button"
                 className="primary-save"
                 onClick={() =>
-                  onNavigate({ screen: 'order-to-program', filter: 'order-entry', module: 'design-to-order' })
+                  onNavigate({ screen: 'dto-sample-job', filter: detail.id, module: 'design-to-order' })
                 }
               >
-                Create Order
+                Sample Job Card
               </button>
             </div>
           </div>
@@ -320,8 +273,7 @@ export function DesignToOrderHub({ onNavigate }: Props) {
             {(
               [
                 ['matchings', 'Matchings'],
-                ['job', 'Job Card'],
-                ['order', 'Order Details'],
+                ['job', 'Sample Job'],
                 ['timeline', 'Timeline'],
               ] as const
             ).map(([id, label]) => (
@@ -389,23 +341,7 @@ export function DesignToOrderHub({ onNavigate }: Props) {
               >
                 Sample Job Card
               </button>{' '}
-              to issue cards for this DIN.
-            </p>
-          ) : null}
-
-          {tab === 'order' ? (
-            <p className="text-muted">
-              Book orders from{' '}
-              <button
-                type="button"
-                className="link-btn"
-                onClick={() =>
-                  onNavigate({ screen: 'order-to-program', filter: 'order-entry', module: 'design-to-order' })
-                }
-              >
-                Customer Order
-              </button>
-              . Rates carry into Program &amp; Dispatch automatically.
+              to issue cards for this DIN. Customer orders are booked in Order to Program (linked by DIN).
             </p>
           ) : null}
 

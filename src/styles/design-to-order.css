@@ -74,6 +74,10 @@
   align-items: start;
 }
 
+.dto-main-grid-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .dto-table-panel,
 .dto-panel,
 .dto-detail,
