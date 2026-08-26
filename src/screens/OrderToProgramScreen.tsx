@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ImageLightbox } from '../components/ImageLightbox'
 import { ShareActions } from '../components/ShareActions'
+import { useAuth } from '../lib/auth'
 import { todayISO } from '../lib/mutate'
 import type { NavTarget } from '../lib/nav'
 import {
@@ -18,10 +19,11 @@ import {
   loadDesignForOrder,
   loadMachineWarpBoard,
   loadOrderStatusRows,
+  loadOtpDashboardStats,
   loadOtpReports,
   matchingMainColour,
   MAX_FEEDERS,
-  OTP_STEPS,
+  OTP_MENU_STEPS,
   rowsToCsv,
   saveCustomerOrder,
   saveProgramWithJobCard,
@@ -32,10 +34,16 @@ import {
   type MachineWarpInfo,
   type MatchingOrderLine,
   type OrderStatusRow,
+  type OtpDashboardStats,
   type OtpStepId,
   type ReportFilters,
   DEFAULT_ADD_WEIGHT_PCT,
 } from '../lib/orderToProgram'
+import {
+  canChangeDispatchStatus,
+  canChangeProductionStatus,
+  isSalesmanRole,
+} from '../lib/permissions'
 import { printSummary, shareWhatsApp, shareWhatsAppBusiness } from '../lib/share'
 import { handleUserError } from '../lib/userError'
 import type { DinWithMatchings } from '../lib/designToOrder'
@@ -57,24 +65,47 @@ type LineDraft = {
 }
 
 const REPORT_KINDS = [
-  { id: 'order-summary', label: 'Order Summary' },
-  { id: 'matching-wise', label: 'Matching-wise Order' },
-  { id: 'machine-wise', label: 'Machine-wise Program' },
-  { id: 'production', label: 'Production Report' },
-  { id: 'pending-production', label: 'Pending Production' },
-  { id: 'completed-production', label: 'Completed Production' },
+  { id: 'party-wise', label: 'Customer-wise Orders' },
+  { id: 'din-wise', label: 'DIN-wise Orders' },
+  { id: 'matching-wise', label: 'Matching-wise Orders' },
+  { id: 'order-summary', label: 'Pending Orders' },
+  { id: 'pending-production', label: 'Program / Production Pending' },
+  { id: 'completed-production', label: 'Production Completed' },
   { id: 'dispatch-pending', label: 'Dispatch Pending' },
   { id: 'dispatch-completed', label: 'Dispatch Completed' },
-  { id: 'din-wise', label: 'DIN-wise Report' },
-  { id: 'party-wise', label: 'Party-wise Report' },
+  { id: 'machine-wise', label: 'Machine-wise Program' },
+  { id: 'production', label: 'Production Report' },
   { id: 'order-dispatch-summary', label: 'Order to Dispatch Summary' },
 ] as const
 
+function confirmWhatsApp(message: string, business: boolean) {
+  const ok = window.confirm(
+    'Open WhatsApp to send this status update?\n\nNothing is sent until you confirm in WhatsApp.',
+  )
+  if (!ok) return
+  if (business) shareWhatsAppBusiness(message)
+  else shareWhatsApp(message)
+}
+
 export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber }: Props) {
-  const [step, setStep] = useState<OtpStepId>(initialStep || 'order-entry')
+  const { roleName } = useAuth()
+  const salesman = isSalesmanRole(roleName)
+  const canEditRecipe = !salesman
+  const canChangeProd = canChangeProductionStatus(roleName)
+  const canChangeDisp = canChangeDispatchStatus(roleName)
+
+  const [step, setStep] = useState<OtpStepId>(initialStep || 'dashboard')
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [dashStats, setDashStats] = useState<OtpDashboardStats>({
+    pendingOrders: 0,
+    todaysOrders: 0,
+    programPending: 0,
+    productionPending: 0,
+    readyForDispatch: 0,
+    dispatched: 0,
+  })
 
   useEffect(() => {
     if (initialStep) setStep(initialStep)
@@ -187,9 +218,14 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
   }, [dinNumber])
 
   const refreshStatusAndOrders = useCallback(async () => {
-    const [orders, status] = await Promise.all([loadBookedOrders(100), loadOrderStatusRows(200)])
+    const [orders, status, dash] = await Promise.all([
+      loadBookedOrders(100),
+      loadOrderStatusRows(200),
+      loadOtpDashboardStats(),
+    ])
     setBookedOrders(orders)
     setStatusRows(status)
+    setDashStats(dash)
     if (!selectedOrderId && orders[0]) {
       setSelectedOrderId(orders[0].orderId)
       if (orders[0].items[0]) setSelectedItemId(orders[0].items[0].itemId)
@@ -197,7 +233,7 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
   }, [selectedOrderId])
 
   useEffect(() => {
-    if (step === 'order-status' || step === 'program' || step === 'reports') {
+    if (step === 'order-status' || step === 'program' || step === 'reports' || step === 'dashboard') {
       void refreshStatusAndOrders().catch((e) =>
         setError(handleUserError('OTP.status', e, 'Unable to load order status.')),
       )
@@ -490,35 +526,51 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
     <div className="screen otp-screen">
       <header className="screen-header otp-header">
         <div>
-          <p className="otp-eyebrow">JAISAL FW · Fashionweave Industries</p>
-          <h1>Order to Program (Machine-wise)</h1>
-          <p className="text-muted">Customer Order → Status → Program to Machine → Reports</p>
+          <p className="otp-eyebrow">JAISAL FW · Sales &amp; Production</p>
+          <h1>Order to Program</h1>
+          <p className="text-muted">
+            Customer Order → Order Status → Program to Machine → Reports &amp; Status
+          </p>
         </div>
         <div className="otp-header-actions">
           <ShareActions
-            onWhatsApp={() => shareWhatsApp(waPayload())}
-            onWhatsAppBusiness={() => shareWhatsAppBusiness(waPayload())}
+            onWhatsApp={() => confirmWhatsApp(waPayload(), false)}
+            onWhatsAppBusiness={() => confirmWhatsApp(waPayload(), true)}
           />
           <button
             type="button"
             className="btn-warp"
-            onClick={() => onNavigate({ screen: 'dto-reports', module: 'design-to-order' })}
+            onClick={() => {
+              setStep('reports')
+              onNavigate({ screen: 'order-to-program', filter: 'reports', module: 'order-to-program' })
+            }}
           >
             Reports
           </button>
-          <button type="button" className="primary-save" onClick={() => { setStep('order-entry'); clearOrderForm() }}>
-            + New Order
+          <button
+            type="button"
+            className="primary-save"
+            onClick={() => {
+              setStep('order-entry')
+              clearOrderForm()
+              onNavigate({ screen: 'order-to-program', filter: 'order-entry', module: 'order-to-program' })
+            }}
+          >
+            + New Customer Order
           </button>
         </div>
       </header>
 
-      <nav className="otp-stepper" aria-label="Order to Program steps">
-        {OTP_STEPS.map((s, idx) => (
+      <nav className="otp-stepper otp-stepper-5" aria-label="Order to Program steps">
+        {OTP_MENU_STEPS.map((s, idx) => (
           <button
             key={s.id}
             type="button"
             className={step === s.id ? 'is-active' : undefined}
-            onClick={() => setStep(s.id)}
+            onClick={() => {
+              setStep(s.id)
+              onNavigate({ screen: 'order-to-program', filter: s.id, module: 'order-to-program' })
+            }}
           >
             <span className="otp-step-num">{idx + 1}</span>
             <span className="otp-step-label">{s.label}</span>
@@ -528,6 +580,68 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
 
       {error ? <p className="form-error">{error}</p> : null}
       {message ? <p className="form-success">{message}</p> : null}
+
+      {step === 'dashboard' ? (
+        <section className="otp-section surface otp-dashboard">
+          <h2 className="section-title">Salesman Dashboard</h2>
+          <div className="otp-kpi-row">
+            {(
+              [
+                ['Pending Orders', dashStats.pendingOrders, 'order-status'],
+                ["Today's Orders", dashStats.todaysOrders, 'order-status'],
+                ['Program Pending', dashStats.programPending, 'program'],
+                ['Production Pending', dashStats.productionPending, 'order-status'],
+                ['Ready for Dispatch', dashStats.readyForDispatch, 'reports'],
+                ['Dispatched', dashStats.dispatched, 'reports'],
+              ] as const
+            ).map(([label, value, goStep]) => (
+              <button
+                key={label}
+                type="button"
+                className="otp-kpi"
+                onClick={() => {
+                  setStep(goStep)
+                  onNavigate({ screen: 'order-to-program', filter: goStep, module: 'order-to-program' })
+                }}
+              >
+                <span className="text-muted">{label}</span>
+                <strong className="num">{value}</strong>
+              </button>
+            ))}
+          </div>
+          <div className="otp-quick-actions">
+            <button
+              type="button"
+              className="primary-save"
+              onClick={() => {
+                setStep('order-entry')
+                clearOrderForm()
+              }}
+            >
+              + New Customer Order
+            </button>
+            <button type="button" className="btn-warp" onClick={() => setStep('order-status')}>
+              Order Status
+            </button>
+            <button type="button" className="btn-warp" onClick={() => setStep('program')}>
+              Program to Machine
+            </button>
+            <button type="button" className="btn-warp" onClick={() => setStep('reports')}>
+              Reports
+            </button>
+          </div>
+          <p className="text-muted otp-hint">
+            Design Master data (DIN, preview, quality, approved sales rate, matchings &amp; recipe) loads
+            automatically when you select a DIN. Salesman cannot edit Design Costing, Rate Master, or
+            Formula Master.
+          </p>
+          {!canChangeProd && !canChangeDisp ? (
+            <p className="text-muted otp-hint">
+              You can view production &amp; dispatch status. Only authorized users can change those statuses.
+            </p>
+          ) : null}
+        </section>
+      ) : null}
 
       {step === 'order-entry' ? (
         <section className="otp-section surface">
@@ -614,18 +728,16 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
             <button type="button" className="primary-save" onClick={addMatchingLine}>+ Add Matching</button>
           </div>
           <p className="text-muted otp-hint">
-            One common sales rate from Design Module applies to all matchings ({fmtInrIn(salesRate)} / m). Colour is matching-wise — not in order header.
+            One approved Design Sales Rate applies to all matchings ({fmtInrIn(salesRate)} / m). No per-matching rate.
           </p>
           <div className="table-wrap otp-table-wrap">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>#</th>
+                  <th>Matching No.</th>
                   <th>Matching Name</th>
                   <th>Main Colour</th>
-                  <th>Other Info</th>
                   <th>Ordered Meter</th>
-                  <th>Rate</th>
                   <th>Amount</th>
                   <th />
                 </tr>
@@ -643,12 +755,8 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
                         <input value={l.mainColour} onChange={(e) => setLines((prev) => prev.map((x) => (x.key === l.key ? { ...x, mainColour: e.target.value } : x)))} />
                       </td>
                       <td>
-                        <input value={l.otherInfo} onChange={(e) => setLines((prev) => prev.map((x) => (x.key === l.key ? { ...x, otherInfo: e.target.value } : x)))} />
-                      </td>
-                      <td>
                         <input className="num" type="number" min="0" step="any" value={l.meter} onChange={(e) => setLines((prev) => prev.map((x) => (x.key === l.key ? { ...x, meter: e.target.value } : x)))} />
                       </td>
-                      <td className="num">{fmtInrIn(salesRate)}</td>
                       <td className="num">{fmtInrIn(amt)}</td>
                       <td>
                         <button type="button" className="link-btn" onClick={() => setLines((prev) => prev.filter((x) => x.key !== l.key))}>Delete</button>
@@ -851,16 +959,20 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
           </div>
 
           <div className="otp-panel-head" style={{ marginTop: '1.25rem' }}>
-            <h2 className="section-title">Matching Recipe (As per Design Costing)</h2>
+            <h2 className="section-title">Matching Recipe (As per Design Master — max 6 feeders)</h2>
             <div className="otp-header-actions">
-              <button type="button" className="btn-warp" onClick={() => { setRecipeEditable(true); setRecipeOverride(true) }}>
-                Edit Recipe (Program Override)
-              </button>
-              {feeders.length < MAX_FEEDERS ? (
-                <button type="button" className="btn-warp" onClick={addFeeder}>+ Add Feeder</button>
+              {canEditRecipe ? (
+                <button type="button" className="btn-warp" onClick={() => { setRecipeEditable(true); setRecipeOverride(true) }}>
+                  Edit Recipe (Program Override)
+                </button>
               ) : (
-                <span className="text-muted">Max 6 feeders</span>
+                <span className="text-muted">Approved recipe (view only)</span>
               )}
+              {canEditRecipe && feeders.length < MAX_FEEDERS ? (
+                <button type="button" className="btn-warp" onClick={addFeeder}>+ Add Feeder</button>
+              ) : feeders.length >= MAX_FEEDERS ? (
+                <span className="text-muted">Max 6 feeders</span>
+              ) : null}
             </div>
           </div>
           <div className="table-wrap otp-table-wrap">
@@ -881,42 +993,42 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
                   <tr key={f.feederNo}>
                     <td className="num">{f.feederNo}</td>
                     <td>
-                      {recipeEditable ? (
+                      {recipeEditable && canEditRecipe ? (
                         <input value={f.yarnWeft} onChange={(e) => setFeeders((prev) => prev.map((x, i) => (i === idx ? { ...x, yarnWeft: e.target.value } : x)))} />
                       ) : (
                         f.yarnWeft || '—'
                       )}
                     </td>
                     <td>
-                      {recipeEditable ? (
+                      {recipeEditable && canEditRecipe ? (
                         <input value={f.colour} onChange={(e) => setFeeders((prev) => prev.map((x, i) => (i === idx ? { ...x, colour: e.target.value } : x)))} />
                       ) : (
                         f.colour || '—'
                       )}
                     </td>
                     <td>
-                      {recipeEditable ? (
+                      {recipeEditable && canEditRecipe ? (
                         <input value={f.denierTex} onChange={(e) => setFeeders((prev) => prev.map((x, i) => (i === idx ? { ...x, denierTex: e.target.value } : x)))} />
                       ) : (
                         f.denierTex || '—'
                       )}
                     </td>
                     <td>
-                      {recipeEditable ? (
+                      {recipeEditable && canEditRecipe ? (
                         <input value={f.quality} onChange={(e) => setFeeders((prev) => prev.map((x, i) => (i === idx ? { ...x, quality: e.target.value } : x)))} />
                       ) : (
                         f.quality || '—'
                       )}
                     </td>
                     <td>
-                      {recipeEditable ? (
+                      {recipeEditable && canEditRecipe ? (
                         <input className="num" type="number" value={f.pickEnds} onChange={(e) => setFeeders((prev) => prev.map((x, i) => (i === idx ? { ...x, pickEnds: Number(e.target.value) || 0 } : x)))} />
                       ) : (
                         <span className="num">{f.pickEnds}</span>
                       )}
                     </td>
                     <td>
-                      {recipeEditable ? (
+                      {recipeEditable && canEditRecipe ? (
                         <input className="num" type="number" step="any" value={f.weightKg} onChange={(e) => setFeeders((prev) => prev.map((x, i) => (i === idx ? { ...x, weightKg: Number(e.target.value) || 0 } : x)))} />
                       ) : (
                         <span className="num">{f.weightKg}</span>
@@ -961,7 +1073,8 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
 
           <div className="otp-footer-actions">
             <button type="button" className="primary-save" onClick={printJobCard}>Print Job Card</button>
-            <button type="button" className="btn-wa" onClick={() => shareWhatsApp(waPayload())}>WhatsApp (Send Status)</button>
+            <button type="button" className="btn-wa" onClick={() => confirmWhatsApp(waPayload(), false)}>WhatsApp (Send Status)</button>
+            <button type="button" className="btn-wa" onClick={() => confirmWhatsApp(waPayload(), true)}>WhatsApp Business</button>
             <button type="button" className="primary-save" disabled={busy} onClick={() => void onSaveProgram()}>Save Program</button>
             <button type="button" className="btn-ghost" onClick={() => { setMeterToWeave(''); setTaka(''); setProgramRemarks(''); setLastJobCard(null) }}>Clear</button>
           </div>
@@ -1008,7 +1121,8 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
             >
               CSV / Excel
             </button>
-            <button type="button" className="btn-wa" onClick={() => shareWhatsApp(waPayload())}>WhatsApp</button>
+            <button type="button" className="btn-wa" onClick={() => confirmWhatsApp(waPayload(), false)}>WhatsApp</button>
+            <button type="button" className="btn-wa" onClick={() => confirmWhatsApp(waPayload(), true)}>WhatsApp Business</button>
           </div>
           <div className="table-wrap otp-table-wrap">
             <table className="data-table">

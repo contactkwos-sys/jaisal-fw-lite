@@ -11,7 +11,8 @@ const corsHeaders = {
 /** Sidebar modules — must match src/lib/nav.ts MAIN_MODULES ids */
 const MODULE_SEEDS: Array<{ key: string; name: string; dept: string }> = [
   { key: 'dashboard', name: 'Dashboard', dept: 'Admin' },
-  { key: 'design-to-order', name: 'Design to Order', dept: 'Design' },
+  { key: 'design-to-order', name: 'Design Master', dept: 'Design' },
+  { key: 'order-to-program', name: 'Order to Program', dept: 'Sales' },
   { key: 'program-dispatch', name: 'Program & Dispatch', dept: 'Production' },
   { key: 'production', name: 'Machine-wise Production', dept: 'Production' },
   { key: 'warp-yarn', name: 'Warp Yarn Management', dept: 'Warping' },

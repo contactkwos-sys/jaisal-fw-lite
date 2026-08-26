@@ -37,8 +37,8 @@ export function DtoReportsScreen({ onNavigate }: Props) {
     <div className="screen dto-screen">
       <header className="screen-header">
         <div>
-          <h1>Design to Order Reports</h1>
-          <p className="text-muted">Pipeline snapshot — DIN → Costing → Sample → Order.</p>
+          <h1>Design Reports</h1>
+          <p className="text-muted">Design Master pipeline — DIN → Costing → Sample.</p>
         </div>
         <button
           type="button"

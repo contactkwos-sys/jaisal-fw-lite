@@ -444,7 +444,8 @@ export function DashboardScreen({ onNavigate }: Props) {
   }
 
   const quick: Array<{ label: string; screen: AppScreen; sub?: string; module?: import('../lib/nav').MainModuleId }> = [
-    { label: 'Design to Order', screen: 'dto-hub', module: 'design-to-order' },
+    { label: 'Design Master', screen: 'dto-hub', module: 'design-to-order' },
+    { label: 'Order to Program', screen: 'order-to-program', module: 'order-to-program' },
     { label: 'Design-wise Costing', screen: 'design-wise-costing', module: 'design-to-order' },
     { label: 'Daily Costing & P&L', screen: 'costing', sub: 'factory', module: 'reports' },
     { label: 'Program & Dispatch', screen: 'program-dispatch', sub: 'pto', module: 'program-dispatch' },
