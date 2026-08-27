@@ -45,8 +45,9 @@ import {
   isSalesmanRole,
 } from '../lib/permissions'
 import { printSummary, shareWhatsApp, shareWhatsAppBusiness } from '../lib/share'
-import { handleUserError } from '../lib/userError'
+import { OrderSettlementPanel } from '../components/OrderSettlementPanel'
 import type { DinWithMatchings } from '../lib/designToOrder'
+import { handleUserError } from '../lib/userError'
 
 type Props = {
   onNavigate: (t: NavTarget) => void
@@ -822,6 +823,7 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
               </tbody>
             </table>
           </div>
+          <OrderSettlementPanel compact />
         </section>
       ) : null}
 

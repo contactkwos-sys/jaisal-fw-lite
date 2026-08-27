@@ -20,6 +20,7 @@ import {
   type CostingWeftParams,
 } from './machineWiseProduction'
 import { nextDocNo, todayISO } from './mutate'
+import { ensurePartyMarka, nextCustomerOrderNo } from './orderBookShared'
 import { loadTrackingTotals } from './programDispatch'
 import { supabase } from './supabase'
 
@@ -34,7 +35,7 @@ export const OTP_STEPS = [
   { id: 'order-entry', label: 'Customer Order' },
   { id: 'order-status', label: 'Order Status' },
   { id: 'program', label: 'Program to Machine' },
-  { id: 'reports', label: 'Reports & Status' },
+  { id: 'reports', label: 'Order Reports' },
 ] as const
 
 export type OtpStepId = (typeof OTP_STEPS)[number]['id']
@@ -385,11 +386,7 @@ export function matchingMainColour(m: DinMatching): string {
 }
 
 export async function nextOrderNo(): Promise<string> {
-  const { data } = await supabase.from('order_book').select('order_no').not('order_no', 'is', null).limit(500)
-  return nextDocNo(
-    'ORD',
-    (data ?? []).map((r) => String(r.order_no || '')),
-  )
+  return nextCustomerOrderNo()
 }
 
 export async function nextJobCardNo(): Promise<string> {
@@ -492,6 +489,8 @@ export async function saveCustomerOrder(input: SaveCustomerOrderInput): Promise<
       await supabase.from('dins').update({ status: 'Order Booked' }).eq('id', input.dinId)
     }
   }
+
+  await ensurePartyMarka(input.partyName)
 
   return { orderId: data.id, orderNo: data.order_no || orderNo }
 }

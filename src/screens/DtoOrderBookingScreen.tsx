@@ -1,3 +1,4 @@
+/** @deprecated Superseded by OrderToProgramScreen (order-to-program / order-entry). Kept for reference only. */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { DtoStatusPill, ImageLightbox } from '../components/ImageLightbox'
 import { useAuth } from '../lib/auth'

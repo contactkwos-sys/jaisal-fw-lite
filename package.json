@@ -17,6 +17,7 @@
     "smoke:mwm-ui": "node scripts/mwm-ui-smoke.mjs",
     "smoke:mwp": "node scripts/machine-wise-production-smoke.mjs",
     "smoke:otp": "node scripts/order-to-program-smoke.mjs",
+    "audit:phase2": "node scripts/phase2-data-audit.mjs",
     "smoke:daily-costing": "node scripts/daily-costing-smoke.mjs",
     "test:design-wise-costing": "node scripts/test-design-wise-costing.mjs",
     "test:rate-master": "node scripts/test-rate-master.mjs",
