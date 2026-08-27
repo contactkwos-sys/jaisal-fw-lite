@@ -149,14 +149,7 @@ export async function nextLotNo(): Promise<string> {
   return nextDocNo('LOT-', (data ?? []).map((r) => r.lot_no))
 }
 
-export async function nextOrderNo(): Promise<string> {
-  const { data } = await supabase
-    .from('order_book')
-    .select('order_no')
-    .order('created_at', { ascending: false })
-    .limit(200)
-  return nextDocNo('ORD-', (data ?? []).map((r) => r.order_no || ''))
-}
+export { nextCustomerOrderNo as nextOrderNo } from './orderBookShared'
 
 export async function nextInvoiceNo(): Promise<string> {
   const { data } = await supabase

@@ -151,8 +151,8 @@ export const MAIN_MODULES: MainModule[] = [
         screen: 'rate-master',
         hint: 'Date-wise warp & weft yarn rates',
       },
-      { id: 'sample-job', label: 'Sample Job Card', screen: 'dto-sample-job', hint: 'Issue sample cards from DIN' },
-      { id: 'sample-tracking', label: 'Sample / Approval', screen: 'dto-tracking', hint: 'Produce · receive · approve matching' },
+      { id: 'sample-job', label: 'Sample', screen: 'dto-sample-job', hint: 'Issue sample cards from DIN' },
+      { id: 'sample-tracking', label: 'Sample Approval', screen: 'dto-tracking', hint: 'Produce · receive · approve matching' },
       { id: 'sample-promotion', label: 'Sample Promotion', screen: 'dto-promotion', hint: 'Share approved matching' },
       {
         id: 'design-reports',
@@ -230,30 +230,16 @@ export const MAIN_MODULES: MainModule[] = [
     label: 'Production & Dispatch',
     icon: 'program-dispatch',
     screen: 'program-dispatch',
-    sub: 'pto',
+    sub: 'entry',
     mobileNav: true,
     navGroup: 'PRODUCTION',
     items: [
       {
-        id: 'pto',
-        label: 'Program to Production',
-        screen: 'program-dispatch',
-        sub: 'pto',
-        hint: 'Order selection · machine programs',
-      },
-      {
         id: 'prod-entry',
-        label: 'Production Entry',
+        label: 'Production',
         screen: 'program-dispatch',
         sub: 'entry',
-        hint: 'Canonical shift / operator / meters entry',
-      },
-      {
-        id: 'tracking',
-        label: 'Production Tracking',
-        screen: 'program-dispatch',
-        sub: 'tracking',
-        hint: 'Order → dispatched live meters',
+        hint: 'Shift / operator / meters entry',
       },
       {
         id: 'folding',
@@ -264,17 +250,10 @@ export const MAIN_MODULES: MainModule[] = [
       },
       {
         id: 'dispatch',
-        label: 'Dispatch / Challan',
+        label: 'Dispatch',
         screen: 'program-dispatch',
         sub: 'challan',
         hint: 'Select lots · create challan',
-      },
-      {
-        id: 'gatepass',
-        label: 'Gate Pass',
-        screen: 'program-dispatch',
-        sub: 'gatepass',
-        hint: 'Vehicle · print gate pass',
       },
       {
         id: 'invoice',
@@ -285,10 +264,31 @@ export const MAIN_MODULES: MainModule[] = [
       },
       {
         id: 'pd-reports',
-        label: 'Dispatch Reports',
+        label: 'Reports',
         screen: 'program-dispatch',
         sub: 'reports',
         hint: 'Production · checking · dispatch history',
+      },
+      {
+        id: 'gatepass',
+        label: 'Gate Pass',
+        screen: 'program-dispatch',
+        sub: 'gatepass',
+        hint: 'Vehicle · print gate pass',
+      },
+      {
+        id: 'pto',
+        label: 'Program to Production (LEGACY)',
+        screen: 'program-dispatch',
+        sub: 'pto',
+        hint: 'Legacy hub — prefer Sales & Order → Program to Machine',
+      },
+      {
+        id: 'tracking',
+        label: 'Production Tracking (LEGACY)',
+        screen: 'program-dispatch',
+        sub: 'tracking',
+        hint: 'Live meters — use Order Status in Sales & Order',
       },
       {
         id: 'legacy-program',
@@ -534,11 +534,11 @@ export const MAIN_MODULES: MainModule[] = [
     hasHub: true,
     items: [
       {
-        id: 'order-book',
-        label: 'Order Book (LEGACY)',
+        id: 'party-settlement',
+        label: 'Party Settlement (Archive)',
         screen: 'orders',
-        sub: 'entry',
-        hint: 'Legacy customer order book — use Sales & Order → Customer Order',
+        sub: 'report',
+        hint: 'Legacy delivery report & short-meter adjustment',
       },
       {
         id: 'customer-delivery',

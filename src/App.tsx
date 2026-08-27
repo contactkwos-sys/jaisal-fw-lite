@@ -303,7 +303,12 @@ function AuthenticatedApp() {
       {tab === 'parties' ? <PartyMasterScreen /> : null}
       {tab === 'item-master' ? <ItemMasterScreen /> : null}
       {tab === 'purchase' ? <PurchaseScreen initialSub={sub || 'general'} /> : null}
-      {tab === 'orders' ? <OrderBookScreen initialSub={sub || 'entry'} /> : null}
+      {tab === 'orders' ? (
+        <OrderBookScreen
+          initialSub={sub || 'report'}
+          onNavigate={go}
+        />
+      ) : null}
       {tab === 'programs' ? <ProgramScreen initialSub={sub || 'create'} /> : null}
       {tab === 'security' ? <SecurityGateScreen initialSub={sub || 'inward'} /> : null}
       {tab === 'production' ? (

@@ -128,8 +128,14 @@ const SECURITY_SUBS: Partial<Record<MainModuleId, string[]>> = {
 /** Program / Production — Program to Machine + production workflow (no customer order entry) */
 const PROGRAM_OTP_SUBS: string[] = ['order-status', 'program-to-machine', 'otp-reports']
 
-/** Salesman — Customer Order, Order Status, Program to Machine, Order Reports */
-const SALESMAN_OTP_SUBS: string[] = ['order-booking', 'order-status', 'program-to-machine', 'otp-reports']
+/** Salesman — Customer Order, Order Status, Follow-up, Program to Machine, Order Reports */
+const SALESMAN_OTP_SUBS: string[] = [
+  'order-booking',
+  'order-status',
+  'order-followup',
+  'program-to-machine',
+  'otp-reports',
+]
 
 /** Dispatch — order status + dispatch reports only in Sales module */
 const DISPATCH_OTP_SUBS: string[] = ['order-status', 'otp-reports']
@@ -147,11 +153,11 @@ const DESIGN_TEAM_SUBS: string[] = [
 ]
 
 /** Production role — machine production + PD workflow */
-const PRODUCTION_PD_SUBS: string[] = ['pto', 'prod-entry', 'tracking', 'folding']
+const PRODUCTION_PD_SUBS: string[] = ['prod-entry', 'folding']
 const PRODUCTION_MWP_SUBS: string[] = ['weft-issue', 'job-card', 'prod-entry', 'mwp-report']
 
 /** Dispatch role — checking through dispatch reports */
-const DISPATCH_PD_SUBS: string[] = ['folding', 'dispatch', 'gatepass', 'invoice', 'pd-reports', 'tracking']
+const DISPATCH_PD_SUBS: string[] = ['folding', 'dispatch', 'gatepass', 'invoice', 'pd-reports']
 
 /** Maintenance role — CMMS only */
 const MAINTENANCE_SUBS: string[] = [

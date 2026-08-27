@@ -15,7 +15,13 @@ const DESIGN_MASTER_SUBS = [
   'design-reports',
 ]
 
-const OTP_SUBS = ['order-booking', 'order-status', 'program-to-machine', 'otp-reports']
+const OTP_SUBS = [
+  'order-booking',
+  'order-status',
+  'order-followup',
+  'program-to-machine',
+  'otp-reports',
+]
 
 const SALESMAN_BLOCKED = [
   'din-intake',
@@ -68,16 +74,17 @@ function modulesOverlap(a, b) {
   console.log('PASS salesman design master block')
 }
 
-// 3) Salesman OTP has exactly four operational sections
+// 3) Salesman OTP has five operational sections
 {
   const subs = salesmanOtpSubs()
   assert.deepEqual(subs, [
     'order-booking',
     'order-status',
+    'order-followup',
     'program-to-machine',
     'otp-reports',
   ])
-  console.log('PASS salesman OTP four sections')
+  console.log('PASS salesman OTP five sections')
 }
 
 // 4) Common sales rate — no per-matching rate column required
