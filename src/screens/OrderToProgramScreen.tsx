@@ -863,6 +863,10 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
               </select>
             </label>
             <label className="field">
+              <span>DIN</span>
+              <input value={selectedOrder?.din || ''} readOnly />
+            </label>
+            <label className="field">
               <span>Main Colour</span>
               <input value={selectedItem?.mainColour || ''} readOnly />
             </label>

@@ -27,6 +27,8 @@ type Kpis = {
   pendingSamples: number
   pendingOrders: number
   openBreakdowns: number
+  customerOrdersToday: number
+  checkingPending: number
 }
 
 type Alerts = {
@@ -72,6 +74,8 @@ export function DashboardScreen({ onNavigate }: Props) {
     pendingSamples: 0,
     pendingOrders: 0,
     openBreakdowns: 0,
+    customerOrdersToday: 0,
+    checkingPending: 0,
   })
   const [alerts, setAlerts] = useState<Alerts>({
     beamPending: 0,
@@ -170,17 +174,21 @@ export function DashboardScreen({ onNavigate }: Props) {
     ])
 
     // Optional module tables — never fail the whole dashboard if migrations lag
-    const [dinsRes, samplesRes, orderBookRes, maintOpenRes] = await Promise.all([
+    const [dinsRes, samplesRes, orderBookRes, maintOpenRes, checkingRes, ordersTodayRes] = await Promise.all([
       supabase.from('dins').select('id, status').limit(500),
       supabase.from('sample_job_cards').select('id, status').limit(500),
       supabase.from('order_book').select('id, status').limit(500),
       supabase.from('maintenance_requests').select('id, status, resolved_at').limit(500),
+      supabase.from('checking_lots').select('id, status').limit(500),
+      supabase.from('order_book').select('id').eq('order_date', today).limit(500),
     ])
 
     const dins = dinsRes.error ? [] : (dinsRes.data ?? [])
     const samples = samplesRes.error ? [] : (samplesRes.data ?? [])
     const orderBook = orderBookRes.error ? [] : (orderBookRes.data ?? [])
     const maintOpen = maintOpenRes.error ? [] : (maintOpenRes.data ?? [])
+    const checkingLots = checkingRes.error ? [] : (checkingRes.data ?? [])
+    const ordersToday = ordersTodayRes.error ? [] : (ordersTodayRes.data ?? [])
 
     const present = (att.data ?? []).filter((a) => {
       const s = String(a.status || '').toLowerCase()
@@ -213,6 +221,11 @@ export function DashboardScreen({ onNavigate }: Props) {
       return st !== 'resolved' && st !== 'closed'
     }).length
 
+    const checkingPending = checkingLots.filter((c: { status?: string | null }) => {
+      const st = String(c.status || 'pending').toLowerCase()
+      return !st.includes('dispatch') && !st.includes('closed') && !st.includes('complete')
+    }).length
+
     setKpis({
       attendanceToday: present,
       warpBeamStock: beamPcs,
@@ -223,6 +236,8 @@ export function DashboardScreen({ onNavigate }: Props) {
       pendingSamples,
       pendingOrders,
       openBreakdowns,
+      customerOrdersToday: ordersToday.length,
+      checkingPending,
     })
     setBeams((beamStock.data as BeamPipeStock[]) ?? [])
     setYarns((weftStock.data as WeftYarnStock[]) ?? [])
@@ -443,17 +458,16 @@ export function DashboardScreen({ onNavigate }: Props) {
     }
   }
 
-  const quick: Array<{ label: string; screen: AppScreen; sub?: string; module?: import('../lib/nav').MainModuleId }> = [
-    { label: 'Design Master', screen: 'dto-hub', module: 'design-to-order' },
-    { label: 'Order to Program', screen: 'order-to-program', module: 'order-to-program' },
-    { label: 'Design-wise Costing', screen: 'design-wise-costing', module: 'design-to-order' },
-    { label: 'Daily Costing & P&L', screen: 'costing', sub: 'factory', module: 'reports' },
-    { label: 'Program & Dispatch', screen: 'program-dispatch', sub: 'pto', module: 'program-dispatch' },
-    { label: 'Warp Yarn Management', screen: 'warp-yarn', sub: 'overview', module: 'warp-yarn' },
-    { label: 'Attendance & Payroll', screen: 'hr-payroll', sub: 'dashboard', module: 'hr-payroll' },
-    { label: 'Machine-wise Maintenance', screen: 'maintenance', sub: 'overview', module: 'maintenance' },
-    { label: 'Factory Notebook', screen: 'notebook', module: 'utilities' },
-    { label: 'Security / Inward', screen: 'security-inventory', sub: 'dashboard', module: 'security' },
+  const quick: Array<{ label: string; screen: AppScreen; sub?: string; filter?: string; module?: import('../lib/nav').MainModuleId }> = [
+    { label: '+ New Customer Order', screen: 'order-to-program', filter: 'order-entry', module: 'order-to-program' },
+    { label: '+ New Design', screen: 'dto-intake', module: 'design-to-order' },
+    { label: '+ DIN Costing', screen: 'design-wise-costing', module: 'design-to-order' },
+    { label: '+ Program Machine', screen: 'order-to-program', filter: 'program', module: 'order-to-program' },
+    { label: '+ Production Entry', screen: 'program-dispatch', sub: 'entry', module: 'program-dispatch' },
+    { label: '+ Checking Entry', screen: 'program-dispatch', sub: 'folding', module: 'program-dispatch' },
+    { label: '+ Dispatch', screen: 'program-dispatch', sub: 'challan', module: 'program-dispatch' },
+    { label: '+ Stock Issue', screen: 'machine-wise-production', sub: 'weft', module: 'production' },
+    { label: '+ Machine Breakdown', screen: 'maintenance', sub: 'breakdown', module: 'maintenance' },
   ]
 
   const alertRows = (
@@ -461,20 +475,99 @@ export function DashboardScreen({ onNavigate }: Props) {
       [`Beam Return Pending (${alerts.beamPending})`, { screen: 'purchase' as AppScreen, sub: 'report', filter: 'pending', module: 'inventory' as const }],
       [`Weft Low Stock <${WEFT_LOW_STOCK_KG}kg (${alerts.weftLow})`, { screen: 'stock' as AppScreen, sub: 'weft', module: 'inventory' as const }],
       [`Repair Out Pending (${alerts.repairOut})`, { screen: 'maintenance' as AppScreen, sub: 'repair', module: 'maintenance' as const }],
-      [`Program Pending (${alerts.programPending})`, { screen: 'programs' as AppScreen, sub: 'pending', module: 'orders' as const }],
+      [`Program Pending (${alerts.programPending})`, { screen: 'order-to-program' as AppScreen, filter: 'program', module: 'order-to-program' as const }],
       [`Gatepass Pending Sign (${alerts.gatepassPending})`, { screen: 'program-dispatch' as AppScreen, sub: 'gatepass', module: 'program-dispatch' as const }],
     ] as const
   ).filter((row) => !row[0].includes('(0)'))
 
-  const alertCount = alertRows.length
+  const factoryFlow: Array<{ label: string; nav: NavTarget }> = [
+    { label: 'Design', nav: { screen: 'dto-intake', module: 'design-to-order' } },
+    { label: 'DIN Costing', nav: { screen: 'design-wise-costing', module: 'design-to-order' } },
+    { label: 'Rate / Approval', nav: { screen: 'rate-master', module: 'design-to-order' } },
+    { label: 'Customer Order', nav: { screen: 'order-to-program', filter: 'order-entry', module: 'order-to-program' } },
+    { label: 'Order Status', nav: { screen: 'order-to-program', filter: 'order-status', module: 'order-to-program' } },
+    { label: 'Program to Machine', nav: { screen: 'order-to-program', filter: 'program', module: 'order-to-program' } },
+    { label: 'Production', nav: { screen: 'program-dispatch', sub: 'entry', module: 'program-dispatch' } },
+    { label: 'Checking', nav: { screen: 'program-dispatch', sub: 'folding', module: 'program-dispatch' } },
+    { label: 'Dispatch', nav: { screen: 'program-dispatch', sub: 'challan', module: 'program-dispatch' } },
+    { label: 'Invoice', nav: { screen: 'program-dispatch', sub: 'invoice', module: 'program-dispatch' } },
+    { label: 'Report', nav: { screen: 'order-to-program', filter: 'reports', module: 'order-to-program' } },
+  ]
 
-  const flowSteps = [
-    ['Warp Issue', `${flow.warpIn.toFixed(1)} kg`, 'warp'],
-    ['Weft Issue', `${flow.weftBuy.toFixed(1)} kg`, 'weft'],
-    ['Production', `${flow.production.toFixed(1)} m`, 'prod'],
-    ['Folding', `${flow.folding.toFixed(1)} m`, 'fold'],
-    ['Dispatch', `${flow.dispatch.toFixed(1)} m`, 'disp'],
-  ] as const
+  const todayCards: Array<{ label: string; value: string | number; nav: NavTarget; tone: string }> = [
+    {
+      label: 'Customer Orders',
+      value: kpis.customerOrdersToday,
+      tone: 'yarn',
+      nav: { screen: 'order-to-program', filter: 'order-status', module: 'order-to-program' },
+    },
+    {
+      label: 'Pending Orders',
+      value: kpis.pendingOrders,
+      tone: 'beam',
+      nav: { screen: 'order-to-program', filter: 'order-status', module: 'order-to-program' },
+    },
+    {
+      label: 'Production Today',
+      value: `${kpis.greigeToday.toFixed(0)} m`,
+      tone: 'greige',
+      nav: { screen: 'program-dispatch', sub: 'entry', module: 'program-dispatch' },
+    },
+    {
+      label: 'Checking Pending',
+      value: kpis.checkingPending,
+      tone: 'att',
+      nav: { screen: 'program-dispatch', sub: 'folding', module: 'program-dispatch' },
+    },
+    {
+      label: 'Dispatch Today',
+      value: `${kpis.dispatchToday.toFixed(0)} m`,
+      tone: 'dispatch',
+      nav: { screen: 'program-dispatch', sub: 'challan', module: 'program-dispatch' },
+    },
+    {
+      label: 'Outstanding',
+      value: kpis.pendingOrders,
+      tone: 'alerts',
+      nav: { screen: 'order-to-program', filter: 'order-status', module: 'order-to-program' },
+    },
+    {
+      label: 'Yarn Stock',
+      value: `${kpis.weftYarnStock.toFixed(0)} kg`,
+      tone: 'yarn',
+      nav: { screen: 'stock', sub: 'weft', module: 'inventory' },
+    },
+    {
+      label: 'Chemical Stock',
+      value: 'Open',
+      tone: 'beam',
+      nav: { screen: 'purchase', sub: 'maint_in', module: 'inventory' },
+    },
+    {
+      label: 'Machine Breakdown',
+      value: kpis.openBreakdowns,
+      tone: 'alerts',
+      nav: { screen: 'maintenance', sub: 'breakdown', module: 'maintenance' },
+    },
+    {
+      label: 'Maintenance Due',
+      value: kpis.openBreakdowns,
+      tone: 'beam',
+      nav: { screen: 'maintenance', sub: 'schedule', module: 'maintenance' },
+    },
+    {
+      label: 'Attendance',
+      value: kpis.attendanceToday,
+      tone: 'att',
+      nav: { screen: 'attendance', module: 'hr-payroll' },
+    },
+    {
+      label: 'Payroll Status',
+      value: 'Open',
+      tone: 'dispatch',
+      nav: { screen: 'hr-payroll', sub: 'salary-status', module: 'hr-payroll' },
+    },
+  ]
 
   const stockTotal =
     beams.reduce((s, b) => s + Number(b.quantity_pcs || 0), 0) +
@@ -486,31 +579,43 @@ export function DashboardScreen({ onNavigate }: Props) {
         <div className="dash-hero-copy">
           <p className="dash-hero-eyebrow">Fashionweave Industries</p>
           <h2 className="dash-hero-title">JAISAL FW</h2>
-          <p className="dash-hero-sub text-muted">Mill overview · live floor KPIs for management</p>
+          <p className="dash-hero-sub text-muted">Today&apos;s factory overview — tap any card to open</p>
         </div>
       </section>
 
-      <section className="kpi-grid kpi-grid-6">
-        {(
-          [
-            ['Attendance Today', kpis.attendanceToday, 'att', { screen: 'attendance' as AppScreen, module: 'hr-payroll' as const }],
-            ['Warp Yarn Mgmt', `${kpis.warpBeamStock} Beams`, 'beam', { screen: 'warp-yarn' as AppScreen, sub: 'overview', module: 'warp-yarn' as const }],
-            ['Weft Yarn Stock', `${kpis.weftYarnStock.toFixed(0)} kg`, 'yarn', { screen: 'stock' as AppScreen, sub: 'weft', module: 'inventory' as const }],
-            ['Greige Production', `${kpis.greigeToday.toFixed(0)} m`, 'greige', { screen: 'program-dispatch' as AppScreen, sub: 'reports', module: 'program-dispatch' as const }],
-            ['Dispatch Today', `${kpis.dispatchToday.toFixed(0)} m`, 'dispatch', { screen: 'program-dispatch' as AppScreen, sub: 'challan', module: 'program-dispatch' as const }],
-            ['Alerts & Reminders', `${alertCount} Alert${alertCount === 1 ? '' : 's'}`, 'alerts', { screen: 'home' as AppScreen, module: 'dashboard' as const }],
-          ] as const
-        ).map(([label, value, tone, nav]) => (
-          <button
-            key={label}
-            type="button"
-            className={`kpi-card surface kpi-tone-${tone}`}
-            onClick={() => onNavigate(nav)}
-          >
-            <span className="text-muted">{label}</span>
-            <strong className="num">{value}</strong>
-          </button>
-        ))}
+      <section className="dash-panel">
+        <h2 className="section-title">TODAY</h2>
+        <div className="kpi-grid kpi-grid-6">
+          {todayCards.map((c) => (
+            <button
+              key={c.label}
+              type="button"
+              className={`kpi-card surface kpi-tone-${c.tone}`}
+              onClick={() => onNavigate(c.nav)}
+            >
+              <span className="text-muted">{c.label}</span>
+              <strong className="num">{c.value}</strong>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="dash-panel">
+        <h2 className="section-title">Daily Factory Flow</h2>
+        <div className="flow-row flow-row-h factory-flow-row">
+          {factoryFlow.map((step, idx) => (
+            <div key={step.label} className="flow-step">
+              <button type="button" className="flow-card surface flow-tone-prod" onClick={() => onNavigate(step.nav)}>
+                <span className="text-muted2">{step.label}</span>
+              </button>
+              {idx < factoryFlow.length - 1 ? (
+                <span className="flow-arrow" aria-hidden="true">
+                  →
+                </span>
+              ) : null}
+            </div>
+          ))}
+        </div>
       </section>
 
       <section className="dash-panel" style={{ marginTop: 12 }}>
@@ -560,48 +665,6 @@ export function DashboardScreen({ onNavigate }: Props) {
               <span className="text-muted">{label}</span>
               <strong className="num">{value}</strong>
             </button>
-          ))}
-        </div>
-      </section>
-
-      <section className="kpi-grid kpi-grid-6" style={{ marginTop: 12 }}>
-        {(
-          [
-            ['Pending DIN', kpis.pendingDin, { screen: 'dto-hub' as AppScreen, module: 'design-to-order' as const }],
-            ['Pending Samples', kpis.pendingSamples, { screen: 'dto-tracking' as AppScreen, module: 'design-to-order' as const }],
-            ['Pending Orders', kpis.pendingOrders, { screen: 'orders-pending' as AppScreen, module: 'orders' as const }],
-            ['Open Breakdowns', kpis.openBreakdowns, { screen: 'maintenance' as AppScreen, sub: 'overview', module: 'maintenance' as const }],
-            ['Today Production', `${kpis.greigeToday.toFixed(0)} m`, { screen: 'program-dispatch' as AppScreen, sub: 'entry', module: 'program-dispatch' as const }],
-            ['Today Dispatch', `${kpis.dispatchToday.toFixed(0)} m`, { screen: 'program-dispatch' as AppScreen, sub: 'challan', module: 'program-dispatch' as const }],
-          ] as const
-        ).map(([label, value, nav]) => (
-          <button
-            key={label}
-            type="button"
-            className="kpi-card surface kpi-tone-beam"
-            onClick={() => onNavigate(nav)}
-          >
-            <span className="text-muted">{label}</span>
-            <strong className="num">{value}</strong>
-          </button>
-        ))}
-      </section>
-
-      <section className="dash-panel">
-        <h2 className="section-title">Today&apos;s Production Flow</h2>
-        <div className="flow-row flow-row-h">
-          {flowSteps.map(([label, val, tone], idx) => (
-            <div key={label} className="flow-step">
-              <div className={`flow-card surface flow-tone-${tone}`}>
-                <span className="text-muted2">{label}</span>
-                <strong className="num">{val}</strong>
-              </div>
-              {idx < flowSteps.length - 1 ? (
-                <span className="flow-arrow" aria-hidden="true">
-                  →
-                </span>
-              ) : null}
-            </div>
           ))}
         </div>
       </section>
@@ -725,14 +788,14 @@ export function DashboardScreen({ onNavigate }: Props) {
       </div>
 
       <section className="dash-panel">
-        <h2 className="section-title">Module Quick Access</h2>
+        <h2 className="section-title">Quick Actions</h2>
         <div className="quick-grid quick-grid-8">
           {quick.map((q) => (
             <button
               key={q.label}
               type="button"
               className="quick-tile"
-              onClick={() => onNavigate({ screen: q.screen, sub: q.sub, module: q.module })}
+              onClick={() => onNavigate({ screen: q.screen, sub: q.sub, filter: q.filter, module: q.module })}
             >
               {q.label}
             </button>

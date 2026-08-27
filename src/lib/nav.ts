@@ -1,7 +1,7 @@
 /**
  * Navigation — JAISAL FW simplified module structure (audit cleanup Aug 2026).
  * Each function has ONE logical home; Reports/Masters may deep-link only.
- * Legacy screens stay routable but are labeled LEGACY and grouped at module bottom.
+ * Old / Historical screens stay routable but are labeled and grouped at module bottom.
  */
 export type AppScreen =
   | 'home'
@@ -56,6 +56,7 @@ export type AppScreen =
   | 'order-entry'
   | 'daily-pending-work'
   | 'notebook'
+  | 'ceo-data-review'
   | 'placeholder'
 
 export type MainModuleId =
@@ -169,15 +170,15 @@ export const MAIN_MODULES: MainModule[] = [
       },
       {
         id: 'legacy-design-register',
-        label: 'Design Register (LEGACY)',
+        label: 'Design Register (Old / Historical)',
         screen: 'design',
         hint: 'Old design list — use Design Intake for new DINs',
       },
       {
         id: 'legacy-sample-card',
-        label: 'Sample Card (LEGACY)',
+        label: 'Sample Card (Old / Historical)',
         screen: 'sample-job-card',
-        hint: 'Legacy — use Sample Job Card above',
+        hint: 'Old screen — use Sample above',
       },
     ],
   },
@@ -278,31 +279,31 @@ export const MAIN_MODULES: MainModule[] = [
       },
       {
         id: 'pto',
-        label: 'Program to Production (LEGACY)',
+        label: 'Program to Production (Old / Historical)',
         screen: 'program-dispatch',
         sub: 'pto',
-        hint: 'Legacy hub — prefer Sales & Order → Program to Machine',
+        hint: 'Old hub — prefer Sales & Order → Program to Machine',
       },
       {
         id: 'tracking',
-        label: 'Production Tracking (LEGACY)',
+        label: 'Production Tracking (Old / Historical)',
         screen: 'program-dispatch',
         sub: 'tracking',
         hint: 'Live meters — use Order Status in Sales & Order',
       },
       {
         id: 'legacy-program',
-        label: 'Program Card (LEGACY)',
+        label: 'Program Card (Old / Historical)',
         screen: 'programs',
         sub: 'create',
-        hint: 'Legacy — use Program to Production',
+        hint: 'Old screen — use Program to Machine',
       },
       {
         id: 'legacy-dispatch',
-        label: 'Classic Dispatch (LEGACY)',
+        label: 'Classic Dispatch (Old / Historical)',
         screen: 'dispatch',
         sub: 'folding',
-        hint: 'Legacy — use Checking / Challan / Gate Pass above',
+        hint: 'Old screen — use Checking / Challan / Gate Pass above',
       },
     ],
   },
@@ -333,7 +334,7 @@ export const MAIN_MODULES: MainModule[] = [
         label: 'Production Entry',
         screen: 'machine-wise-production',
         sub: 'entry',
-        hint: 'Canonical shift / operator / meters entry',
+        hint: 'Main shift / operator / meters entry',
       },
       {
         id: 'mwp-report',
@@ -352,10 +353,10 @@ export const MAIN_MODULES: MainModule[] = [
       },
       {
         id: 'legacy-entry',
-        label: 'Classic Production Entry (LEGACY)',
+        label: 'Classic Production Entry (Old / Historical)',
         screen: 'production',
         sub: 'entry',
-        hint: 'Legacy — use Production Entry above',
+        hint: 'Old screen — use Production Entry above',
       },
     ],
   },
@@ -376,9 +377,9 @@ export const MAIN_MODULES: MainModule[] = [
       { id: 'beam-remaining', label: 'Beam Remaining', screen: 'beam-remaining', hint: 'Beam meters left' },
       {
         id: 'legacy-beam',
-        label: 'Beam Pipe (LEGACY)',
+        label: 'Beam Pipe (Old / Historical)',
         screen: 'warp-beam-pipe',
-        hint: 'Legacy — prefer Warp Yarn Management tabs',
+        hint: 'Old screen — prefer Warp Yarn Management tabs',
       },
     ],
   },
@@ -420,10 +421,10 @@ export const MAIN_MODULES: MainModule[] = [
       },
       {
         id: 'purchase-legacy',
-        label: 'Purchase Entry (LEGACY)',
+        label: 'Purchase Entry (Old / Historical)',
         screen: 'purchase',
         sub: 'general',
-        hint: 'Legacy — prefer Security gate inward',
+        hint: 'Old screen — prefer Security gate inward',
       },
     ],
   },
@@ -505,10 +506,10 @@ export const MAIN_MODULES: MainModule[] = [
       },
       {
         id: 'repair-out',
-        label: 'Repair Tracker (LEGACY)',
+        label: 'Repair Tracker (Old / Historical)',
         screen: 'maintenance',
         sub: 'repair',
-        hint: 'Legacy repairing tracker',
+        hint: 'Old repairing tracker',
       },
     ],
   },
@@ -528,17 +529,17 @@ export const MAIN_MODULES: MainModule[] = [
   },
   {
     id: 'orders',
-    label: 'Supply & Legacy',
+    label: 'Supply & Historical',
     icon: 'orders',
     screen: 'module-hub',
     hasHub: true,
     items: [
       {
         id: 'party-settlement',
-        label: 'Party Settlement (Archive)',
+        label: 'Party Settlement (Historical Records)',
         screen: 'orders',
         sub: 'report',
-        hint: 'Legacy delivery report & short-meter adjustment',
+        hint: 'Historical delivery report & short-meter adjustment',
       },
       {
         id: 'customer-delivery',
@@ -553,6 +554,13 @@ export const MAIN_MODULES: MainModule[] = [
         screen: 'orders',
         sub: 'report',
         hint: 'Carry forward · write-off · program adjustment',
+      },
+      {
+        id: 'open-customer-order',
+        label: 'Customer Order (use Sales & Order)',
+        screen: 'order-to-program',
+        filter: 'order-entry',
+        hint: 'Opens the only Customer Order screen — not a second order book',
       },
       { id: 'parties', label: 'Party / Customer', screen: 'parties', hint: 'Customer & party master' },
       {
@@ -572,7 +580,7 @@ export const MAIN_MODULES: MainModule[] = [
       { id: 'broadcast', label: 'Design Broadcast', screen: 'broadcast', hint: 'WhatsApp design share' },
       {
         id: 'legacy-sample-register',
-        label: 'Sample Register (Archive)',
+        label: 'Sample Register (Historical Records)',
         screen: 'sample-register',
         hint: 'Historical sample log',
       },
@@ -688,7 +696,7 @@ export const MAIN_MODULES: MainModule[] = [
         label: 'Weft Yarn Inward',
         screen: 'security-inventory',
         sub: 'weft',
-        hint: 'Canonical weft gate inward + stock post',
+        hint: 'Main weft gate inward + stock post',
       },
       {
         id: 'si-maint-in',
@@ -788,14 +796,15 @@ export const MAIN_MODULES: MainModule[] = [
         hint: 'System preferences (placeholder)',
       },
       { id: 'ceo-pin-mgmt', label: 'CEO PIN Management', screen: 'ceo-pin-management', hint: 'Module PINs · departments · audit' },
-      { id: 'user-mgmt', label: 'Role Login PINs', screen: 'admin', sub: 'roles', hint: 'Role-based login PINs (legacy)' },
+      { id: 'ceo-data-review', label: 'CEO Data Review', screen: 'ceo-data-review', hint: 'Yarn possible duplicates · salary rate comparison · historical empty stores' },
+      { id: 'user-mgmt', label: 'Role Login PINs', screen: 'admin', sub: 'roles', hint: 'Role-based login PINs' },
       { id: 'perm-mgmt', label: 'Permission Management', screen: 'admin', sub: 'permissions', hint: 'Module access by role' },
       {
         id: 'legacy-payroll',
-        label: 'Payroll Rates (LEGACY)',
+        label: 'Payroll Rates (Old / Historical)',
         screen: 'admin',
         sub: 'payroll',
-        hint: 'Legacy — use HR & Payroll → Salary Rate Master',
+        hint: 'Old rates — compare in CEO Data Review before any change',
       },
     ],
   },
@@ -809,15 +818,15 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   purchase: 'Purchase & Inward',
   production: 'Machine-wise Production',
   maintenance: 'Machine-wise Maintenance',
-  dispatch: 'Classic Dispatch (LEGACY)',
+  dispatch: 'Classic Dispatch (Old / Historical)',
   admin: 'Admin',
   costing: 'Daily Costing & P&L',
   orders: 'Order Book',
-  programs: 'Program Card (LEGACY)',
+  programs: 'Program Card (Old / Historical)',
   security: 'Security Gate',
   broadcast: 'Design Broadcast',
   parties: 'Party Master',
-  'sample-job-card': 'Sample Job Card (LEGACY)',
+  'sample-job-card': 'Sample Job Card (Old / Historical)',
   'sample-register': 'Sample Register (Archive)',
   'beam-remaining': 'Beam Remaining',
   'design-wise-costing': 'DIN Costing',
@@ -826,7 +835,7 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   'design-catalog': 'Design Catalog',
   crm: 'CRM',
   'cash-book': 'Cash Book',
-  'warp-beam-pipe': 'Warp Beam Pipe (LEGACY)',
+  'warp-beam-pipe': 'Warp Beam Pipe (Old / Historical)',
   'warp-yarn': 'Warp Yarn Management',
   'yarn-inward': 'Yarn Inward OCR',
   'maint-material': 'Repair / Material Out · In',
@@ -839,6 +848,7 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   'order-entry': 'Order Entry',
   'daily-pending-work': 'Daily Pending Work',
   notebook: 'Digital Factory Notebook',
+  'ceo-data-review': 'CEO Data Review',
   'dto-intake': 'Design Intake',
   'dto-sample-job': 'Sample Job Card',
   'dto-tracking': 'Sample Tracking',
@@ -936,7 +946,7 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
   if (screen === 'maintenance' || screen === 'maint-material') return 'maintenance'
   if (screen === 'parties' || screen === 'crm' || screen === 'item-master') return 'masters'
   if (screen === 'security') return 'security'
-  if (screen === 'ceo-pin-management') return 'settings'
+  if (screen === 'ceo-pin-management' || screen === 'ceo-data-review') return 'settings'
   if (screen === 'admin') {
     if (sub === 'roles' || sub === 'permissions' || sub === 'payroll') return 'settings'
     return 'security'
@@ -1069,7 +1079,7 @@ export function titleFor(screen: AppScreen, sub?: string, moduleId?: MainModuleI
     return 'Machine-wise Production'
   }
   if (screen === 'stock' && sub === 'weft') return 'Yarn Stock'
-  if (screen === 'stock') return 'Warp Beam Stock (Legacy)'
+  if (screen === 'stock') return 'Warp Beam Stock (Old / Historical)'
   if (screen === 'purchase' && sub === 'weft') return 'Weft Purchase / Inward'
   if (screen === 'purchase' && sub === 'report') return 'Stock Reports'
   if (screen === 'purchase' && sub === 'maint_in') return 'Consumables / Inward'
@@ -1078,12 +1088,12 @@ export function titleFor(screen: AppScreen, sub?: string, moduleId?: MainModuleI
   if (screen === 'dispatch') return 'Dispatch'
   if (screen === 'production' && sub === 'report') return 'Shift-wise Production Report'
   if (screen === 'production' && sub === 'job') return 'Machine-wise Job Card'
-  if (screen === 'production' && sub === 'entry') return 'Classic Production Entry (LEGACY)'
+  if (screen === 'production' && sub === 'entry') return 'Classic Production Entry (Old / Historical)'
   if (screen === 'orders' && sub === 'report') return 'Party Delivery Report'
   if (screen === 'programs' && sub === 'pending') return 'Program Pending'
-  if (screen === 'programs') return 'Program Card (LEGACY)'
+  if (screen === 'programs') return 'Program Card (Old / Historical)'
   if (screen === 'security') return 'Security Gate'
-  if (screen === 'admin' && sub === 'payroll') return 'Payroll Rates (LEGACY)'
+  if (screen === 'admin' && sub === 'payroll') return 'Payroll Rates (Old / Historical)'
   if (screen === 'admin' && sub === 'permissions') return 'Permission Management'
   if (screen === 'admin' && sub === 'approvals') return 'Approvals'
   if (screen === 'admin' && sub === 'gmail') return 'Gmail Integration'

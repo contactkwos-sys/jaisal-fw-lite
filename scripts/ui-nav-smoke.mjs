@@ -187,7 +187,7 @@ await shot(d, 'ui-desktop-dashboard')
 const bg = await d.evaluate(() => getComputedStyle(document.body).backgroundColor)
 record('light theme body', !bg.includes('20,') && !bg.includes('rgb(20'), { bg })
 
-for (const name of ['Supply & Legacy', 'Inventory', 'Security']) {
+for (const name of ['Supply & Historical', 'Inventory', 'Security']) {
   await d.locator('.side-nav .side-nav-item', { hasText: name }).first().click()
   await d.waitForTimeout(500)
   record(`open ${name} hub`, (await d.locator('.hub-card, .screen').count()) > 0)

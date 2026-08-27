@@ -34,8 +34,8 @@ export function OrderBookScreen({ initialSub, onNavigate }: Props) {
       <header className="screen-header">
         <h1>Party Delivery &amp; Settlement</h1>
         <p className="text-muted">
-          Legacy order book entry has moved to{' '}
-          <strong>Sales &amp; Order → Customer Order</strong>. All historical order_book records are preserved.
+          Old order entry has moved to{' '}
+          <strong>Sales &amp; Order → Customer Order</strong>. All historical order records are preserved.
         </p>
         {onNavigate ? (
           <button

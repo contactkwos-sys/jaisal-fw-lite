@@ -58,6 +58,7 @@ import { MachineWiseProductionScreen } from './screens/MachineWiseProductionScre
 import { SecurityInventoryScreen, type SiSub } from './screens/SecurityInventoryScreen'
 import { ItemMasterScreen } from './screens/ItemMasterScreen'
 import { CeoPinManagementScreen } from './screens/CeoPinManagementScreen'
+import { CeoDataReviewScreen } from './screens/CeoDataReviewScreen'
 import { OrderEntryScreen } from './screens/OrderEntryScreen'
 import { DailyPendingWorkScreen } from './screens/DailyPendingWorkScreen'
 import { NotebookScreen } from './screens/NotebookScreen'
@@ -212,6 +213,7 @@ function AuthenticatedApp() {
         />
       ) : null}
       {tab === 'ceo-pin-management' ? <CeoPinManagementScreen /> : null}
+      {tab === 'ceo-data-review' ? <CeoDataReviewScreen /> : null}
       {tab === 'home' ? <DashboardScreen onNavigate={go} /> : null}
       {tab === 'module-hub' ? (
         <ModuleHub moduleId={hubModule} onNavigate={go} />
