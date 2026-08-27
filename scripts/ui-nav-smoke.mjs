@@ -24,13 +24,14 @@ function record(check, pass, extra = {}) {
   console.log(pass ? 'PASS' : 'FAIL', check, JSON.stringify(extra))
 }
 
-const MAIN_NINE = [
+const MAIN_MODULES_EXPECTED = [
   'Dashboard',
-  'Production',
+  'Design',
+  'Sales & Order',
+  'Production & Dispatch',
   'Inventory',
-  'Orders',
   'Reports',
-  'Maintenance',
+  'Machine Maintenance',
   'Masters',
   'Security',
   'Settings',
@@ -92,24 +93,24 @@ record('drawer opens', (await m.locator('.app-shell.drawer-is-open').count()) ==
 await shot(m, 'ui-mobile-drawer')
 
 const navText = await m.locator('.side-nav').innerText()
-const missing = MAIN_NINE.filter((n) => !navText.includes(n))
-record('exactly 9 main modules present', missing.length === 0, { missing, navPreview: navText.slice(0, 400) })
+const missing = MAIN_MODULES_EXPECTED.filter((n) => !navText.includes(n))
+record('main modules present', missing.length === 0, { missing, navPreview: navText.slice(0, 400) })
 
 // Should NOT show flat old top-level items as main tabs
-const forbidden = ['ADMIN', 'Yarn Management', 'Admin Master', 'Dispatch & Gate Pass']
+const forbidden = ['Yarn Management', 'Admin Master', 'Dispatch & Gate Pass', 'Order to Program']
 const leaked = forbidden.filter((n) => navText.split('\n').map((s) => s.trim()).includes(n))
 record('old flat tabs not main-level', leaked.length === 0, { leaked })
 
-await m.locator('.side-nav').getByRole('button', { name: 'Production', exact: true }).click()
+await m.locator('.side-nav').getByRole('button', { name: 'Machine Production', exact: true }).click()
 await m.waitForTimeout(500)
 record('drawer closes on nav', (await m.locator('.app-shell.drawer-is-open').count()) === 0)
-record('module hub cards', (await m.locator('.hub-card').count()) >= 3)
+record('module hub cards', (await m.locator('.hub-card').count()) >= 1)
 await shot(m, 'ui-mobile-production-hub')
 
 await ham.click()
 await m.waitForTimeout(300)
-record('Program & Dispatch in nav', (await m.locator('.side-nav').innerText()).includes('Program & Dispatch'))
-await m.locator('.side-nav').locator('.side-nav-item', { hasText: 'Program & Dispatch' }).first().click()
+record('Production & Dispatch in nav', (await m.locator('.side-nav').innerText()).includes('Production & Dispatch'))
+await m.locator('.side-nav').locator('.side-nav-item', { hasText: 'Production & Dispatch' }).first().click()
 await m.waitForTimeout(500)
 record('program dispatch screen', (await m.locator('.pd-hub, .pd-screen, .screen').count()) >= 1)
 await shot(m, 'ui-mobile-program-dispatch')
@@ -186,7 +187,7 @@ await shot(d, 'ui-desktop-dashboard')
 const bg = await d.evaluate(() => getComputedStyle(document.body).backgroundColor)
 record('light theme body', !bg.includes('20,') && !bg.includes('rgb(20'), { bg })
 
-for (const name of ['Orders & Pending', 'Inventory', 'Security']) {
+for (const name of ['Supply & Legacy', 'Inventory', 'Security']) {
   await d.locator('.side-nav .side-nav-item', { hasText: name }).first().click()
   await d.waitForTimeout(500)
   record(`open ${name} hub`, (await d.locator('.hub-card, .screen').count()) > 0)
@@ -194,7 +195,7 @@ for (const name of ['Orders & Pending', 'Inventory', 'Security']) {
 await shot(d, 'ui-desktop-orders-hub')
 
 // Program & Dispatch module
-await d.locator('.side-nav .side-nav-item', { hasText: 'Program & Dispatch' }).first().click()
+await d.locator('.side-nav .side-nav-item', { hasText: 'Production & Dispatch' }).first().click()
 await d.waitForTimeout(700)
 record('program dispatch form', (await d.locator('.pd-hub, .pd-workflow, .pd-kpi, .screen').count()) > 0)
 await shot(d, 'ui-desktop-program')

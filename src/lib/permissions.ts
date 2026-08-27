@@ -40,12 +40,21 @@ const ROLE_DEFAULTS: Record<string, MainModuleId[]> = {
   owner: CEO_MODULES,
   manager: MANAGER_MODULES,
   'machine supervisor': ['production', 'program-dispatch', 'inventory', 'warp-yarn', 'maintenance', 'daily-pending-work', 'utilities', 'reports'],
-  /** Salesman — Order to Program only (no Design Master write access) */
-  salesman: ['order-to-program', 'orders', 'masters', 'reports', 'cash-book'],
-  /** Dispatch — dispatch + reports */
-  'checker & dispatch': ['production', 'program-dispatch', 'order-to-program', 'inventory', 'security', 'reports'],
-  dispatch: ['production', 'program-dispatch', 'order-to-program', 'reports'],
-  'program supervisor': ['production', 'program-dispatch', 'order-to-program', 'orders', 'reports'],
+  /** Salesman — Sales & Order only (no Design, no duplicate Orders hub) */
+  salesman: ['order-to-program', 'reports'],
+  /** Dispatch — dispatch workflow + order status reports */
+  'checker & dispatch': ['program-dispatch', 'order-to-program', 'reports'],
+  dispatch: ['program-dispatch', 'order-to-program', 'reports'],
+  'program supervisor': ['production', 'program-dispatch', 'order-to-program', 'reports'],
+  /** Production — program, production entry, checking */
+  'production incharge': ['production', 'program-dispatch', 'order-to-program', 'reports'],
+  production: ['production', 'program-dispatch', 'order-to-program', 'reports'],
+  programmer: ['production', 'program-dispatch', 'order-to-program', 'reports'],
+  operator: ['production', 'program-dispatch', 'utilities'],
+  /** Maintenance — machine maintenance only */
+  'maintenance incharge': ['maintenance', 'inventory', 'reports'],
+  maintenance: ['maintenance', 'inventory', 'reports'],
+  technician: ['maintenance', 'reports'],
   'mill incharge': [
     'production',
     'program-dispatch',
@@ -54,7 +63,6 @@ const ROLE_DEFAULTS: Record<string, MainModuleId[]> = {
     'warp-yarn',
     'cash-book',
     'hr-payroll',
-    'orders',
     'reports',
     'maintenance',
     'daily-pending-work',
@@ -69,7 +77,6 @@ const ROLE_DEFAULTS: Record<string, MainModuleId[]> = {
     'warp-yarn',
     'cash-book',
     'hr-payroll',
-    'orders',
     'reports',
     'maintenance',
     'daily-pending-work',
@@ -78,20 +85,15 @@ const ROLE_DEFAULTS: Record<string, MainModuleId[]> = {
   ],
   'store incharge': ['inventory', 'warp-yarn', 'cash-book', 'reports', 'security'],
   store: ['inventory', 'warp-yarn', 'cash-book', 'reports'],
-  /** Production — Program to Machine + Production */
-  'production incharge': ['production', 'program-dispatch', 'order-to-program', 'orders', 'reports'],
-  production: ['production', 'program-dispatch', 'order-to-program', 'reports'],
-  programmer: ['production', 'program-dispatch', 'order-to-program', 'orders', 'reports'],
-  operator: ['production', 'program-dispatch', 'utilities'],
   security: ['security', 'inventory', 'warp-yarn', 'hr-payroll'],
   account: ['cash-book', 'hr-payroll', 'reports', 'masters', 'security'],
   admin: ['cash-book', 'hr-payroll', 'reports', 'masters', 'security', 'settings'],
   accounts: ['cash-book', 'hr-payroll', 'reports', 'masters'],
   hr: ['hr-payroll', 'masters', 'reports'],
   payroll: ['hr-payroll', 'reports'],
-  /** Design team — Design Master full + read sales */
-  design: ['design-to-order', 'order-to-program', 'orders', 'masters', 'reports'],
-  'design team': ['design-to-order', 'order-to-program', 'orders', 'masters', 'reports'],
+  /** Design team — Design module only */
+  design: ['design-to-order', 'masters', 'reports'],
+  'design team': ['design-to-order', 'masters', 'reports'],
 }
 
 /** Operator may only open production entry / related entry screens */
@@ -118,28 +120,77 @@ const SECURITY_SUBS: Partial<Record<MainModuleId, string[]>> = {
     'geb-sec',
     'login-activity',
   ],
-  inventory: [
-    'yarn-stock',
-    'wy-overview',
-    'wy-machines',
-    'wy-godown',
-    'wy-empty',
-    'wy-warper',
-    'wy-reports',
-    'stock-reports',
-  ],
+  inventory: ['yarn-stock', 'warp-yarn-link', 'stock-reports'],
   'warp-yarn': ['wy-overview', 'wy-machines', 'wy-godown', 'wy-empty', 'wy-warper', 'wy-reports'],
   'hr-payroll': ['hr-attendance', 'hr-dash'],
 }
 
-/** Program / Production — Order to Program without Design Master write screens */
+/** Program / Production — Program to Machine + production workflow (no customer order entry) */
 const PROGRAM_OTP_SUBS: string[] = ['order-status', 'program-to-machine', 'otp-reports']
 
-/** Salesman — Order to Program four sections only */
+/** Salesman — Customer Order, Order Status, Program to Machine, Order Reports */
 const SALESMAN_OTP_SUBS: string[] = ['order-booking', 'order-status', 'program-to-machine', 'otp-reports']
 
-/** Dispatch — status + reports (and program-dispatch elsewhere) */
+/** Dispatch — order status + dispatch reports only in Sales module */
 const DISPATCH_OTP_SUBS: string[] = ['order-status', 'otp-reports']
+
+/** Design team — full design workflow, no legacy register unless CEO */
+const DESIGN_TEAM_SUBS: string[] = [
+  'din-intake',
+  'din-costing',
+  'formula-master',
+  'rate-master',
+  'sample-job',
+  'sample-tracking',
+  'sample-promotion',
+  'design-reports',
+]
+
+/** Production role — machine production + PD workflow */
+const PRODUCTION_PD_SUBS: string[] = ['pto', 'prod-entry', 'tracking', 'folding']
+const PRODUCTION_MWP_SUBS: string[] = ['weft-issue', 'job-card', 'prod-entry', 'mwp-report']
+
+/** Dispatch role — checking through dispatch reports */
+const DISPATCH_PD_SUBS: string[] = ['folding', 'dispatch', 'gatepass', 'invoice', 'pd-reports', 'tracking']
+
+/** Maintenance role — CMMS only */
+const MAINTENANCE_SUBS: string[] = [
+  'overview',
+  'machine-master',
+  'maint-schedule',
+  'breakdown',
+  'spare-parts',
+  'maint-material',
+  'maint-entry',
+  'contacts',
+  'maint-reports',
+  'complaints',
+  'pending-work',
+  'service-history',
+  'maint-material-order',
+  'maint-repair-order',
+  'si-repair-link',
+]
+
+/** HR role — payroll flow only */
+const HR_SUBS: string[] = [
+  'hr-dash',
+  'hr-employees',
+  'hr-attendance',
+  'hr-leave',
+  'hr-rates',
+  'hr-advance',
+  'hr-salary-status',
+  'hr-payroll-run',
+  'hr-statutory',
+  'hr-register',
+  'hr-payment',
+  'hr-bank-letter',
+  'hr-reports',
+]
+
+/** Salesman reports — order reports only */
+const SALESMAN_REPORTS_SUBS: string[] = ['otp-report-link', 'party-delivery', 'prod-report']
 
 function normalizeRole(name: string): string {
   return name.trim().toLowerCase()
@@ -164,6 +215,26 @@ export function isProductionRole(roleName: string): boolean {
 export function isDispatchRole(roleName: string): boolean {
   const n = normalizeRole(roleName)
   return n === 'dispatch' || n === 'checker & dispatch' || n.includes('dispatch')
+}
+
+export function isMaintenanceRole(roleName: string): boolean {
+  const n = normalizeRole(roleName)
+  return (
+    n === 'maintenance' ||
+    n === 'maintenance incharge' ||
+    n === 'technician' ||
+    (n.includes('maintenance') && !n.includes('material'))
+  )
+}
+
+export function isHrRole(roleName: string): boolean {
+  const n = normalizeRole(roleName)
+  return n === 'hr' || n === 'payroll' || n.includes('payroll')
+}
+
+export function isDesignTeamRole(roleName: string): boolean {
+  const n = normalizeRole(roleName)
+  return n === 'design' || n === 'design team' || (n.includes('design') && !n.includes('sales'))
 }
 
 /** Design Master write (costing / rate / formula / intake edits) */
@@ -274,6 +345,9 @@ export function getDefaultPermissions(roleName: string): ModulePermission[] {
   const isManager = n === 'manager'
   const salesman = isSalesmanRole(n)
   const dispatch = isDispatchRole(n)
+  const maint = isMaintenanceRole(n)
+  const hr = isHrRole(n)
+  const designTeam = isDesignTeamRole(n)
   const isProgram =
     n.includes('program') ||
     n === 'programmer' ||
@@ -288,13 +362,19 @@ export function getDefaultPermissions(roleName: string): ModulePermission[] {
     if (isOperator && OPERATOR_SUBS[moduleId]) subIds = OPERATOR_SUBS[moduleId]
     if (isSecurity && SECURITY_SUBS[moduleId]) subIds = SECURITY_SUBS[moduleId]
     if (salesman && moduleId === 'order-to-program') subIds = SALESMAN_OTP_SUBS
-    if (salesman && moduleId === 'design-to-order') subIds = [] // hard deny design subs
+    if (salesman && moduleId === 'reports') subIds = SALESMAN_REPORTS_SUBS
+    if (salesman && moduleId === 'design-to-order') subIds = []
     if (dispatch && moduleId === 'order-to-program') subIds = DISPATCH_OTP_SUBS
+    if (dispatch && moduleId === 'program-dispatch') subIds = DISPATCH_PD_SUBS
     if (isProgram && moduleId === 'order-to-program') subIds = PROGRAM_OTP_SUBS
-    if (isProgram && moduleId === 'design-to-order') {
-      // Program roles may view rate only — no design intake/costing write
-      subIds = ['din-costing-view']
-    }
+    if (isProgram && moduleId === 'program-dispatch') subIds = PRODUCTION_PD_SUBS
+    if (isProgram && moduleId === 'production') subIds = PRODUCTION_MWP_SUBS
+    if (isProgram && moduleId === 'design-to-order') subIds = ['din-costing-view']
+    if (designTeam && moduleId === 'design-to-order') subIds = DESIGN_TEAM_SUBS
+    if (maint && moduleId === 'maintenance') subIds = MAINTENANCE_SUBS
+    if (maint && moduleId === 'inventory') subIds = ['yarn-stock', 'maint-store', 'chemical-store', 'stock-reports']
+    if (hr && moduleId === 'hr-payroll') subIds = HR_SUBS
+    if (hr && moduleId === 'masters') subIds = ['employee-master']
     if (isManager) subIds = undefined
     return { moduleId, subIds }
   })
