@@ -23,7 +23,7 @@ const ROLE_DEFAULTS = {
   owner: CEO_MODULES,
   manager: CEO_MODULES.filter((m) => m !== 'dashboard'),
   admin: ['cash-book', 'reports', 'masters', 'security', 'settings'],
-  salesman: ['orders', 'masters', 'reports', 'cash-book'],
+  salesman: ['order-to-program', 'reports'],
 }
 
 function normalizeRole(name) {
@@ -46,7 +46,7 @@ const OLD_DEFAULTS = {
   ceo: CEO_MODULES,
   manager: CEO_MODULES.filter((m) => m !== 'dashboard'),
   admin: ['cash-book', 'reports', 'masters', 'security', 'settings'],
-  salesman: ['orders', 'masters', 'reports', 'cash-book'],
+  salesman: ['order-to-program', 'reports'],
 }
 
 function oldMatch(roleName) {
@@ -62,7 +62,8 @@ assert.equal(oldMatch('MD').includes('orders'), false, 'sanity: old MD had no Or
 assert.equal(matchDefaultModules('MD').includes('orders'), true, 'MD keeps Orders / Design Broadcast')
 assert.equal(matchDefaultModules('CEO').includes('orders'), true)
 assert.equal(matchDefaultModules('Manager').includes('orders'), true)
-assert.equal(matchDefaultModules('Salesman').includes('orders'), true)
+assert.equal(matchDefaultModules('Salesman').includes('orders'), false)
+assert.equal(matchDefaultModules('Salesman').includes('order-to-program'), true)
 assert.equal(matchDefaultModules('admin').includes('orders'), false)
 assert.equal(matchDefaultModules('Operator').includes('orders'), false)
 

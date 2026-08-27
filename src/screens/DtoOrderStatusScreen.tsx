@@ -1,3 +1,4 @@
+/** @deprecated Superseded by OrderToProgramScreen (order-to-program / order-status). Kept for reference only. */
 import { useCallback, useEffect, useState } from 'react'
 import { DtoStatusPill } from '../components/ImageLightbox'
 import { fmtInrIn } from '../lib/designToOrder'
