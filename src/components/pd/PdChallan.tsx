@@ -5,6 +5,7 @@ import { applyOrQueue, nextDocNo, todayISO } from '../../lib/mutate'
 import { markProgramDispatched } from '../../lib/programs'
 import { printChallan, shareDocWhatsApp } from '../../lib/printDocs'
 import { supabase } from '../../lib/supabase'
+import { handleUserError } from '../../lib/userError'
 import type { PdSub } from '../../screens/ProgramDispatchScreen'
 
 type Props = { onGo: (s: PdSub) => void }
@@ -14,6 +15,10 @@ export function PdChallan({ onGo }: Props) {
   const [lots, setLots] = useState<CheckingLot[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [challanNo, setChallanNo] = useState('CH-0001')
+  const [vehicle, setVehicle] = useState('')
+  const [transporter, setTransporter] = useState('')
+  const [invoiceNo, setInvoiceNo] = useState('')
+  const [dispatchQty, setDispatchQty] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -25,7 +30,7 @@ export function PdChallan({ onGo }: Props) {
         .from('checking_lots')
         .select('*')
         .is('challan_id', null)
-        .eq('status', 'Checked')
+        .in('status', ['Checked', 'Pass', 'Passed'])
         .order('created_at', { ascending: false })
         .limit(100),
       supabase.from('challans').select('challan_no').order('created_at', { ascending: false }).limit(200),
@@ -35,11 +40,12 @@ export function PdChallan({ onGo }: Props) {
   }, [])
 
   useEffect(() => {
-    void load().catch((e: Error) => setError(e.message))
+    void load().catch((e: Error) => setError(handleUserError('PD.challan.load', e, 'Could not load ready lots.')))
   }, [load])
 
   const picked = useMemo(() => lots.filter((l) => selected.has(l.id)), [lots, selected])
-  const totalMeter = picked.reduce((s, l) => s + Number(l.final_meter || 0), 0)
+  const availableMeter = picked.reduce((s, l) => s + Number(l.final_meter || 0), 0)
+  const totalMeter = dispatchQty.trim() !== '' ? Number(dispatchQty) || 0 : availableMeter
 
   const meta = useMemo(() => {
     return {
@@ -56,6 +62,7 @@ export function PdChallan({ onGo }: Props) {
   const [design, setDesign] = useState('')
   const [quality, setQuality] = useState('')
   const [colour, setColour] = useState('')
+  const [checkStatus, setCheckStatus] = useState('READY')
 
   useEffect(() => {
     const pid = picked[0]?.program_id
@@ -72,6 +79,8 @@ export function PdChallan({ onGo }: Props) {
         setQuality(data.quality || '')
         setColour(data.colour || '')
       }
+      setCheckStatus('READY')
+      setDispatchQty('')
     })()
   }, [picked])
 
@@ -85,7 +94,19 @@ export function PdChallan({ onGo }: Props) {
   }
 
   async function createChallan() {
-    if (!profile || !picked.length) return
+    if (!profile) return
+    if (!picked.length) {
+      setError('Please select an order / lot ready for dispatch')
+      return
+    }
+    if (totalMeter <= 0) {
+      setError('Please enter Dispatch Qty greater than 0')
+      return
+    }
+    if (totalMeter > availableMeter + 0.01) {
+      setError(`Dispatch Qty cannot be greater than available (${availableMeter.toFixed(1)} m)`)
+      return
+    }
     setBusy(true)
     setError(null)
     setMessage(null)
@@ -127,7 +148,6 @@ export function PdChallan({ onGo }: Props) {
           }
           if (meta.programId) await markProgramDispatched(meta.programId, totalMeter)
 
-          // Auto-create draft gate pass linked to challan
           const { data: gps } = await supabase
             .from('gatepass')
             .select('gatepass_no')
@@ -143,10 +163,13 @@ export function PdChallan({ onGo }: Props) {
             total_meter: totalMeter,
             lots_count: picked.length,
             gp_time: new Date().toTimeString().slice(0, 5),
+            vehicle_no: vehicle.trim() || null,
+            transporter_name: transporter.trim() || null,
+            remarks: invoiceNo.trim() ? `Invoice ${invoiceNo.trim()}` : null,
           })
         },
       })
-      setMessage(result === 'applied' ? `Challan ${no} created · Gate Pass drafted` : 'Sent to approval queue')
+      setMessage(result === 'applied' ? `Dispatch Saved · Challan ${no}` : 'Sent for approval')
       if (result === 'applied') {
         printChallan({
           challanNo: no,
@@ -161,9 +184,13 @@ export function PdChallan({ onGo }: Props) {
         })
       }
       setSelected(new Set())
+      setVehicle('')
+      setTransporter('')
+      setInvoiceNo('')
+      setDispatchQty('')
       await load()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Challan failed')
+      setError(handleUserError('PD.challan.save', e, 'Could not save dispatch. Please try again.'))
     } finally {
       setBusy(false)
     }
@@ -172,8 +199,8 @@ export function PdChallan({ onGo }: Props) {
   return (
     <div className="pd-sub">
       <header className="pd-sub-header">
-        <h1>Dispatch / Challan</h1>
-        <p className="pd-lead">Select checked lots · auto challan · gate pass follows.</p>
+        <h1>Dispatch</h1>
+        <p className="pd-lead">Orders ready for dispatch · auto customer &amp; checking status</p>
         <div className="pd-header-actions">
           <button type="button" className="btn-sm" onClick={() => onGo('gatepass')}>
             Gate Pass
@@ -189,99 +216,103 @@ export function PdChallan({ onGo }: Props) {
 
       <div className="pd-form-grid" style={{ marginBottom: 12 }}>
         <label className="field">
-          <span className="text-muted">Challan No.</span>
-          <input value={challanNo} onChange={(e) => setChallanNo(e.target.value)} />
-        </label>
-        <label className="field">
-          <span className="text-muted">Party</span>
+          <span className="text-muted">Customer</span>
           <input value={partyName} onChange={(e) => setPartyName(e.target.value)} />
         </label>
         <label className="field">
-          <span className="text-muted">Marka</span>
-          <input value={picked[0]?.marka || ''} readOnly />
-        </label>
-        <label className="field">
-          <span className="text-muted">Design</span>
+          <span className="text-muted">Order / Design</span>
           <input value={design} onChange={(e) => setDesign(e.target.value)} />
         </label>
         <label className="field">
-          <span className="text-muted">Quality</span>
-          <input value={quality} onChange={(e) => setQuality(e.target.value)} />
+          <span className="text-muted">Checking Status</span>
+          <input value={picked.length ? checkStatus : '—'} readOnly />
+        </label>
+        <label className="field">
+          <span className="text-muted">Available Qty</span>
+          <input className="num" value={availableMeter.toFixed(1)} readOnly />
+        </label>
+        <label className="field">
+          <span className="text-muted">Dispatch Qty</span>
+          <input
+            className="num"
+            type="number"
+            min="0"
+            step="0.1"
+            value={dispatchQty}
+            placeholder={availableMeter ? String(availableMeter) : ''}
+            onChange={(e) => setDispatchQty(e.target.value)}
+          />
+        </label>
+        <label className="field">
+          <span className="text-muted">Vehicle</span>
+          <input value={vehicle} onChange={(e) => setVehicle(e.target.value)} />
+        </label>
+        <label className="field">
+          <span className="text-muted">Transporter</span>
+          <input value={transporter} onChange={(e) => setTransporter(e.target.value)} />
+        </label>
+        <label className="field">
+          <span className="text-muted">Challan</span>
+          <input value={challanNo} onChange={(e) => setChallanNo(e.target.value)} />
+        </label>
+        <label className="field">
+          <span className="text-muted">Invoice</span>
+          <input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} placeholder="Optional / later" />
         </label>
         <label className="field">
           <span className="text-muted">Colour</span>
           <input value={colour} onChange={(e) => setColour(e.target.value)} />
         </label>
+        <label className="field">
+          <span className="text-muted">Quality</span>
+          <input value={quality} onChange={(e) => setQuality(e.target.value)} />
+        </label>
       </div>
 
       <section className="pd-panel">
         <header className="pd-panel-h">
-          <h2>Available Checked Lots</h2>
-          <span className="text-muted">
-            Selected {picked.length} · {totalMeter.toLocaleString('en-IN')} m
-          </span>
+          <h2>Ready for Dispatch</h2>
+          <span className="text-muted">{lots.length} lot(s)</span>
         </header>
-        <div className="pd-table-wrap">
-          <table className="pd-table">
-            <thead>
-              <tr>
-                <th />
-                <th>Lot No.</th>
-                <th>Marka</th>
-                <th>Meter</th>
-                <th>Date</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lots.map((l) => (
-                <tr key={l.id} className={selected.has(l.id) ? 'is-selected' : ''}>
-                  <td>
-                    <input type="checkbox" checked={selected.has(l.id)} onChange={() => toggle(l.id)} />
-                  </td>
-                  <td className="num">{l.lot_no}</td>
-                  <td>{l.marka}</td>
-                  <td className="num">{l.final_meter}</td>
-                  <td>{l.entry_date}</td>
-                  <td>
-                    <span className="pd-pill ok">{l.status}</span>
-                  </td>
-                </tr>
-              ))}
-              {!lots.length ? (
-                <tr>
-                  <td colSpan={6} className="text-muted">
-                    No checked lots available. Complete Folding &amp; Checking first.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
+        {!lots.length ? <p className="text-muted">No checked lots ready</p> : null}
+        <ul className="list">
+          {lots.map((l) => (
+            <li key={l.id} className="card-row surface row-top">
+              <label className="pd-lot-pick">
+                <input type="checkbox" checked={selected.has(l.id)} onChange={() => toggle(l.id)} />
+                <span>
+                  <strong>{l.lot_no}</strong>
+                  <span className="text-muted">
+                    {' '}
+                    · {l.marka || '—'} · {Number(l.final_meter || 0).toFixed(1)} m · {l.status}
+                  </span>
+                </span>
+              </label>
+            </li>
+          ))}
+        </ul>
       </section>
 
-      <div className="pd-action-row">
-        <button type="button" className="primary-save pd-qa-green" disabled={busy || !picked.length} onClick={() => void createChallan()}>
-          Create Challan
+      <div className="otp-sticky-actions" style={{ marginTop: 16 }}>
+        <button type="button" className="btn-ghost" onClick={() => onGo('folding')}>
+          Back
         </button>
-        <button
-          type="button"
-          className="pd-qa pd-qa-green"
-          disabled={!picked.length}
-          onClick={() =>
-            shareDocWhatsApp(`Challan ${challanNo}`, [
-              `Party: ${partyName}`,
-              `Marka: ${picked[0]?.marka || ''}`,
-              `Lots: ${picked.map((l) => l.lot_no).join(', ')}`,
-              `Total Meter: ${totalMeter}`,
-            ])
-          }
-        >
-          WhatsApp
+        <button type="button" className="primary-save" disabled={busy || !picked.length} onClick={() => void createChallan()}>
+          Save Dispatch
         </button>
         {lastChallanId ? (
-          <button type="button" className="pd-qa pd-qa-orange" onClick={() => onGo('gatepass')}>
-            Open Gate Pass
+          <button
+            type="button"
+            className="btn-warp"
+            onClick={() =>
+              shareDocWhatsApp(`Challan ${challanNo}`, [
+                `Party: ${partyName}`,
+                `Meter: ${totalMeter}`,
+                `Vehicle: ${vehicle || '—'}`,
+              ])
+            }
+          >
+            Share
           </button>
         ) : null}
       </div>

@@ -1,9 +1,10 @@
 /**
  * Global factory search — opens primary business screens.
- * No technical IDs shown in results.
+ * Result columns: Type · Number · Name · Status
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { NavTarget } from '../lib/nav'
+import { friendlyFactoryStatus } from '../lib/orderToProgram'
 import { supabase } from '../lib/supabase'
 
 type Props = {
@@ -12,9 +13,10 @@ type Props = {
 
 type Hit = {
   id: string
-  kind: string
-  title: string
-  subtitle: string
+  type: string
+  number: string
+  name: string
+  status: string
   nav: NavTarget
 }
 
@@ -55,9 +57,9 @@ export function GlobalSearch({ onNavigate }: Props) {
         supabase.from('order_book').select('id, order_no, party_name, status').or(`order_no.ilike.${like},party_name.ilike.${like}`).limit(8),
         supabase.from('party_master').select('id, party_name, marka').ilike('party_name', like).limit(6),
         supabase.from('dins').select('id, din_number, design_name, status').or(`din_number.ilike.${like},design_name.ilike.${like}`).limit(8),
-        supabase.from('weft_yarn_stock').select('id, colour_no, colour_name, quality, supplier').or(`colour_no.ilike.${like},colour_name.ilike.${like},quality.ilike.${like}`).limit(8),
+        supabase.from('weft_yarn_stock').select('id, colour_no, colour_name, quality, supplier, stock_kg').or(`colour_no.ilike.${like},colour_name.ilike.${like},quality.ilike.${like}`).limit(8),
         supabase.from('workers').select('id, full_name, employee_code').or(`full_name.ilike.${like},employee_code.ilike.${like}`).limit(6),
-        supabase.from('challans').select('id, challan_no, party').or(`challan_no.ilike.${like},party.ilike.${like}`).limit(6),
+        supabase.from('challans').select('id, challan_no, party, status').or(`challan_no.ilike.${like},party.ilike.${like}`).limit(6),
         supabase.from('gst_invoices').select('id, invoice_no, party_name').or(`invoice_no.ilike.${like},party_name.ilike.${like}`).limit(6),
         supabase.from('designs').select('id, dno, colour').or(`dno.ilike.${like},colour.ilike.${like}`).limit(6),
       ])
@@ -66,84 +68,92 @@ export function GlobalSearch({ onNavigate }: Props) {
       for (const o of orders.data ?? []) {
         out.push({
           id: `ord-${o.id}`,
-          kind: 'Order',
-          title: o.order_no || 'Order',
-          subtitle: `${o.party_name || '—'} · ${o.status || ''}`,
+          type: 'Order',
+          number: o.order_no || '—',
+          name: o.party_name || '—',
+          status: friendlyFactoryStatus(o.status),
           nav: { screen: 'order-to-program', filter: 'order-status', module: 'order-to-program' },
         })
       }
       for (const p of parties.data ?? []) {
         out.push({
           id: `pty-${p.id}`,
-          kind: 'Customer',
-          title: p.party_name || 'Customer',
-          subtitle: p.marka ? `Marka ${p.marka}` : 'Party master',
+          type: 'Customer',
+          number: p.marka || '—',
+          name: p.party_name || 'Customer',
+          status: 'READY',
           nav: { screen: 'parties', module: 'masters' },
         })
       }
       for (const d of dins.data ?? []) {
         out.push({
           id: `din-${d.id}`,
-          kind: 'DIN',
-          title: d.din_number || 'DIN',
-          subtitle: d.design_name || d.status || 'Design',
+          type: 'DIN',
+          number: d.din_number || '—',
+          name: d.design_name || '—',
+          status: friendlyFactoryStatus(d.status),
           nav: { screen: 'design-wise-costing', filter: d.din_number || undefined, module: 'design-to-order' },
         })
       }
       for (const d of designs.data ?? []) {
         out.push({
           id: `des-${d.id}`,
-          kind: 'Design',
-          title: d.dno || 'Design',
-          subtitle: d.colour || 'Old design register',
+          type: 'Design',
+          number: d.dno || '—',
+          name: d.colour || 'Design',
+          status: 'READY',
           nav: { screen: 'design', module: 'design-to-order' },
         })
       }
       for (const y of yarns.data ?? []) {
         out.push({
           id: `yrn-${y.id}`,
-          kind: 'Yarn',
-          title: `Colour ${y.colour_no || y.colour_name || '—'}`,
-          subtitle: [y.quality, y.supplier].filter(Boolean).join(' · ') || 'Yarn stock',
+          type: 'Yarn',
+          number: String(y.colour_no || '—'),
+          name: [y.colour_name, y.quality].filter(Boolean).join(' · ') || 'Yarn',
+          status: Number(y.stock_kg) > 0 ? 'READY' : 'PENDING',
           nav: { screen: 'stock', sub: 'weft', module: 'inventory' },
         })
       }
       for (const w of workers.data ?? []) {
         out.push({
           id: `emp-${w.id}`,
-          kind: 'Employee',
-          title: w.full_name || 'Employee',
-          subtitle: w.employee_code || 'HR',
+          type: 'Employee',
+          number: w.employee_code || '—',
+          name: w.full_name || 'Employee',
+          status: 'READY',
           nav: { screen: 'hr-payroll', sub: 'employees', module: 'hr-payroll' },
         })
       }
       for (const c of challans.data ?? []) {
         out.push({
           id: `ch-${c.id}`,
-          kind: 'Challan',
-          title: c.challan_no || 'Challan',
-          subtitle: c.party || 'Dispatch',
+          type: 'Challan',
+          number: c.challan_no || '—',
+          name: c.party || '—',
+          status: friendlyFactoryStatus(c.status),
           nav: { screen: 'program-dispatch', sub: 'challan', module: 'program-dispatch' },
         })
       }
       for (const inv of invoices.data ?? []) {
         out.push({
           id: `inv-${inv.id}`,
-          kind: 'Invoice',
-          title: inv.invoice_no || 'Invoice',
-          subtitle: inv.party_name || 'GST Invoice',
+          type: 'Invoice',
+          number: inv.invoice_no || '—',
+          name: inv.party_name || '—',
+          status: 'READY',
           nav: { screen: 'program-dispatch', sub: 'invoice', module: 'program-dispatch' },
         })
       }
 
-      // Machine shortcut
       const m = t.toUpperCase().match(/^M([1-6])$/) || t.toUpperCase().match(/^MACHINE\s*([1-6])$/)
       if (m) {
         out.unshift({
           id: `mach-${m[1]}`,
-          kind: 'Machine',
-          title: `Machine ${m[1]}`,
-          subtitle: 'Program / Production',
+          type: 'Machine',
+          number: `M${m[1]}`,
+          name: `Machine ${m[1]}`,
+          status: 'READY',
           nav: { screen: 'order-to-program', filter: 'program', module: 'order-to-program' },
         })
       }
@@ -175,10 +185,18 @@ export function GlobalSearch({ onNavigate }: Props) {
           autoComplete="off"
         />
       </label>
-      {open && (q.trim().length >= 2) ? (
+      {open && q.trim().length >= 2 ? (
         <div className="global-search-panel surface" role="listbox">
           {busy ? <p className="text-muted">Searching…</p> : null}
           {!busy && !hits.length ? <p className="text-muted">No matches</p> : null}
+          {hits.length ? (
+            <div className="global-search-head text-muted">
+              <span>Type</span>
+              <span>Number</span>
+              <span>Name</span>
+              <span>Status</span>
+            </div>
+          ) : null}
           {hits.map((h) => (
             <button
               key={h.id}
@@ -190,9 +208,10 @@ export function GlobalSearch({ onNavigate }: Props) {
                 setQ('')
               }}
             >
-              <span className="global-search-kind">{h.kind}</span>
-              <span className="global-search-title">{h.title}</span>
-              <span className="text-muted global-search-sub">{h.subtitle}</span>
+              <span className="global-search-kind">{h.type}</span>
+              <span className="global-search-title">{h.number}</span>
+              <span className="text-muted global-search-sub">{h.name}</span>
+              <span className="global-search-status">{h.status}</span>
             </button>
           ))}
         </div>

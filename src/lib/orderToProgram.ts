@@ -1074,9 +1074,29 @@ export function downloadCsv(filename: string, csv: string) {
 
 export function statusBadgeClass(status: string): string {
   const s = status.toUpperCase()
+  if (/CANCEL/.test(s)) return 'otp-badge otp-badge-cancel'
+  if (/HOLD|REJECT/.test(s)) return 'otp-badge otp-badge-hold'
   if (/DISPATCH/.test(s)) return 'otp-badge otp-badge-dispatch'
-  if (/COMPLETE|READY|APPROVED|CREATED/.test(s)) return 'otp-badge otp-badge-ok'
+  if (/COMPLETE|READY|APPROVED|CREATED|PASS/.test(s)) return 'otp-badge otp-badge-ok'
   if (/PRODUCTION|CHECKING|PROGRESS/.test(s)) return 'otp-badge otp-badge-prog'
-  if (/PENDING|RECEIVED|CONFIRMED/.test(s)) return 'otp-badge otp-badge-pending'
+  if (/PENDING|RECEIVED|CONFIRMED|NEW/.test(s)) return 'otp-badge otp-badge-pending'
   return 'otp-badge'
+}
+
+/** Display-only factory labels — does not change stored database values. */
+export function friendlyFactoryStatus(raw: string | null | undefined): string {
+  const s = String(raw || '')
+    .trim()
+    .toUpperCase()
+  if (!s || s === '—' || s === '-') return 'PENDING'
+  if (/CANCEL/.test(s)) return 'CANCELLED'
+  if (/HOLD|REJECT/.test(s)) return 'HOLD'
+  if (/DISPATCHED/.test(s)) return 'COMPLETED'
+  if (/PRODUCTION COMPLETE|COMPLETED|COMPLETE/.test(s)) return 'COMPLETED'
+  if (/READY/.test(s)) return 'READY'
+  if (/IN PRODUCTION|CHECKING|PROGRESS|PROGRAM CREATED|RUNNING/.test(s)) return 'IN PROGRESS'
+  if (/ORDER RECEIVED|^NEW$/.test(s)) return 'NEW'
+  if (/PENDING|RECEIVED|CONFIRMED|OPEN/.test(s)) return 'PENDING'
+  if (/CHECKED|PASS/.test(s)) return 'READY'
+  return s.length > 18 ? 'IN PROGRESS' : s
 }

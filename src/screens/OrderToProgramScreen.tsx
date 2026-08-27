@@ -28,6 +28,7 @@ import {
   saveCustomerOrder,
   saveProgramWithJobCard,
   statusBadgeClass,
+  friendlyFactoryStatus,
   type BookedOrderOption,
   type DesignForOrder,
   type FeederRow,
@@ -131,10 +132,13 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
     if (initialDinNumber) setDinNumber(initialDinNumber)
   }, [initialDinNumber])
   const [deliveryDays, setDeliveryDays] = useState('30')
+  const [deliveryDate, setDeliveryDate] = useState('')
   const [paymentTerms, setPaymentTerms] = useState('30 Days')
   const [discountPct, setDiscountPct] = useState('')
   const [remarks, setRemarks] = useState('')
   const [lines, setLines] = useState<LineDraft[]>([])
+  const [orderCreated, setOrderCreated] = useState<{ orderId: string; orderNo: string } | null>(null)
+  const [lastProgramId, setLastProgramId] = useState<string | null>(null)
 
   // program
   const [selectedOrderId, setSelectedOrderId] = useState('')
@@ -349,8 +353,16 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
   }
 
   async function onSaveOrder() {
+    if (!party.trim()) {
+      setError('Please select Customer')
+      return
+    }
     if (!design) {
-      setError('Select a DIN / Design Number first.')
+      setError('Please select Design / DIN')
+      return
+    }
+    if (salesRate <= 0) {
+      setError('Please enter a valid Rate (greater than 0)')
       return
     }
     const matchingLines: MatchingOrderLine[] = lines
@@ -366,9 +378,21 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
         rate: salesRate,
         amount: (Number(l.meter) || 0) * salesRate,
       }))
-    if (!party.trim() || !matchingLines.length) {
-      setError('Party and at least one matching with meter are required.')
+    if (!matchingLines.length) {
+      setError('Please enter Quantity (meter) greater than 0 for at least one colour / matching')
       return
+    }
+    if (matchingLines.some((l) => l.orderedMeter <= 0)) {
+      setError('Quantity must be greater than 0')
+      return
+    }
+    let withinDays = deliveryDays ? Number(deliveryDays) : null
+    if (deliveryDate && orderDate) {
+      const a = new Date(orderDate).getTime()
+      const b = new Date(deliveryDate).getTime()
+      if (Number.isFinite(a) && Number.isFinite(b) && b >= a) {
+        withinDays = Math.round((b - a) / 86400000)
+      }
     }
     setBusy(true)
     setError(null)
@@ -383,18 +407,20 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
         qualityName: design.qualityName,
         salesRate,
         previewUrl: design.previewUrl,
-        deliveryWithinDays: deliveryDays ? Number(deliveryDays) : null,
+        deliveryWithinDays: withinDays,
         paymentTerms,
         remarks,
         discountPct: Number(discountPct) || 0,
         discountAmount: orderTotals.discount,
         lines: matchingLines,
       })
-      setMessage(`Order ${res.orderNo} saved. Program status = PROGRAM PENDING.`)
+      setOrderCreated({ orderId: res.orderId, orderNo: res.orderNo })
+      setSelectedOrderId(res.orderId)
+      setMessage(`ORDER CREATED · ${res.orderNo}`)
       setLines((prev) => prev.map((l) => ({ ...l, meter: '' })))
-      setStep('order-status')
+      await refreshStatusAndOrders()
     } catch (e) {
-      setError(handleUserError('OTP.saveOrder', e, 'Could not save customer order.'))
+      setError(handleUserError('OTP.saveOrder', e, 'Could not save customer order. Please try again.'))
     } finally {
       setBusy(false)
     }
@@ -402,16 +428,20 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
 
   async function onSaveProgram() {
     if (!selectedOrder || !selectedItem) {
-      setError('Select an order and matching first.')
+      setError('Please select an Order first')
       return
     }
     const meter = Number(meterToWeave) || 0
     if (meter <= 0) {
-      setError('Enter meter to weave.')
+      setError('Please enter Quantity to weave (greater than 0)')
       return
     }
     if (!operator.trim()) {
-      setError('Select an operator.')
+      setError('Please select Operator')
+      return
+    }
+    if (!machineNo) {
+      setError('Please select Machine')
       return
     }
     setBusy(true)
@@ -446,10 +476,11 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
         recipeIsOverride: recipeOverride,
       })
       setLastJobCard({ no: res.jobCardNo, programNo: res.programNo })
-      setMessage(`Program ${res.programNo} saved · Job Card ${res.jobCardNo} · Status = CREATED`)
+      setLastProgramId(res.programId)
+      setMessage(`Program Saved · ${res.programNo}`)
       await refreshStatusAndOrders()
     } catch (e) {
-      setError(handleUserError('OTP.saveProgram', e, 'Could not save program / job card.'))
+      setError(handleUserError('OTP.saveProgram', e, 'Could not save program. Please try again.'))
     } finally {
       setBusy(false)
     }
@@ -460,7 +491,9 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
     setRemarks('')
     setDiscountPct('')
     setDeliveryDays('30')
+    setDeliveryDate('')
     setPaymentTerms('30 Days')
+    setOrderCreated(null)
     setLines((prev) => prev.map((l) => ({ ...l, meter: '', otherInfo: '' })))
     setMessage(null)
     setError(null)
@@ -646,16 +679,56 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
 
       {step === 'order-entry' ? (
         <section className="otp-section surface">
+          {orderCreated ? (
+            <div className="otp-success-panel">
+              <h2 className="section-title">ORDER CREATED</h2>
+              <p className="otp-success-order">
+                Order No. <strong>{orderCreated.orderNo}</strong>
+              </p>
+              <p className="text-muted">Customer order saved. Choose next step:</p>
+              <div className="otp-footer-actions otp-sticky-actions">
+                <button
+                  type="button"
+                  className="primary-save"
+                  onClick={() => {
+                    setOrderCreated(null)
+                    setStep('order-status')
+                  }}
+                >
+                  View Order
+                </button>
+                <button
+                  type="button"
+                  className="primary-save"
+                  onClick={() => {
+                    setSelectedOrderId(orderCreated.orderId)
+                    setOrderCreated(null)
+                    setStep('program')
+                  }}
+                >
+                  Create Program
+                </button>
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  onClick={() => {
+                    setOrderCreated(null)
+                    if (onNavigate) onNavigate({ screen: 'home', module: 'dashboard' })
+                    else setStep('dashboard')
+                  }}
+                >
+                  Back to Dashboard
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
           <h2 className="section-title">Customer Order</h2>
           <div className="otp-order-grid">
             <div className="otp-form-grid">
               <label className="field">
-                <span>Order Date</span>
-                <input type="date" value={orderDate} onChange={(e) => setOrderDate(e.target.value)} />
-              </label>
-              <label className="field">
-                <span>Party / Customer</span>
-                <input list="otp-parties" value={party} onChange={(e) => setParty(e.target.value)} placeholder="Select party" />
+                <span>Customer</span>
+                <input list="otp-parties" value={party} onChange={(e) => setParty(e.target.value)} placeholder="Select customer" />
                 <datalist id="otp-parties">
                   {parties.map((p) => (
                     <option key={p} value={p} />
@@ -663,15 +736,11 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
                 </datalist>
               </label>
               <label className="field">
-                <span>Item Name</span>
-                <select value={itemName} onChange={(e) => setItemName(e.target.value)}>
-                  {ITEM_NAME_OPTIONS.map((o) => (
-                    <option key={o} value={o}>{o}</option>
-                  ))}
-                </select>
+                <span>Order Date</span>
+                <input type="date" value={orderDate} onChange={(e) => setOrderDate(e.target.value)} />
               </label>
               <label className="field">
-                <span>DIN / Design Number</span>
+                <span>Design / DIN</span>
                 <select value={dinNumber} onChange={(e) => setDinNumber(e.target.value)}>
                   <option value="">Select DIN…</option>
                   {dins.map((d) => (
@@ -682,16 +751,12 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
                 </select>
               </label>
               <label className="field">
-                <span>Delivery Within (Days)</span>
-                <input className="num" type="number" min="0" value={deliveryDays} onChange={(e) => setDeliveryDays(e.target.value)} />
+                <span>Rate (per meter)</span>
+                <input className="num" value={fmtInrIn(salesRate)} readOnly />
               </label>
               <label className="field">
-                <span>Payment Terms</span>
-                <input value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)} />
-              </label>
-              <label className="field">
-                <span>Discount %</span>
-                <input className="num" type="number" min="0" step="any" value={discountPct} onChange={(e) => setDiscountPct(e.target.value)} />
+                <span>Delivery Date</span>
+                <input type="date" value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} />
               </label>
               <label className="field otp-span-2">
                 <span>Remarks</span>
@@ -712,7 +777,7 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
                   </dl>
                 </>
               ) : (
-                <p className="text-muted">Select a DIN to auto-load preview, quality &amp; sales rate from Design Module.</p>
+                <p className="text-muted">Select a DIN to auto-load preview, quality &amp; sales rate.</p>
               )}
             </aside>
           </div>
@@ -725,11 +790,11 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
           </div>
 
           <div className="otp-panel-head">
-            <h2 className="section-title">Matching-wise Order (Customer Confirmed)</h2>
-            <button type="button" className="primary-save" onClick={addMatchingLine}>+ Add Matching</button>
+            <h2 className="section-title">Colour / Quantity</h2>
+            <button type="button" className="primary-save" onClick={addMatchingLine}>+ Add Colour</button>
           </div>
           <p className="text-muted otp-hint">
-            One approved Design Sales Rate applies to all matchings ({fmtInrIn(salesRate)} / m). No per-matching rate.
+            Enter Colour and Quantity (meter). Rate is from Design ({fmtInrIn(salesRate)} / m).
           </p>
           <div className="table-wrap otp-table-wrap">
             <table className="data-table">
@@ -737,8 +802,8 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
                 <tr>
                   <th>Matching No.</th>
                   <th>Matching Name</th>
-                  <th>Main Colour</th>
-                  <th>Ordered Meter</th>
+                  <th>Colour</th>
+                  <th>Quantity (m)</th>
                   <th>Amount</th>
                   <th />
                 </tr>
@@ -769,11 +834,41 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
             </table>
           </div>
 
-          <div className="otp-footer-actions">
-            <button type="button" className="primary-save" disabled={busy} onClick={() => void onSaveOrder()}>Save Order</button>
-            <button type="button" className="btn-warp" onClick={() => setStep('program')}>Continue to Program</button>
+          <details className="otp-more-details">
+            <summary>More Details</summary>
+            <div className="otp-form-grid" style={{ marginTop: 12 }}>
+              <label className="field">
+                <span>Item Name</span>
+                <select value={itemName} onChange={(e) => setItemName(e.target.value)}>
+                  {ITEM_NAME_OPTIONS.map((o) => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Delivery Within (Days)</span>
+                <input className="num" type="number" min="0" value={deliveryDays} onChange={(e) => setDeliveryDays(e.target.value)} />
+              </label>
+              <label className="field">
+                <span>Payment Terms</span>
+                <input value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)} />
+              </label>
+              <label className="field">
+                <span>Discount %</span>
+                <input className="num" type="number" min="0" step="any" value={discountPct} onChange={(e) => setDiscountPct(e.target.value)} />
+              </label>
+            </div>
+          </details>
+
+          <div className="otp-footer-actions otp-sticky-actions">
+            <button type="button" className="btn-ghost" onClick={() => (onNavigate ? onNavigate({ screen: 'home', module: 'dashboard' }) : setStep('dashboard'))}>
+              Back
+            </button>
             <button type="button" className="btn-ghost" onClick={clearOrderForm}>Clear</button>
+            <button type="button" className="primary-save" disabled={busy} onClick={() => void onSaveOrder()}>Save Order</button>
           </div>
+            </>
+          )}
         </section>
       ) : null}
 
@@ -813,11 +908,11 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
                     <td>{r.quality}</td>
                     <td className="num">{r.totalMeter}</td>
                     <td className="num">{r.matchingCount}</td>
-                    <td><span className={statusBadgeClass(r.programStatus)}>{r.programStatus}</span></td>
-                    <td><span className={statusBadgeClass(r.productionStatus)}>{r.productionStatus}</span></td>
-                    <td><span className={statusBadgeClass(r.checkingStatus)}>{r.checkingStatus}</span></td>
-                    <td><span className={statusBadgeClass(r.dispatchStatus)}>{r.dispatchStatus}</span></td>
-                    <td><span className={statusBadgeClass(r.overallStatus)}>{r.overallStatus}</span></td>
+                    <td><span className={statusBadgeClass(r.programStatus)}>{friendlyFactoryStatus(r.programStatus)}</span></td>
+                    <td><span className={statusBadgeClass(r.productionStatus)}>{friendlyFactoryStatus(r.productionStatus)}</span></td>
+                    <td><span className={statusBadgeClass(r.checkingStatus)}>{friendlyFactoryStatus(r.checkingStatus)}</span></td>
+                    <td><span className={statusBadgeClass(r.dispatchStatus)}>{friendlyFactoryStatus(r.dispatchStatus)}</span></td>
+                    <td><span className={statusBadgeClass(r.overallStatus)}>{friendlyFactoryStatus(r.overallStatus)}</span></td>
                   </tr>
                 ))}
               </tbody>
@@ -829,7 +924,18 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
 
       {step === 'program' ? (
         <section className="otp-section surface">
-          <h2 className="section-title">Program to Machine (Create Job Cards)</h2>
+          <h2 className="section-title">Program to Machine</h2>
+          {selectedOrder ? (
+            <div className="otp-context-strip surface">
+              <div><span className="text-muted">Customer</span><strong>{selectedOrder.party}</strong></div>
+              <div><span className="text-muted">Order No</span><strong>{selectedOrder.orderNo}</strong></div>
+              <div><span className="text-muted">Design / DIN</span><strong>{selectedOrder.din}</strong></div>
+              <div><span className="text-muted">Colour</span><strong>{selectedItem?.mainColour || '—'}</strong></div>
+              <div><span className="text-muted">Quantity</span><strong className="num">{selectedItem?.orderedMeter ?? '—'} m</strong></div>
+            </div>
+          ) : (
+            <p className="form-error">Please select an Order first</p>
+          )}
           <div className="otp-form-grid">
             <label className="field">
               <span>Order</span>
@@ -850,7 +956,7 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
               </select>
             </label>
             <label className="field">
-              <span>Matching</span>
+              <span>Matching Recipe</span>
               <select
                 value={selectedItemId}
                 onChange={(e) => setSelectedItemId(e.target.value)}
@@ -867,16 +973,12 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
               <input value={selectedOrder?.din || ''} readOnly />
             </label>
             <label className="field">
-              <span>Main Colour</span>
+              <span>Colour</span>
               <input value={selectedItem?.mainColour || ''} readOnly />
             </label>
             <label className="field">
               <span>Ordered Meter</span>
               <input className="num" value={selectedItem?.orderedMeter ?? ''} readOnly />
-            </label>
-            <label className="field">
-              <span>Sales Rate</span>
-              <input value={selectedOrder ? fmtInrIn(selectedOrder.salesRate) : ''} readOnly />
             </label>
             <label className="field">
               <span>Program Date</span>
@@ -894,10 +996,6 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
             <label className="field">
               <span>Meter to Weave</span>
               <input className="num" type="number" min="0" step="any" value={meterToWeave} onChange={(e) => setMeterToWeave(e.target.value)} />
-            </label>
-            <label className="field">
-              <span>Taka / Pick</span>
-              <input className="num" type="number" min="0" step="any" value={taka} onChange={(e) => setTaka(e.target.value)} />
             </label>
           </div>
 
@@ -961,11 +1059,31 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
               <button type="button" className="primary-save otp-full-btn" disabled={busy} onClick={() => void onSaveProgram()}>
                 Generate Job Card
               </button>
+              {lastProgramId && onNavigate ? (
+                <button
+                  type="button"
+                  className="btn-warp otp-full-btn"
+                  style={{ marginTop: 8 }}
+                  onClick={() =>
+                    onNavigate({
+                      screen: 'program-dispatch',
+                      sub: 'entry',
+                      filter: lastProgramId,
+                      module: 'program-dispatch',
+                    })
+                  }
+                >
+                  Continue to Production
+                </button>
+              ) : null}
+              <button type="button" className="btn-ghost otp-full-btn" style={{ marginTop: 8 }} onClick={() => setStep('order-status')}>
+                Back
+              </button>
             </aside>
           </div>
 
           <div className="otp-panel-head" style={{ marginTop: '1.25rem' }}>
-            <h2 className="section-title">Matching Recipe (As per Design Master — max 6 feeders)</h2>
+            <h2 className="section-title">Matching Recipe (Feeders 1–6)</h2>
             <div className="otp-header-actions">
               {canEditRecipe ? (
                 <button type="button" className="btn-warp" onClick={() => { setRecipeEditable(true); setRecipeOverride(true) }}>

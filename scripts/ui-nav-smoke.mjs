@@ -177,10 +177,12 @@ await d.locator('.side-nav').getByRole('button', { name: 'Dashboard', exact: tru
 await d.waitForTimeout(1400)
 const kpiCount = await d.locator('.kpi-card').count()
 record('KPI cards present', kpiCount >= 6, { kpiCount })
-record('summary flow', (await d.locator('.flow-row-h').count()) >= 1)
+record('summary flow', (await d.locator('.factory-stage-row, .flow-row-h').count()) >= 1)
 const tables = await d.locator('.dash-table').count()
 record('inward+machines tables', tables >= 2, { tables })
 record('dash hero present', (await d.locator('.dash-hero').count()) >= 1)
+record('ceo today title', Boolean((await d.locator('.dash-hero-title').textContent())?.includes('CEO TODAY')))
+record('quick actions', (await d.locator('.quick-tile').count()) >= 6)
 await shot(d, 'ui-desktop-dashboard')
 
 // Light theme check (not dark black)

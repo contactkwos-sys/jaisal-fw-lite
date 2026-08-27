@@ -275,7 +275,18 @@ function AuthenticatedApp() {
       ) : null}
       {tab === 'orders-pending' ? <OrdersPendingScreen /> : null}
       {tab === 'program-dispatch' ? (
-        <ProgramDispatchScreen initialSub={sub || 'pto'} onNavigate={go} />
+        <ProgramDispatchScreen
+          initialSub={sub || 'pto'}
+          initialProgramId={
+            filter &&
+            !['pto', 'entry', 'tracking', 'folding', 'challan', 'gatepass', 'invoice', 'reports', 'view-only'].includes(
+              filter,
+            )
+              ? filter
+              : undefined
+          }
+          onNavigate={go}
+        />
       ) : null}
       {tab === 'machine-wise-production' ? (
         <MachineWiseProductionScreen initialTab={sub || 'weft'} />

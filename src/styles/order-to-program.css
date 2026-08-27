@@ -330,6 +330,8 @@
 .otp-badge-prog { background: #dbeafe; color: #1e40af; }
 .otp-badge-pending { background: #fef3c7; color: #92400e; }
 .otp-badge-dispatch { background: #ede9fe; color: #5b21b6; }
+.otp-badge-hold { background: #ffedd5; color: #9a3412; }
+.otp-badge-cancel { background: #fee2e2; color: #991b1b; }
 
 .otp-report-kinds {
   display: flex;

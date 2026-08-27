@@ -38,6 +38,7 @@ import {
 } from '../lib/machineWiseProduction'
 import { applyOrQueue, todayISO } from '../lib/mutate'
 import { maybeCompleteProgramFromProduction } from '../lib/programs'
+import { handleUserError } from '../lib/userError'
 import { printReport, printWeftYarnIssueSlip } from '../lib/printDocs'
 import { shareWhatsApp, shareWhatsAppBusiness } from '../lib/share'
 import { supabase } from '../lib/supabase'
@@ -90,7 +91,13 @@ function downloadCsv(filename: string, csv: string) {
   URL.revokeObjectURL(url)
 }
 
-export function MachineWiseProductionScreen({ initialTab }: { initialTab?: string }) {
+export function MachineWiseProductionScreen({
+  initialTab,
+  initialProgramId,
+}: {
+  initialTab?: string
+  initialProgramId?: string
+}) {
   const { profile, isCeo } = useAuth()
   const [tab, setTab] = useState<TabId>(
     initialTab === 'entry' || initialTab === 'report' ? initialTab : 'weft',
@@ -178,6 +185,14 @@ export function MachineWiseProductionScreen({ initialTab }: { initialTab?: strin
   useEffect(() => {
     void loadMasters().catch((e: Error) => setError(e.message))
   }, [loadMasters])
+
+  useEffect(() => {
+    if (!initialProgramId || !programs.length) return
+    if (programs.some((p) => p.id === initialProgramId)) {
+      setProgramId(initialProgramId)
+      setTab('entry')
+    }
+  }, [initialProgramId, programs])
 
   const effectiveMeter = useMemo(() => {
     const o = Number(meterOverride)
@@ -453,15 +468,23 @@ export function MachineWiseProductionScreen({ initialTab }: { initialTab?: strin
   async function saveProduction(e: React.FormEvent) {
     e.preventDefault()
     if (!programId) {
-      setError('Select a program first')
+      setError('Please select a Program first')
       return
     }
     if (!profile) return
+    const meters = Number(prodMeter) || 0
+    if (meters <= 0) {
+      setError('Please enter Production Qty greater than 0')
+      return
+    }
+    if (!operator.trim()) {
+      setError('Please select Operator')
+      return
+    }
     setBusy(true)
     setError(null)
     setMessage(null)
     try {
-      const meters = Number(prodMeter) || 0
       const payload = {
         machine_no: machine,
         entry_date: date,
@@ -490,7 +513,7 @@ export function MachineWiseProductionScreen({ initialTab }: { initialTab?: strin
             .in('status', ['pending', 'Programmed', 'Pending'])
         },
       })
-      setMessage(result === 'applied' ? 'Production entry saved' : 'Sent to approval queue')
+      setMessage(result === 'applied' ? 'Production Saved' : 'Sent for approval')
       setProdMeter('')
       setStartMeter('')
       setEndMeter('')
@@ -499,7 +522,7 @@ export function MachineWiseProductionScreen({ initialTab }: { initialTab?: strin
       const produced = await loadProducedMeter(programId)
       setProducedMeter(produced)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Save failed')
+      setError(handleUserError('MWP.saveProduction', err, 'Could not save production. Please try again.'))
     } finally {
       setBusy(false)
     }
@@ -911,14 +934,13 @@ export function MachineWiseProductionScreen({ initialTab }: { initialTab?: strin
             <p className="text-muted">Same program — no duplicate DIN / machine entry</p>
           </header>
           <div className="mwp-carry">
-            <span className="mwp-din-badge">DIN: {dinNumber || '—'}</span>
-            <span>Machine {machine}</span>
+            <span>Order / Party: {partyName || '—'}</span>
             <span>Program {programNo || '—'}</span>
+            <span>Machine {machine}</span>
+            <span className="mwp-din-badge">DIN: {dinNumber || '—'}</span>
             <span>Design {designName || '—'}</span>
-            <span>Party {partyName || '—'}</span>
-            <span>Marka {marka || '—'}</span>
             <span>
-              {matchingNo != null ? matchingBadge(matchingNo) : selected?.colour || '—'}
+              Colour {matchingNo != null ? matchingBadge(matchingNo) : selected?.colour || '—'}
             </span>
             <span>
               Program {fmtQty(effectiveMeter)} Mtr · Produced {fmtQty(producedMeter)} · Balance{' '}
