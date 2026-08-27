@@ -20,6 +20,7 @@ import {
   type CostingWeftParams,
 } from './machineWiseProduction'
 import { nextDocNo, todayISO } from './mutate'
+import { ensurePartyMarka, nextCustomerOrderNo } from './orderBookShared'
 import { loadTrackingTotals } from './programDispatch'
 import { supabase } from './supabase'
 
@@ -34,7 +35,7 @@ export const OTP_STEPS = [
   { id: 'order-entry', label: 'Customer Order' },
   { id: 'order-status', label: 'Order Status' },
   { id: 'program', label: 'Program to Machine' },
-  { id: 'reports', label: 'Reports & Status' },
+  { id: 'reports', label: 'Order Reports' },
 ] as const
 
 export type OtpStepId = (typeof OTP_STEPS)[number]['id']
@@ -385,11 +386,7 @@ export function matchingMainColour(m: DinMatching): string {
 }
 
 export async function nextOrderNo(): Promise<string> {
-  const { data } = await supabase.from('order_book').select('order_no').not('order_no', 'is', null).limit(500)
-  return nextDocNo(
-    'ORD',
-    (data ?? []).map((r) => String(r.order_no || '')),
-  )
+  return nextCustomerOrderNo()
 }
 
 export async function nextJobCardNo(): Promise<string> {
@@ -492,6 +489,8 @@ export async function saveCustomerOrder(input: SaveCustomerOrderInput): Promise<
       await supabase.from('dins').update({ status: 'Order Booked' }).eq('id', input.dinId)
     }
   }
+
+  await ensurePartyMarka(input.partyName)
 
   return { orderId: data.id, orderNo: data.order_no || orderNo }
 }
@@ -1075,9 +1074,29 @@ export function downloadCsv(filename: string, csv: string) {
 
 export function statusBadgeClass(status: string): string {
   const s = status.toUpperCase()
+  if (/CANCEL/.test(s)) return 'otp-badge otp-badge-cancel'
+  if (/HOLD|REJECT/.test(s)) return 'otp-badge otp-badge-hold'
   if (/DISPATCH/.test(s)) return 'otp-badge otp-badge-dispatch'
-  if (/COMPLETE|READY|APPROVED|CREATED/.test(s)) return 'otp-badge otp-badge-ok'
+  if (/COMPLETE|READY|APPROVED|CREATED|PASS/.test(s)) return 'otp-badge otp-badge-ok'
   if (/PRODUCTION|CHECKING|PROGRESS/.test(s)) return 'otp-badge otp-badge-prog'
-  if (/PENDING|RECEIVED|CONFIRMED/.test(s)) return 'otp-badge otp-badge-pending'
+  if (/PENDING|RECEIVED|CONFIRMED|NEW/.test(s)) return 'otp-badge otp-badge-pending'
   return 'otp-badge'
+}
+
+/** Display-only factory labels — does not change stored database values. */
+export function friendlyFactoryStatus(raw: string | null | undefined): string {
+  const s = String(raw || '')
+    .trim()
+    .toUpperCase()
+  if (!s || s === '—' || s === '-') return 'PENDING'
+  if (/CANCEL/.test(s)) return 'CANCELLED'
+  if (/HOLD|REJECT/.test(s)) return 'HOLD'
+  if (/DISPATCHED/.test(s)) return 'COMPLETED'
+  if (/PRODUCTION COMPLETE|COMPLETED|COMPLETE/.test(s)) return 'COMPLETED'
+  if (/READY/.test(s)) return 'READY'
+  if (/IN PRODUCTION|CHECKING|PROGRESS|PROGRAM CREATED|RUNNING/.test(s)) return 'IN PROGRESS'
+  if (/ORDER RECEIVED|^NEW$/.test(s)) return 'NEW'
+  if (/PENDING|RECEIVED|CONFIRMED|OPEN/.test(s)) return 'PENDING'
+  if (/CHECKED|PASS/.test(s)) return 'READY'
+  return s.length > 18 ? 'IN PROGRESS' : s
 }

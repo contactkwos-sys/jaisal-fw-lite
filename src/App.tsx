@@ -58,6 +58,7 @@ import { MachineWiseProductionScreen } from './screens/MachineWiseProductionScre
 import { SecurityInventoryScreen, type SiSub } from './screens/SecurityInventoryScreen'
 import { ItemMasterScreen } from './screens/ItemMasterScreen'
 import { CeoPinManagementScreen } from './screens/CeoPinManagementScreen'
+import { CeoDataReviewScreen } from './screens/CeoDataReviewScreen'
 import { OrderEntryScreen } from './screens/OrderEntryScreen'
 import { DailyPendingWorkScreen } from './screens/DailyPendingWorkScreen'
 import { NotebookScreen } from './screens/NotebookScreen'
@@ -212,6 +213,7 @@ function AuthenticatedApp() {
         />
       ) : null}
       {tab === 'ceo-pin-management' ? <CeoPinManagementScreen /> : null}
+      {tab === 'ceo-data-review' ? <CeoDataReviewScreen /> : null}
       {tab === 'home' ? <DashboardScreen onNavigate={go} /> : null}
       {tab === 'module-hub' ? (
         <ModuleHub moduleId={hubModule} onNavigate={go} />
@@ -273,7 +275,18 @@ function AuthenticatedApp() {
       ) : null}
       {tab === 'orders-pending' ? <OrdersPendingScreen /> : null}
       {tab === 'program-dispatch' ? (
-        <ProgramDispatchScreen initialSub={sub || 'pto'} onNavigate={go} />
+        <ProgramDispatchScreen
+          initialSub={sub || 'pto'}
+          initialProgramId={
+            filter &&
+            !['pto', 'entry', 'tracking', 'folding', 'challan', 'gatepass', 'invoice', 'reports', 'view-only'].includes(
+              filter,
+            )
+              ? filter
+              : undefined
+          }
+          onNavigate={go}
+        />
       ) : null}
       {tab === 'machine-wise-production' ? (
         <MachineWiseProductionScreen initialTab={sub || 'weft'} />
@@ -303,7 +316,12 @@ function AuthenticatedApp() {
       {tab === 'parties' ? <PartyMasterScreen /> : null}
       {tab === 'item-master' ? <ItemMasterScreen /> : null}
       {tab === 'purchase' ? <PurchaseScreen initialSub={sub || 'general'} /> : null}
-      {tab === 'orders' ? <OrderBookScreen initialSub={sub || 'entry'} /> : null}
+      {tab === 'orders' ? (
+        <OrderBookScreen
+          initialSub={sub || 'report'}
+          onNavigate={go}
+        />
+      ) : null}
       {tab === 'programs' ? <ProgramScreen initialSub={sub || 'create'} /> : null}
       {tab === 'security' ? <SecurityGateScreen initialSub={sub || 'inward'} /> : null}
       {tab === 'production' ? (

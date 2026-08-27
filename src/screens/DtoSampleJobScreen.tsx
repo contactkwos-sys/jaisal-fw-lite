@@ -161,7 +161,7 @@ export function DtoSampleJobScreen({ onNavigate, initialDinId }: Props) {
           className="btn-warp"
           onClick={() => onNavigate({ screen: 'sample-job-card', module: 'orders' })}
         >
-          Open Sample Job Card (LEGACY)
+          Open Sample Job Card (Old / Historical)
         </button>
       </header>
 

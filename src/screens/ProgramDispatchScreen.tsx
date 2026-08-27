@@ -20,6 +20,8 @@ export type PdSub =
 
 type Props = {
   initialSub?: string
+  /** When opening Production Entry from a Program, pass program id to auto-select. */
+  initialProgramId?: string
   onNavigate: (t: NavTarget) => void
 }
 
@@ -27,7 +29,7 @@ type Props = {
  * Program & Dispatch shell.
  * D-03: Production Entry embeds canonical Machine-wise Production Entry (no second engine).
  */
-export function ProgramDispatchScreen({ initialSub = 'pto', onNavigate }: Props) {
+export function ProgramDispatchScreen({ initialSub = 'pto', initialProgramId, onNavigate }: Props) {
   const sub = (['pto', 'entry', 'tracking', 'folding', 'challan', 'gatepass', 'invoice', 'reports'].includes(
     initialSub || '',
   )
@@ -41,7 +43,9 @@ export function ProgramDispatchScreen({ initialSub = 'pto', onNavigate }: Props)
   return (
     <div className="screen pd-screen">
       {sub === 'pto' ? <PdHub onGo={go} onNavigate={onNavigate} /> : null}
-      {sub === 'entry' ? <MachineWiseProductionScreen initialTab="entry" /> : null}
+      {sub === 'entry' ? (
+        <MachineWiseProductionScreen initialTab="entry" initialProgramId={initialProgramId} />
+      ) : null}
       {sub === 'tracking' ? <PdTracking onGo={go} /> : null}
       {sub === 'folding' ? <PdFolding onGo={go} /> : null}
       {sub === 'challan' ? <PdChallan onGo={go} /> : null}

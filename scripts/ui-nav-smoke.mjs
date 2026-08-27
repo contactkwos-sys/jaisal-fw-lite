@@ -177,17 +177,19 @@ await d.locator('.side-nav').getByRole('button', { name: 'Dashboard', exact: tru
 await d.waitForTimeout(1400)
 const kpiCount = await d.locator('.kpi-card').count()
 record('KPI cards present', kpiCount >= 6, { kpiCount })
-record('summary flow', (await d.locator('.flow-row-h').count()) >= 1)
+record('summary flow', (await d.locator('.factory-stage-row, .flow-row-h').count()) >= 1)
 const tables = await d.locator('.dash-table').count()
 record('inward+machines tables', tables >= 2, { tables })
 record('dash hero present', (await d.locator('.dash-hero').count()) >= 1)
+record('ceo today title', Boolean((await d.locator('.dash-hero-title').textContent())?.includes('CEO TODAY')))
+record('quick actions', (await d.locator('.quick-tile').count()) >= 6)
 await shot(d, 'ui-desktop-dashboard')
 
 // Light theme check (not dark black)
 const bg = await d.evaluate(() => getComputedStyle(document.body).backgroundColor)
 record('light theme body', !bg.includes('20,') && !bg.includes('rgb(20'), { bg })
 
-for (const name of ['Supply & Legacy', 'Inventory', 'Security']) {
+for (const name of ['Supply & Historical', 'Inventory', 'Security']) {
   await d.locator('.side-nav .side-nav-item', { hasText: name }).first().click()
   await d.waitForTimeout(500)
   record(`open ${name} hub`, (await d.locator('.hub-card, .screen').count()) > 0)

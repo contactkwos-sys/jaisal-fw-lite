@@ -45,6 +45,8 @@ const ROLE_DEFAULTS: Record<string, MainModuleId[]> = {
   /** Dispatch — dispatch workflow + order status reports */
   'checker & dispatch': ['program-dispatch', 'order-to-program', 'reports'],
   dispatch: ['program-dispatch', 'order-to-program', 'reports'],
+  checking: ['program-dispatch', 'reports'],
+  checker: ['program-dispatch', 'reports'],
   'program supervisor': ['production', 'program-dispatch', 'order-to-program', 'reports'],
   /** Production — program, production entry, checking */
   'production incharge': ['production', 'program-dispatch', 'order-to-program', 'reports'],
@@ -55,6 +57,8 @@ const ROLE_DEFAULTS: Record<string, MainModuleId[]> = {
   'maintenance incharge': ['maintenance', 'inventory', 'reports'],
   maintenance: ['maintenance', 'inventory', 'reports'],
   technician: ['maintenance', 'reports'],
+  'store incharge': ['inventory', 'warp-yarn', 'reports', 'security'],
+  store: ['inventory', 'warp-yarn', 'reports'],
   'mill incharge': [
     'production',
     'program-dispatch',
@@ -83,8 +87,6 @@ const ROLE_DEFAULTS: Record<string, MainModuleId[]> = {
     'design-to-order',
     'utilities',
   ],
-  'store incharge': ['inventory', 'warp-yarn', 'cash-book', 'reports', 'security'],
-  store: ['inventory', 'warp-yarn', 'cash-book', 'reports'],
   security: ['security', 'inventory', 'warp-yarn', 'hr-payroll'],
   account: ['cash-book', 'hr-payroll', 'reports', 'masters', 'security'],
   admin: ['cash-book', 'hr-payroll', 'reports', 'masters', 'security', 'settings'],
@@ -128,8 +130,14 @@ const SECURITY_SUBS: Partial<Record<MainModuleId, string[]>> = {
 /** Program / Production — Program to Machine + production workflow (no customer order entry) */
 const PROGRAM_OTP_SUBS: string[] = ['order-status', 'program-to-machine', 'otp-reports']
 
-/** Salesman — Customer Order, Order Status, Program to Machine, Order Reports */
-const SALESMAN_OTP_SUBS: string[] = ['order-booking', 'order-status', 'program-to-machine', 'otp-reports']
+/** Salesman — Customer Order, Order Status, Follow-up, Program to Machine, Order Reports */
+const SALESMAN_OTP_SUBS: string[] = [
+  'order-booking',
+  'order-status',
+  'order-followup',
+  'program-to-machine',
+  'otp-reports',
+]
 
 /** Dispatch — order status + dispatch reports only in Sales module */
 const DISPATCH_OTP_SUBS: string[] = ['order-status', 'otp-reports']
@@ -147,11 +155,13 @@ const DESIGN_TEAM_SUBS: string[] = [
 ]
 
 /** Production role — machine production + PD workflow */
-const PRODUCTION_PD_SUBS: string[] = ['pto', 'prod-entry', 'tracking', 'folding']
+const PRODUCTION_PD_SUBS: string[] = ['prod-entry', 'folding']
 const PRODUCTION_MWP_SUBS: string[] = ['weft-issue', 'job-card', 'prod-entry', 'mwp-report']
 
 /** Dispatch role — checking through dispatch reports */
 const DISPATCH_PD_SUBS: string[] = ['folding', 'dispatch', 'gatepass', 'invoice', 'pd-reports', 'tracking']
+const CHECKING_PD_SUBS: string[] = ['folding', 'pd-reports']
+const STORE_INVENTORY_SUBS: string[] = ['yarn-stock', 'warp-yarn-link', 'chemical-store', 'maint-store', 'stock-reports']
 
 /** Maintenance role — CMMS only */
 const MAINTENANCE_SUBS: string[] = [
@@ -366,6 +376,8 @@ export function getDefaultPermissions(roleName: string): ModulePermission[] {
     if (salesman && moduleId === 'design-to-order') subIds = []
     if (dispatch && moduleId === 'order-to-program') subIds = DISPATCH_OTP_SUBS
     if (dispatch && moduleId === 'program-dispatch') subIds = DISPATCH_PD_SUBS
+    if ((n === 'checking' || n === 'checker') && moduleId === 'program-dispatch') subIds = CHECKING_PD_SUBS
+    if ((n === 'store' || n === 'store incharge') && moduleId === 'inventory') subIds = STORE_INVENTORY_SUBS
     if (isProgram && moduleId === 'order-to-program') subIds = PROGRAM_OTP_SUBS
     if (isProgram && moduleId === 'program-dispatch') subIds = PRODUCTION_PD_SUBS
     if (isProgram && moduleId === 'production') subIds = PRODUCTION_MWP_SUBS

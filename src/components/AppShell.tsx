@@ -13,6 +13,7 @@ import {
 } from '../lib/nav'
 import { canAccessModule, canAccessSub, isSalesmanRole } from '../lib/permissions'
 import { todayISO } from '../lib/mutate'
+import { GlobalSearch } from './GlobalSearch'
 
 type Props = {
   active: AppScreen
@@ -336,8 +337,8 @@ export function AppShell({ active, sub, filter, activeModule, onNavigate, childr
               <span>{userName}</span>
             </div>
           </div>
-          <div className="content-top-actions" aria-hidden="true">
-            <span className="top-action-dot" />
+          <div className="content-top-actions">
+            <GlobalSearch onNavigate={onNavigate} />
           </div>
         </div>
         <main className="app-main">{children}</main>

@@ -3,6 +3,7 @@ import { useAuth } from '../../lib/auth'
 import { applyOrQueue, todayISO } from '../../lib/mutate'
 import { DAMAGE_TYPES, nextLotNo } from '../../lib/programDispatch'
 import { supabase } from '../../lib/supabase'
+import { handleUserError } from '../../lib/userError'
 import type { PdSub } from '../../screens/ProgramDispatchScreen'
 
 type ProgramOpt = {
@@ -11,6 +12,9 @@ type ProgramOpt = {
   marka: string
   label: string
   design: string
+  party: string
+  colour: string
+  pending: boolean
 }
 
 type DamageDraft = {
@@ -20,6 +24,8 @@ type DamageDraft = {
   damage_meter: string
   remarks: string
 }
+
+type CheckAction = 'Pass' | 'Hold' | 'Reject'
 
 type Props = { onGo: (s: PdSub) => void }
 
@@ -45,6 +51,8 @@ export function PdFolding({ onGo }: Props) {
   const [date, setDate] = useState(todayISO())
   const [shift, setShift] = useState<'Day' | 'Night'>('Day')
   const [remarks, setRemarks] = useState('')
+  const [checkAction, setCheckAction] = useState<CheckAction>('Pass')
+  const [showRemarks, setShowRemarks] = useState(false)
   const [damages, setDamages] = useState<DamageDraft[]>([emptyDamage()])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -56,29 +64,58 @@ export function PdFolding({ onGo }: Props) {
     [damages],
   )
   const finalMeter = Math.max(0, (Number(meterIn) || 0) - damageTotal)
+  const selectedProg = programs.find((p) => p.id === programId)
 
   const load = useCallback(async () => {
-    const [{ data: progs }, lot] = await Promise.all([
+    const [{ data: progs }, { data: entries }, { data: lotsAll }, lot] = await Promise.all([
       supabase
         .from('programs')
-        .select('id, program_no, marka, design_no, party_name, status')
+        .select('id, program_no, marka, design_no, party_name, colour, status, produced_meter, total_meter')
         .not('status', 'eq', 'Cancelled')
         .order('created_at', { ascending: false })
         .limit(100),
+      supabase.from('production_entries').select('program_id, total_meter').limit(2000),
+      supabase.from('checking_lots').select('program_id, final_meter, status').limit(2000),
       nextLotNo(),
     ])
     setLotNo(lot)
-    const opts: ProgramOpt[] = (progs ?? []).map((p) => ({
-      id: p.id,
-      program_no: p.program_no || p.id.slice(0, 8),
-      marka: p.marka || '',
-      design: p.design_no || '—',
-      label: `${p.program_no || 'PRG'} · ${p.party_name || '—'} · ${p.marka || '—'}`,
-    }))
+
+    const producedBy = new Map<string, number>()
+    for (const e of entries ?? []) {
+      if (!e.program_id) continue
+      producedBy.set(e.program_id, (producedBy.get(e.program_id) || 0) + Number(e.total_meter || 0))
+    }
+    const checkedBy = new Map<string, number>()
+    for (const l of lotsAll ?? []) {
+      if (!l.program_id) continue
+      const st = String(l.status || '')
+      if (/hold|reject/i.test(st)) continue
+      checkedBy.set(l.program_id, (checkedBy.get(l.program_id) || 0) + Number(l.final_meter || 0))
+    }
+
+    const opts: ProgramOpt[] = (progs ?? []).map((p) => {
+      const produced = producedBy.get(p.id) || Number(p.produced_meter || 0)
+      const checked = checkedBy.get(p.id) || 0
+      const pending = produced > checked + 0.01
+      return {
+        id: p.id,
+        program_no: p.program_no || p.id.slice(0, 8),
+        marka: p.marka || '',
+        design: p.design_no || '—',
+        party: p.party_name || '—',
+        colour: p.colour || '—',
+        pending,
+        label: `${pending ? '● ' : ''}${p.program_no || 'PRG'} · ${p.party_name || '—'} · ${p.design_no || '—'}`,
+      }
+    })
+    opts.sort((a, b) => Number(b.pending) - Number(a.pending))
     setPrograms(opts)
-    if (!programId && opts[0]) {
-      setProgramId(opts[0].id)
-      setMarka(opts[0].marka)
+    if (!programId) {
+      const firstPending = opts.find((o) => o.pending) || opts[0]
+      if (firstPending) {
+        setProgramId(firstPending.id)
+        setMarka(firstPending.marka)
+      }
     }
 
     const { data: lots } = await supabase
@@ -90,7 +127,7 @@ export function PdFolding({ onGo }: Props) {
   }, [programId])
 
   useEffect(() => {
-    void load().catch((e: Error) => setError(e.message))
+    void load().catch((e: Error) => setError(handleUserError('PD.folding.load', e, 'Could not load checking list.')))
   }, [load])
 
   useEffect(() => {
@@ -100,17 +137,32 @@ export function PdFolding({ onGo }: Props) {
 
   async function save(e: React.FormEvent) {
     e.preventDefault()
-    if (!profile || !programId) return
+    if (!profile) return
+    if (!programId) {
+      setError('Please select Order / Program')
+      return
+    }
+    const mIn = Number(meterIn) || 0
+    if (mIn <= 0) {
+      setError('Please enter Quantity greater than 0')
+      return
+    }
+    if ((checkAction === 'Hold' || checkAction === 'Reject') && !remarks.trim()) {
+      setError('Please add remarks for Hold or Reject')
+      setShowRemarks(true)
+      return
+    }
     setBusy(true)
     setError(null)
     setMessage(null)
     try {
-      const mIn = Number(meterIn) || 0
       const checked = Number(checkedMeter) || mIn
       const dmg = damageTotal
       const final = Math.max(0, mIn - dmg)
       const prog = programs.find((p) => p.id === programId)
       const lot = lotNo
+      const status =
+        checkAction === 'Pass' ? 'Checked' : checkAction === 'Hold' ? 'Hold' : 'Rejected'
 
       const result = await applyOrQueue({
         isCeo,
@@ -118,7 +170,7 @@ export function PdFolding({ onGo }: Props) {
         tableName: 'checking_lots',
         action: 'insert',
         recordId: null,
-        payload: { lot_no: lot, program_id: programId, meter_in: mIn, final_meter: final },
+        payload: { lot_no: lot, program_id: programId, meter_in: mIn, final_meter: final, status },
         apply: async () => {
           const { data, error: lErr } = await supabase
             .from('checking_lots')
@@ -134,7 +186,7 @@ export function PdFolding({ onGo }: Props) {
               entry_date: date,
               shift,
               remarks: remarks.trim() || null,
-              status: 'Checked',
+              status,
             })
             .select('id')
             .single()
@@ -154,7 +206,6 @@ export function PdFolding({ onGo }: Props) {
             if (dErr) throw dErr
           }
 
-          // Mirror into folding_entries for legacy reports
           await supabase.from('folding_entries').insert({
             dno: prog?.design || lot,
             meter_folded: final,
@@ -171,14 +222,20 @@ export function PdFolding({ onGo }: Props) {
           })
         },
       })
-      setMessage(result === 'applied' ? `Lot ${lot} checked · Final ${final} m` : 'Sent to approval queue')
+      setMessage(
+        result === 'applied'
+          ? `Checking Saved · ${checkAction} · Lot ${lot} · ${final} m`
+          : 'Sent for approval',
+      )
       setMeterIn('')
       setCheckedMeter('')
       setDamages([emptyDamage()])
       setRemarks('')
+      setCheckAction('Pass')
+      setShowRemarks(false)
       await load()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Save failed')
+      setError(handleUserError('PD.folding.save', err, 'Could not save checking. Please try again.'))
     } finally {
       setBusy(false)
     }
@@ -187,10 +244,10 @@ export function PdFolding({ onGo }: Props) {
   return (
     <div className="pd-sub">
       <header className="pd-sub-header">
-        <h1>Folding &amp; Checking</h1>
-        <p className="pd-lead">Auto lot numbers · damage entry · final meter = meter in − damage.</p>
+        <h1>Checking</h1>
+        <p className="pd-lead">Pending production listed first · Pass / Hold / Reject</p>
         <button type="button" className="btn-sm" onClick={() => onGo('challan')}>
-          Go to Challan
+          Go to Dispatch
         </button>
       </header>
 
@@ -200,9 +257,9 @@ export function PdFolding({ onGo }: Props) {
       <form className="form-stack pd-form" onSubmit={(e) => void save(e)}>
         <div className="pd-form-grid">
           <label className="field">
-            <span className="text-muted">Program No.</span>
+            <span className="text-muted">Order / Program</span>
             <select value={programId} onChange={(e) => setProgramId(e.target.value)} required>
-              <option value="">Select</option>
+              <option value="">Select pending…</option>
               {programs.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.label}
@@ -211,15 +268,19 @@ export function PdFolding({ onGo }: Props) {
             </select>
           </label>
           <label className="field">
-            <span className="text-muted">Marka</span>
-            <input value={marka} onChange={(e) => setMarka(e.target.value)} />
+            <span className="text-muted">Customer</span>
+            <input value={selectedProg?.party || ''} readOnly />
+          </label>
+          <label className="field">
+            <span className="text-muted">Design / Colour</span>
+            <input value={`${selectedProg?.design || '—'} · ${selectedProg?.colour || '—'}`} readOnly />
           </label>
           <label className="field">
             <span className="text-muted">Lot No.</span>
             <input value={lotNo} readOnly />
           </label>
           <label className="field">
-            <span className="text-muted">Meter In</span>
+            <span className="text-muted">Quantity (Meter In)</span>
             <input
               type="number"
               step="0.1"
@@ -232,133 +293,136 @@ export function PdFolding({ onGo }: Props) {
             />
           </label>
           <label className="field">
-            <span className="text-muted">Checked Meter</span>
-            <input type="number" step="0.1" value={checkedMeter} onChange={(e) => setCheckedMeter(e.target.value)} />
-          </label>
-          <label className="field">
-            <span className="text-muted">Damage Meter (auto)</span>
-            <input value={damageTotal} readOnly />
-          </label>
-          <label className="field">
-            <span className="text-muted">Final Meter (auto)</span>
-            <input value={finalMeter} readOnly className="pd-final-meter" />
-          </label>
-          <label className="field">
-            <span className="text-muted">Checker Name</span>
-            <input value={checker} onChange={(e) => setChecker(e.target.value)} />
-          </label>
-          <label className="field">
-            <span className="text-muted">Date</span>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-          </label>
-          <label className="field">
-            <span className="text-muted">Shift</span>
-            <select value={shift} onChange={(e) => setShift(e.target.value as 'Day' | 'Night')}>
-              <option>Day</option>
-              <option>Night</option>
-            </select>
-          </label>
-          <label className="field pd-span-2">
-            <span className="text-muted">Remarks</span>
-            <input value={remarks} onChange={(e) => setRemarks(e.target.value)} />
+            <span className="text-muted">Marka</span>
+            <input value={marka} onChange={(e) => setMarka(e.target.value)} />
           </label>
         </div>
 
-        <h2 className="section-title">Damage Entry</h2>
-        {damages.map((d, idx) => (
-          <div key={d.key} className="pd-damage-row">
+        <div className="pd-check-actions" role="group" aria-label="Checking result">
+          {(['Pass', 'Hold', 'Reject'] as CheckAction[]).map((a) => (
+            <button
+              key={a}
+              type="button"
+              className={checkAction === a ? 'primary-save' : 'btn-warp'}
+              onClick={() => {
+                setCheckAction(a)
+                if (a !== 'Pass') setShowRemarks(true)
+              }}
+            >
+              {a}
+            </button>
+          ))}
+        </div>
+
+        {showRemarks || checkAction !== 'Pass' ? (
+          <label className="field">
+            <span className="text-muted">Remarks {checkAction !== 'Pass' ? '(required)' : ''}</span>
+            <input value={remarks} onChange={(e) => setRemarks(e.target.value)} />
+          </label>
+        ) : (
+          <button type="button" className="btn-ghost" onClick={() => setShowRemarks(true)}>
+            Add remarks
+          </button>
+        )}
+
+        <details className="otp-more-details">
+          <summary>More Details</summary>
+          <div className="pd-form-grid" style={{ marginTop: 12 }}>
             <label className="field">
-              <span className="text-muted">Damage Type</span>
-              <select
-                value={d.damage_type}
-                onChange={(e) => {
-                  const next = [...damages]
-                  next[idx] = { ...d, damage_type: e.target.value }
-                  setDamages(next)
-                }}
-              >
-                {DAMAGE_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
+              <span className="text-muted">Checked Meter</span>
+              <input type="number" step="0.1" value={checkedMeter} onChange={(e) => setCheckedMeter(e.target.value)} />
+            </label>
+            <label className="field">
+              <span className="text-muted">Checker</span>
+              <input value={checker} onChange={(e) => setChecker(e.target.value)} />
+            </label>
+            <label className="field">
+              <span className="text-muted">Date</span>
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            </label>
+            <label className="field">
+              <span className="text-muted">Shift</span>
+              <select value={shift} onChange={(e) => setShift(e.target.value as 'Day' | 'Night')}>
+                <option value="Day">Day</option>
+                <option value="Night">Night</option>
               </select>
             </label>
             <label className="field">
-              <span className="text-muted">Damage Operator</span>
-              <input
-                value={d.damage_operator}
-                onChange={(e) => {
-                  const next = [...damages]
-                  next[idx] = { ...d, damage_operator: e.target.value }
-                  setDamages(next)
-                }}
-              />
+              <span className="text-muted">Damage Total</span>
+              <input value={damageTotal.toFixed(1)} readOnly />
             </label>
             <label className="field">
-              <span className="text-muted">Damage Meter</span>
-              <input
-                type="number"
-                step="0.1"
-                value={d.damage_meter}
-                onChange={(e) => {
-                  const next = [...damages]
-                  next[idx] = { ...d, damage_meter: e.target.value }
-                  setDamages(next)
-                }}
-              />
-            </label>
-            <label className="field">
-              <span className="text-muted">Remarks</span>
-              <input
-                value={d.remarks}
-                onChange={(e) => {
-                  const next = [...damages]
-                  next[idx] = { ...d, remarks: e.target.value }
-                  setDamages(next)
-                }}
-              />
+              <span className="text-muted">Final Meter</span>
+              <input value={finalMeter.toFixed(1)} readOnly />
             </label>
           </div>
-        ))}
-        <button type="button" className="btn-sm" onClick={() => setDamages([...damages, emptyDamage()])}>
-          + Add Damage
-        </button>
+          {damages.map((d) => (
+            <div key={d.key} className="pd-form-grid" style={{ marginTop: 8 }}>
+              <label className="field">
+                <span className="text-muted">Damage Type</span>
+                <select
+                  value={d.damage_type}
+                  onChange={(e) =>
+                    setDamages((prev) => prev.map((x) => (x.key === d.key ? { ...x, damage_type: e.target.value } : x)))
+                  }
+                >
+                  {DAMAGE_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span className="text-muted">Damage Meter</span>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={d.damage_meter}
+                  onChange={(e) =>
+                    setDamages((prev) => prev.map((x) => (x.key === d.key ? { ...x, damage_meter: e.target.value } : x)))
+                  }
+                />
+              </label>
+            </div>
+          ))}
+          <button
+            type="button"
+            className="btn-sm"
+            style={{ marginTop: 8 }}
+            onClick={() => setDamages((prev) => [...prev, emptyDamage()])}
+          >
+            + Damage line
+          </button>
+        </details>
 
-        <button type="submit" className="primary-save" disabled={busy}>
-          Save Checking · Create Lot
-        </button>
+        <div className="otp-sticky-actions">
+          <button type="button" className="btn-ghost" onClick={() => onGo('entry')}>
+            Back
+          </button>
+          <button type="submit" className="primary-save" disabled={busy}>
+            Save Checking
+          </button>
+        </div>
       </form>
 
-      <section className="pd-panel">
-        <header className="pd-panel-h">
-          <h2>Recent Lots</h2>
-        </header>
-        <div className="pd-table-wrap">
-          <table className="pd-table">
+      <section className="pd-panel" style={{ marginTop: 16 }}>
+        <h2>Recent Lots</h2>
+        <div className="table-wrap">
+          <table className="data-table">
             <thead>
               <tr>
-                <th>Lot No.</th>
-                <th>Marka</th>
-                <th>Meter In</th>
-                <th>Damage</th>
-                <th>Final</th>
-                <th>Checker</th>
+                <th>Lot</th>
                 <th>Status</th>
+                <th className="num">Final m</th>
               </tr>
             </thead>
             <tbody>
               {recent.map((r) => (
                 <tr key={String(r.id)}>
-                  <td className="num">{String(r.lot_no)}</td>
-                  <td>{String(r.marka || '—')}</td>
-                  <td className="num">{Number(r.meter_in || 0)}</td>
-                  <td className="num">{Number(r.damage_meter || 0)}</td>
-                  <td className="num">{Number(r.final_meter || 0)}</td>
-                  <td>{String(r.checker_name || '—')}</td>
-                  <td>
-                    <span className="pd-pill ok">{String(r.status)}</span>
-                  </td>
+                  <td>{String(r.lot_no || '—')}</td>
+                  <td>{String(r.status || '—')}</td>
+                  <td className="num">{Number(r.final_meter || 0).toFixed(1)}</td>
                 </tr>
               ))}
             </tbody>
