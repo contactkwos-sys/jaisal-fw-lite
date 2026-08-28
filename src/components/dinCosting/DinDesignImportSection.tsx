@@ -97,6 +97,7 @@ export function DinDesignImportSection({
       const ocr = await readDesignReference(file, hints)
       setOcrExtracted(JSON.parse(JSON.stringify(ocr)) as DesignOcrResult)
       setOcrDraft(ocr)
+      if (ocr.readWarning) setError(ocr.readWarning)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Design read failed')
     } finally {
@@ -117,7 +118,8 @@ export function DinDesignImportSection({
       })
       setOcrExtracted(JSON.parse(JSON.stringify(ocr)) as DesignOcrResult)
       setOcrDraft(ocr)
-      if (!file) {
+      if (ocr.readWarning) setError(ocr.readWarning)
+      else if (!file) {
         setError('Design image imported. OCR could not run — enter values manually in review below.')
       }
     } catch (e) {

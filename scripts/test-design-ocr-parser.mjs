@@ -4,6 +4,7 @@
  */
 
 const DESIGN_NO_RE = /\b([A-Z]{2,5}\d{3,6})\b/g
+const DESIGN_NO_HYPHEN_RE = /\b([A-Z]{2,5})[\s\-]+(\d{3,6})\b/gi
 const LOOM_PICK_RE = /(?:loom[\s-]*pick|loom\s*pick)[\s:=-]*(\d+(?:\.\d+)?)/i
 const PICK_ONLY_RE = /\b(\d+(?:\.\d+)?)\s*pick\b/i
 const FEEDER_RE = /(?:feeder|fd)[\s.-]*(\d+)\s*[=:\-]?\s*([A-Z][A-Z0-9]{1,15})/gi
@@ -13,8 +14,10 @@ const TOTAL_LINE_RE = /^total\s*[:.]?\s*(\d+(?:\.\d+)?)\s*[/\s]\s*(\d+(?:\.\d+)?
 function extractDesignNumbers(text) {
   const lines = text.split(/\r?\n/)
   for (const line of lines) {
-    const m = line.match(/\b([A-Z]{2,5}\d{3,6})\b/)
-    if (m) return m[1]
+    const hyphen = line.match(/\b([A-Z]{2,5})[\s\-]+(\d{3,6})\b/i)
+    if (hyphen) return `${hyphen[1].toUpperCase()}${hyphen[2]}`
+    const m = line.match(/\b([A-Z]{2,5}\d{3,6})\b/i)
+    if (m) return m[1].toUpperCase()
   }
   return ''
 }
@@ -111,4 +114,11 @@ assert(wB[2].pic === '1.89' && wB[2].strings === '150', 'Weft #3')
 const tB = extractTotals(formatB)
 assert(tB.totalPick === '57.89' && tB.totalStrings === '4594', 'Format B totals')
 
-console.log('✓ Design OCR parser tests passed (Format A + Format B)')
+const formatHyphen = `
+jfg-2249
+loom-pick-56
+`
+assert(extractDesignNumbers(formatHyphen) === 'JFG2249', 'Hyphenated JFG DIN')
+assert(extractLoomPick(formatHyphen) === '56', 'Hyphenated loom pick')
+
+console.log('✓ Design OCR parser tests passed (Format A + Format B + hyphenated)')

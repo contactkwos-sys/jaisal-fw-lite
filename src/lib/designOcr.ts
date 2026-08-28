@@ -32,6 +32,8 @@ export type DesignOcrWeftRow = {
   confidence: FieldConfidence
 }
 
+export type DesignOcrReadSource = 'external' | 'edge' | 'tesseract'
+
 /** Structured OCR result — editable in review before applying to costing. */
 export type DesignOcrResult = {
   designNumber: OcrField
@@ -42,6 +44,10 @@ export type DesignOcrResult = {
   totalStrings: OcrField
   qualityName: OcrField
   rawText?: string
+  /** How the image was read (edge vision vs browser Tesseract). */
+  readSource?: DesignOcrReadSource
+  /** User-facing hint when automatic read was weak or the OCR service was unavailable. */
+  readWarning?: string
 }
 
 export type MissingRateItem = {
@@ -57,6 +63,8 @@ export type DesignOcrApplyResult = {
 }
 
 const DESIGN_NO_RE = /\b([A-Z]{2,5}\d{3,6})\b/g
+/** e.g. JFG-2249, jfg 2249 — normalized to JFG2249 */
+const DESIGN_NO_HYPHEN_RE = /\b([A-Z]{2,5})[\s\-]+(\d{3,6})\b/gi
 const PHONE_RE = /\b\d{10,}\b/
 const LOOM_PICK_RE = /(?:loom[\s-]*pick|loom\s*pick)[\s:=-]*(\d+(?:\.\d+)?)/i
 const PICK_ONLY_RE = /\b(\d+(?:\.\d+)?)\s*pick\b/i
@@ -110,36 +118,51 @@ function pickBestDesignNumber(
   }
 }
 
+function scanDesignNumberCandidates(
+  text: string,
+  sourceLabel: string,
+  baseScore: number,
+  lineIdx?: number,
+  lineCount?: number,
+): Array<{ value: string; source: string; score: number }> {
+  const candidates: Array<{ value: string; source: string; score: number }> = []
+  const upper = text.toUpperCase()
+
+  let m: RegExpExecArray | null
+  const compactRe = new RegExp(DESIGN_NO_RE.source, 'g')
+  while ((m = compactRe.exec(upper)) !== null) {
+    let score = baseScore
+    if (lineIdx != null) {
+      if (lineIdx <= 2) score += 3
+      if (lineCount != null && lineIdx >= lineCount - 3) score += 2
+      if (/design|desi|din|jfg/i.test(text)) score += 2
+    }
+    candidates.push({ value: m[1], source: sourceLabel, score })
+  }
+
+  const hyphenRe = new RegExp(DESIGN_NO_HYPHEN_RE.source, 'gi')
+  while ((m = hyphenRe.exec(text)) !== null) {
+    let score = baseScore + 1
+    if (lineIdx != null) {
+      if (lineIdx <= 2) score += 3
+      if (lineCount != null && lineIdx >= lineCount - 3) score += 2
+      if (/design|desi|din|jfg/i.test(text)) score += 2
+    }
+    candidates.push({ value: `${m[1].toUpperCase()}${m[2]}`, source: sourceLabel, score })
+  }
+
+  return candidates
+}
+
 function extractDesignNumbers(text: string, subject?: string, filename?: string): OcrField {
   const candidates: Array<{ value: string; source: string; score: number }> = []
 
-  if (subject) {
-    let m: RegExpExecArray | null
-    const re = new RegExp(DESIGN_NO_RE.source, 'g')
-    while ((m = re.exec(subject.toUpperCase())) !== null) {
-      candidates.push({ value: m[1], source: 'email_subject', score: 6 })
-    }
-  }
-
-  if (filename) {
-    let m: RegExpExecArray | null
-    const re = new RegExp(DESIGN_NO_RE.source, 'g')
-    while ((m = re.exec(filename.toUpperCase())) !== null) {
-      candidates.push({ value: m[1], source: 'filename', score: 4 })
-    }
-  }
+  if (subject) candidates.push(...scanDesignNumberCandidates(subject, 'email_subject', 6))
+  if (filename) candidates.push(...scanDesignNumberCandidates(filename, 'filename', 4))
 
   const lines = text.split(/\r?\n/)
   lines.forEach((line, idx) => {
-    let m: RegExpExecArray | null
-    const re = new RegExp(DESIGN_NO_RE.source, 'g')
-    while ((m = re.exec(line.toUpperCase())) !== null) {
-      let score = 5
-      if (idx <= 2) score += 3
-      if (idx >= lines.length - 3) score += 2
-      if (/design|desi|din/i.test(line)) score += 2
-      candidates.push({ value: m[1], source: 'ocr_text', score })
-    }
+    candidates.push(...scanDesignNumberCandidates(line, 'ocr_text', 5, idx, lines.length))
   })
 
   return pickBestDesignNumber(candidates, subject, filename)
@@ -347,6 +370,27 @@ async function ocrViaTesseract(file: File): Promise<string> {
   }
 }
 
+/** True when OCR extracted at least one costing-relevant field. */
+export function ocrHasDetectedFields(ocr: DesignOcrResult): boolean {
+  return Boolean(
+    ocr.designNumber.value.trim() ||
+      ocr.loomPick.value.trim() ||
+      ocr.feeders.length ||
+      ocr.weftRows.length ||
+      ocr.totalPick.value.trim() ||
+      ocr.totalStrings.value.trim() ||
+      ocr.qualityName.value.trim(),
+  )
+}
+
+function attachReadMeta(
+  result: DesignOcrResult,
+  readSource: DesignOcrReadSource,
+  readWarning?: string,
+): DesignOcrResult {
+  return { ...result, readSource, readWarning }
+}
+
 /** Invoke design-ocr edge function; falls back to client Tesseract + regex parser. */
 export async function readDesignReference(
   file: File,
@@ -361,10 +405,12 @@ export async function readDesignReference(
     const res = await fetch(endpoint, { method: 'POST', body })
     if (res.ok) {
       const json = (await res.json()) as { text?: string; result?: Partial<DesignOcrResult> }
-      return mergeDesignOcrPayload(json.result || null, json.text || '', hints)
+      const merged = mergeDesignOcrPayload(json.result || null, json.text || '', hints)
+      return attachReadMeta(merged, 'external')
     }
   }
 
+  let edgeError: string | undefined
   try {
     const { base64, mediaType } = await fileToBase64(file)
     const { data, error } = await supabase.functions.invoke('design-ocr', {
@@ -375,16 +421,30 @@ export async function readDesignReference(
         filename: hints?.filename,
       },
     })
-    if (!error && data && !data.error) {
+    if (error) {
+      edgeError = error.message || 'Design OCR service unavailable'
+    } else if (data?.error) {
+      edgeError = String(data.error)
+    } else if (data) {
       const text = String(data.raw_text || '')
-      return mergeDesignOcrPayload(data as Partial<DesignOcrResult>, text, hints)
+      const merged = mergeDesignOcrPayload(data as Partial<DesignOcrResult>, text, hints)
+      return attachReadMeta(merged, 'edge')
     }
-  } catch {
-    /* fall through to tesseract */
+  } catch (e) {
+    edgeError = e instanceof Error ? e.message : 'Design OCR service unavailable'
   }
 
   const text = await ocrViaTesseract(file)
-  return parseDesignReferenceText(text, hints)
+  const parsed = parseDesignReferenceText(text, hints)
+  const warning =
+    edgeError && !ocrHasDetectedFields(parsed)
+      ? `${edgeError}. Browser OCR also could not read this sheet — enter details manually or retry with a clearer photo.`
+      : edgeError
+        ? `${edgeError}. Showing browser OCR results — review fields below.`
+        : !ocrHasDetectedFields(parsed)
+          ? 'Could not read design sheet from this image. Try a clearer photo, or open DIN Costing for manual entry.'
+          : undefined
+  return attachReadMeta(parsed, 'tesseract', warning)
 }
 
 /** Map OCR review → weft rows (Pick → PIC, Strings → Width) preserving order. */
