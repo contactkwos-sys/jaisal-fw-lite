@@ -21,6 +21,7 @@ import type { WarpDraft, WeftDraft } from '../../lib/designWiseCosting'
 export type DinOcrApplyPayload = {
   dinNumber: string
   qualityName: string
+  loomPick?: string
   warps: WarpDraft[]
   wefts: WeftDraft[]
   designImageUrl: string | null
@@ -28,6 +29,8 @@ export type DinOcrApplyPayload = {
   ocrExtracted: DesignOcrResult
   ocrConfirmed: DesignOcrResult
   missingRates: MissingRateItem[]
+  /** Explicit new revision — do not update existing costing row */
+  forceNew?: boolean
 }
 
 type Props = {
@@ -189,7 +192,7 @@ export function DinDesignImportSection({
     }))
   }
 
-  function buildPayload(draft: DesignOcrResult): DinOcrApplyPayload | null {
+  function buildPayload(draft: DesignOcrResult, forceNew = false): DinOcrApplyPayload | null {
     const din = draft.designNumber.value.trim()
     if (!din) return null
     const applied = applyOcrToCostingDraft(draft, {
@@ -201,6 +204,7 @@ export function DinDesignImportSection({
     return {
       dinNumber: din,
       qualityName: draft.qualityName.value,
+      loomPick: draft.loomPick.value,
       warps: applied.warps,
       wefts: applied.wefts,
       designImageUrl: designPreviewUrl,
@@ -208,6 +212,7 @@ export function DinDesignImportSection({
       ocrExtracted: ocrExtracted || draft,
       ocrConfirmed: draft,
       missingRates: applied.missingRates,
+      forceNew,
     }
   }
 
@@ -226,7 +231,7 @@ export function DinDesignImportSection({
       }
     }
 
-    const payload = buildPayload(ocrDraft)
+    const payload = buildPayload(ocrDraft, forceNew)
     if (!payload) return
 
     skipLiveRef.current = true
@@ -256,7 +261,8 @@ export function DinDesignImportSection({
     <section className="dwc-panel dwc-import-panel">
       <h2 className="section-title">Design Import</h2>
       <p className="text-muted2 dwc-import-hint">
-        Upload a design reference — OCR reads DIN, Pick, Strings &amp; Feeders, then fills costing below.
+        Upload a design reference — OCR reads Design No., TOTAL LOOM PICK, Feeder/Colour &amp; Pick values.
+        Strings are kept for reference only and are not used in costing.
       </p>
 
       <div className="dwc-import-actions">
@@ -401,7 +407,10 @@ export function DinDesignImportSection({
 
               <label className="field">
                 <span>
-                  Detected Loom Pick {confidenceLabel(ocrDraft.loomPick.confidence)}
+                  TOTAL LOOM PICK {confidenceLabel(ocrDraft.loomPick.confidence)}
+                  {ocrDraft.loomPick.confidence === 'low' ? (
+                    <em className="dwc-low-conf"> Please confirm</em>
+                  ) : null}
                   {ocrDraft.loomPick.confidence === 'missing' && !ocrDraft.loomPick.value ? (
                     <em className="dwc-low-conf"> Could not confidently read this field.</em>
                   ) : null}
@@ -410,13 +419,13 @@ export function DinDesignImportSection({
                   className="num"
                   value={ocrDraft.loomPick.value}
                   onChange={(e) => updateLoomPick(e.target.value)}
-                  placeholder="e.g. 56"
+                  placeholder="e.g. 112"
                 />
               </label>
 
               <div className="dwc-ocr-feeders">
                 <div className="dwc-ocr-block-head">
-                  <span>Detected Feeders (Colour 1→FD1… — dash if yarn blank)</span>
+                  <span>Feeder/Colour (blank yarn allowed)</span>
                   <button type="button" className="btn-ghost btn-sm" onClick={addFeeder}>
                     + Feeder
                   </button>
@@ -424,12 +433,15 @@ export function DinDesignImportSection({
                 {ocrDraft.feeders.length ? (
                   ocrDraft.feeders.map((f, idx) => (
                     <div key={f.feederNo} className="dwc-ocr-feeder-row">
-                      <span className="num">FD{f.feederNo}</span>
+                      <span className="num">{f.sourceLabel || `Colour ${f.feederNo}`}</span>
                       <input
-                        value={f.yarnType}
-                        onChange={(e) => updateFeeder(idx, { yarnType: e.target.value })}
-                        placeholder="Yarn / - if blank"
+                        value={f.yarnType === '-' ? '' : f.yarnType}
+                        onChange={(e) => updateFeeder(idx, { yarnType: e.target.value || '-' })}
+                        placeholder="Yarn name (leave blank if empty)"
                       />
+                      {f.confidence === 'low' ? (
+                        <em className="dwc-low-conf">Please confirm</em>
+                      ) : null}
                     </div>
                   ))
                 ) : (
@@ -439,7 +451,7 @@ export function DinDesignImportSection({
 
               <div className="dwc-ocr-weft">
                 <div className="dwc-ocr-block-head">
-                  <span>Detected Weft (Pick → PIC; Strings optional)</span>
+                  <span>Weft Pick (maps 1:1 to Feeder/Colour — Strings not used for costing)</span>
                   <button type="button" className="btn-ghost btn-sm" onClick={addWeftRow}>
                     + Row
                   </button>
@@ -457,26 +469,31 @@ export function DinDesignImportSection({
                           placeholder="Pick"
                         />
                       </label>
-                      <label>
-                        Strings
-                        <input
-                          className="num"
-                          value={row.strings}
-                          onChange={(e) => updateWeftRow(idx, { strings: e.target.value })}
-                          placeholder="Optional"
-                        />
-                      </label>
                     </div>
                   ))
                 ) : (
-                  <p className="text-muted2">Could not confidently read Pick/Strings — add rows manually.</p>
+                  <p className="text-muted2">Could not confidently read Pick rows — add manually.</p>
                 )}
-                {(ocrDraft.totalPick.value || ocrDraft.totalStrings.value) && (
-                  <p className="text-muted2 dwc-ocr-totals">
-                    Total: {ocrDraft.totalPick.value || '—'} / {ocrDraft.totalStrings.value || '—'}
-                  </p>
-                )}
+                {ocrDraft.totalPick.value ? (
+                  <p className="text-muted2 dwc-ocr-totals">Colour total pick (ref): {ocrDraft.totalPick.value}</p>
+                ) : null}
               </div>
+
+              {(ocrDraft.totalStrings.value || ocrDraft.weftRows.some((r) => r.strings)) && (
+                <details className="dwc-ocr-source-details">
+                  <summary>Source / OCR Details (Strings — not used in costing)</summary>
+                  <p className="text-muted2">
+                    Total Strings: {ocrDraft.totalStrings.value || '—'}
+                  </p>
+                  {ocrDraft.weftRows.map((row, idx) =>
+                    row.strings ? (
+                      <p key={idx} className="text-muted2">
+                        Row {idx + 1} Strings: {row.strings}
+                      </p>
+                    ) : null,
+                  )}
+                </details>
+              )}
 
               <button
                 type="button"

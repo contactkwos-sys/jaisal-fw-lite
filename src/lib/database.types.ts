@@ -918,6 +918,8 @@ export type DesignCostingWarp = {
   costing_id: string
   sr_no: number
   yarn_name: string | null
+  /** Entered base denier; costing denier = base + 10 stored in denier */
+  base_denier: number | null
   denier: number | null
   tar_ends: number | null
   length_mtr: number | null
@@ -933,6 +935,7 @@ export type DesignCostingWeft = {
   costing_id: string
   sr_no: number
   weft_name: string | null
+  base_denier: number | null
   denier: number | null
   pic: number | null
   width: number | null
@@ -942,6 +945,10 @@ export type DesignCostingWeft = {
   amount: number | null
   rate_source: string | null
   rate_master_id: string | null
+  feeder_no: number | null
+  feeder_label: string | null
+  /** OCR strings reference — never used in costing */
+  strings_ref: string | null
 }
 
 export type RateMasterConfig = {

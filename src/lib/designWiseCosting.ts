@@ -2,10 +2,74 @@
 
 export const CALC_FACTOR = 9_000_000
 
+/** Default fabric width (inches) for every new DIN Costing weft row. */
+export const DEFAULT_WIDTH = 52
+
+/** Default production / warp / weft length (meters). Yarn consumption uses this basis. */
+export const DEFAULT_LENGTH_MTR = 110
+
+/** Default wastage meters → usable customer basis = 110 − 10 = 100. */
+export const DEFAULT_WASTAGE_MTR = 10
+
+/** Customer-facing costing basis (meters). Yarn ₹/mtr = total yarn cost ÷ this. */
+export const DEFAULT_CUSTOMER_USABLE_MTR = 100
+
+/**
+ * Costing denier offset: Working/Costing Denier = Base (Entered) Denier + 10.
+ * Always derived from base_denier — never re-add on Recalculate.
+ */
+export const DENIER_COSTING_OFFSET = 10
+
 export function n(v: string | number | null | undefined): number {
   if (v === '' || v == null) return 0
   const x = typeof v === 'number' ? v : Number(v)
   return Number.isFinite(x) ? x : 0
+}
+
+/** Costing denier from entered base denier (base + 10). Returns 0 when base is empty. */
+export function costingDenierFromBase(baseDenier: string | number | null | undefined): number {
+  const base = n(baseDenier)
+  return base > 0 ? base + DENIER_COSTING_OFFSET : 0
+}
+
+/**
+ * Resolve denier used in weight formulas.
+ * Prefer base_denier → base + 10. Legacy rows without base_denier use denier as-is
+ * (avoids re-applying +10 on historical data).
+ */
+export function resolveCostingDenier(row: {
+  base_denier?: string | null
+  denier?: string | number | null
+}): number {
+  const baseRaw = row.base_denier
+  if (baseRaw != null && String(baseRaw).trim() !== '') {
+    return costingDenierFromBase(baseRaw)
+  }
+  return n(row.denier)
+}
+
+/** Display string for costing denier column. */
+export function formatCostingDenier(row: {
+  base_denier?: string | null
+  denier?: string | number | null
+}): string {
+  const c = resolveCostingDenier(row)
+  return c > 0 ? String(c) : ''
+}
+
+/**
+ * Warn when source TOTAL LOOM PICK differs from Σ weft PIC rows.
+ * Do not silently overwrite either value.
+ */
+export function loomPickWeftPicWarning(
+  loomPick: number | string | null | undefined,
+  totalWeftPic: number | string | null | undefined,
+): string | null {
+  const loom = n(loomPick)
+  const weft = n(totalWeftPic)
+  if (loom <= 0 || weft <= 0) return null
+  if (Math.abs(loom - weft) < 0.01) return null
+  return 'Loom Pick and calculated Weft PIC differ — please verify.'
 }
 
 /**
@@ -98,6 +162,12 @@ export type WarpDraft = {
   key: string
   sr_no: number
   yarn_name: string
+  /** User / Rate Master entered denier (base). Costing uses base + 10. */
+  base_denier: string
+  /**
+   * Costing denier snapshot (base + 10 when base_denier set).
+   * Legacy rows may only have this field — then it is used as-is.
+   */
   denier: string
   tar_ends: string
   length_mtr: string
@@ -107,12 +177,22 @@ export type WarpDraft = {
 export type WeftDraft = {
   key: string
   sr_no: number
+  /** Feeder/Colour position label e.g. "Colour 1" / "Feeder 1" */
+  feeder_label: string
+  feeder_no: number | null
   weft_name: string
+  /** User / Rate Master entered denier (base). Costing uses base + 10. */
+  base_denier: string
+  /** Costing denier snapshot — see WarpDraft.denier */
   denier: string
   pic: string
   width: string
   length_mtr: string
   rate_per_kg: string
+  /**
+   * OCR Strings reference only — NEVER used in pick / weight / costing formulas.
+   */
+  strings_ref?: string
 } & RateRowMeta
 
 export type WastageParams = {
@@ -184,33 +264,59 @@ export function computeWastageParams(
   }
 }
 
-export function emptyWarp(sr = 1): WarpDraft {
+export function emptyWarp(sr = 1, lengthMtr: string | number = DEFAULT_LENGTH_MTR): WarpDraft {
   return {
     key: crypto.randomUUID(),
     sr_no: sr,
     yarn_name: '',
+    base_denier: '',
     denier: '',
     tar_ends: '',
-    length_mtr: '',
+    length_mtr: String(lengthMtr || DEFAULT_LENGTH_MTR),
     rate_per_kg: '',
   }
 }
 
-export function emptyWeft(sr = 1): WeftDraft {
+export function emptyWeft(
+  sr = 1,
+  opts?: { lengthMtr?: string | number; width?: string | number; feederNo?: number },
+): WeftDraft {
+  const feederNo = opts?.feederNo ?? sr
   return {
     key: crypto.randomUUID(),
     sr_no: sr,
+    feeder_label: `Colour ${feederNo}`,
+    feeder_no: feederNo,
     weft_name: '',
+    base_denier: '',
     denier: '',
     pic: '',
-    width: '',
-    length_mtr: '',
+    width: String(opts?.width ?? DEFAULT_WIDTH),
+    length_mtr: String(opts?.lengthMtr ?? DEFAULT_LENGTH_MTR),
     rate_per_kg: '',
+    strings_ref: '',
+  }
+}
+
+/**
+ * Apply base denier edit: store base separately and sync costing denier = base + 10.
+ * Recalculate always re-derives from base — never base+10+10.
+ */
+export function withBaseDenier<T extends { base_denier: string; denier: string }>(
+  row: T,
+  baseDenier: string,
+): T {
+  const trimmed = baseDenier.trim()
+  const costing = costingDenierFromBase(trimmed)
+  return {
+    ...row,
+    base_denier: trimmed,
+    denier: costing > 0 ? String(costing) : '',
   }
 }
 
 export function computeWarpRow(row: WarpDraft) {
-  const denier = n(row.denier)
+  const denier = resolveCostingDenier(row)
   const tar = n(row.tar_ends)
   const length = n(row.length_mtr)
   const rate = n(row.rate_per_kg)
@@ -221,12 +327,13 @@ export function computeWarpRow(row: WarpDraft) {
     weight,
     amount,
     length,
+    costingDenier: denier,
     calcFactor: CALC_FACTOR,
   }
 }
 
 export function computeWeftRow(row: WeftDraft) {
-  const denier = n(row.denier)
+  const denier = resolveCostingDenier(row)
   const pic = n(row.pic)
   const width = n(row.width)
   const length = n(row.length_mtr)
@@ -237,6 +344,7 @@ export function computeWeftRow(row: WeftDraft) {
     weight,
     amount,
     pic,
+    costingDenier: denier,
     calcFactor: CALC_FACTOR,
   }
 }
@@ -358,15 +466,17 @@ export function computeProfitProjection(
 
 /** Calculation hints for info-icon tooltips (auditable chain). */
 export const CALC_HINTS = {
-  yarnCostPerMtr: 'Total Yarn Amount ÷ Usable Length (yarn on entered mtr, rate on 100 mtr basis)',
-  conversionCharge: 'Total PIC × Conversion Rate (₹/PIC)',
+  yarnCostPerMtr:
+    'Total Yarn Amount ÷ Customer Usable Length (yarn consumed on 110 m production; ₹/mtr on 100 m basis)',
+  conversionCharge: 'TOTAL WEFT PIC × PIC Conversion Rate (₹/PIC) — not Total Loom Pick',
   subtotalPerMtr: 'Yarn Cost/Mtr + Conversion / Weaving Charge',
   muAmount: 'Subtotal × MU %',
   afterMuPerMtr: 'Subtotal + MU Amount',
   gstAmount: 'After MU × GST %',
   finalCostPerMtr: 'After MU + GST Amount',
-  conversionMultiplier: 'Entered Length ÷ Usable Length',
+  conversionMultiplier: 'Production Length ÷ Customer Usable Length (110 ÷ 100 = 1.10)',
   totalProfit: '(CEO Final Selling Rate − Cost/Mtr) × Production Meters',
+  costingDenier: 'Costing Denier = Base Denier + 10 (derived each time from base — never stacked)',
 } as const
 
 /** Role helpers for DIN Costing access */

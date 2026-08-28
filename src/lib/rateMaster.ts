@@ -6,10 +6,11 @@
  *   Effective Rate = Basic Rate + GST Amount + Freight
  *
  * Rounding: each monetary field rounded to 2 dp (half-up).
+ * denier on rate_master stores BASE denier (remembered per yarn name).
  */
 
 import { supabase } from './supabase'
-import { round2 } from './designWiseCosting'
+import { costingDenierFromBase, n, round2 } from './designWiseCosting'
 import { assertDesignMasterWrite } from './permissions'
 
 export type RateCategory = 'warp' | 'weft'
@@ -65,7 +66,8 @@ export const WEFT_CATALOGUE = [
   { item_name: '440 HSY', denier: 'Same' },
   { item_name: '550 HSY', denier: 'Same' },
   { item_name: '660 HSY', denier: 'Same' },
-  { item_name: '300 Tex', denier: '310', supplier_name: 'Santosh Zari' },
+  // Base denier 300 → costing denier 310 applied at calc time (never store pre-+10)
+  { item_name: '300 Tex', denier: '300', supplier_name: 'Santosh Zari' },
   { item_name: '300 NSY', denier: '' },
   { item_name: 'Others (Weft)', denier: '' },
 ] as const
@@ -401,4 +403,56 @@ export function allRateMasterItemNames(rates: RateMasterRow[], category: RateCat
   return [
     ...new Set(rates.filter((r) => r.category === category && r.is_active).map((r) => r.item_name)),
   ].sort((a, b) => a.localeCompare(b))
+}
+
+/** Numeric base denier from Rate Master / catalogue (ignores "Same" / blank). */
+export function rememberedBaseDenier(denier: string | null | undefined): string {
+  if (denier == null) return ''
+  const s = String(denier).trim()
+  if (!s || s.toLowerCase() === 'same') return ''
+  const num = Number(s)
+  return Number.isFinite(num) && num > 0 ? String(num) : ''
+}
+
+/**
+ * Remember base denier for a yarn on Rate Master so next selection auto-fills.
+ * Updates the latest active row for that item; no-op when denier empty or "Same".
+ */
+export async function rememberYarnBaseDenier(
+  category: RateCategory,
+  itemName: string,
+  baseDenier: string,
+  userId: string | null,
+): Promise<void> {
+  const name = itemName.trim()
+  const base = rememberedBaseDenier(baseDenier)
+  if (!name || !base) return
+  try {
+    await assertDesignMasterWrite()
+  } catch {
+    return
+  }
+  const { data: rows } = await supabase
+    .from('rate_master')
+    .select('id')
+    .eq('category', category)
+    .eq('is_active', true)
+    .ilike('item_name', name)
+    .order('effective_from', { ascending: false })
+    .limit(1)
+  const id = rows?.[0]?.id
+  if (!id) return
+  await supabase
+    .from('rate_master')
+    .update({
+      denier: base,
+      updated_by: userId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+}
+
+/** Costing denier display helper for Rate Master UI (base + 10). */
+export function rateMasterCostingDenier(baseDenier: string | null | undefined): number {
+  return costingDenierFromBase(rememberedBaseDenier(baseDenier) || n(baseDenier))
 }

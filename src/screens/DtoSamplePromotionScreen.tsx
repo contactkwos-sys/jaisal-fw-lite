@@ -75,7 +75,11 @@ export function DtoSamplePromotionScreen({ initialDinId }: Props) {
   }, [matchings, matchingId])
 
   const matching: DinMatching | null = matchings.find((m) => m.id === matchingId) || null
-  const photo = matching?.approved_photo_url || matching?.sample_photo_url || din?.din_image_url || null
+  // Sales sees only final sample assets — never internal DIN/OCR/costing images
+  const mainPhoto = din?.main_sample_photo_url || matching?.approved_photo_url || null
+  const combinedPhoto = din?.combined_matching_photo_url || null
+  const photo = mainPhoto
+  const saleRate = din?.approved_sale_rate ?? din?.final_cost_per_mtr ?? null
 
   const filteredParties = parties.filter((p) => {
     const needle = q.trim().toLowerCase()
@@ -91,7 +95,7 @@ export function DtoSamplePromotionScreen({ initialDinId }: Props) {
       matching_no: matching?.matching_no,
       colours: matching ? matchingColourLabel(matching) : undefined,
       imageUrl: photo,
-      rate: din.final_cost_per_mtr,
+      rate: saleRate,
     })
   }
 
@@ -138,7 +142,10 @@ export function DtoSamplePromotionScreen({ initialDinId }: Props) {
       <header className="screen-header">
         <div>
           <h1>Sample Promotion</h1>
-          <p className="text-muted">Share approved DIN / matching photos with Party Master contacts via WhatsApp.</p>
+          <p className="text-muted">
+            Sales sees Main Sample Photo + Combined Matching Photo + Approved Sale Rate only — never
+            internal DIN costing.
+          </p>
         </div>
       </header>
 
@@ -176,7 +183,10 @@ export function DtoSamplePromotionScreen({ initialDinId }: Props) {
         </div>
 
         <div className="dto-promo-hero">
-          <ImageLightbox src={photo} alt="Final sample" thumbClassName="dto-thumb-hero" />
+          <ImageLightbox src={photo} alt="Main sample" thumbClassName="dto-thumb-hero" />
+          {combinedPhoto ? (
+            <ImageLightbox src={combinedPhoto} alt="Combined matchings" thumbClassName="dto-thumb-hero" />
+          ) : null}
           <div>
             <h2>{din?.design_name || din?.din_number}</h2>
             {matching ? (
@@ -184,14 +194,22 @@ export function DtoSamplePromotionScreen({ initialDinId }: Props) {
                 Matching {matching.matching_no} · <DtoStatusPill status={matching.status} />
               </p>
             ) : null}
+            {saleRate != null ? (
+              <p className="text-muted">Approved Sale Rate: ₹{Number(saleRate).toFixed(2)}/mtr</p>
+            ) : (
+              <p className="text-muted2">Approved sale rate pending CEO finalize</p>
+            )}
+            {!mainPhoto ? (
+              <p className="form-error">Upload Final Sample photos in Sample Tracking before promoting.</p>
+            ) : null}
             <div className="dto-share-bar">
-              <button type="button" className="btn-warp" onClick={broadcastAll}>
+              <button type="button" className="btn-warp" onClick={broadcastAll} disabled={!mainPhoto}>
                 Broadcast
               </button>
-              <button type="button" className="btn-warp" onClick={emailShare}>
+              <button type="button" className="btn-warp" onClick={emailShare} disabled={!mainPhoto}>
                 Email
               </button>
-              <button type="button" className="btn-warp" onClick={downloadImage}>
+              <button type="button" className="btn-warp" onClick={downloadImage} disabled={!mainPhoto}>
                 Download Image
               </button>
             </div>

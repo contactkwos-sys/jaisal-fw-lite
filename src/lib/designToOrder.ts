@@ -41,6 +41,12 @@ export type DinRow = {
   design_name: string | null
   party_name: string | null
   din_image_url: string | null
+  /** Customer/sales main sample photo — not internal DIN image */
+  main_sample_photo_url: string | null
+  /** One combined photo of all matchings for sales */
+  combined_matching_photo_url: string | null
+  /** CEO-approved sale rate for salesman screens */
+  approved_sale_rate: number | null
   common_warp: string | null
   remarks: string | null
   status: string
@@ -286,6 +292,9 @@ export async function updateDin(
       | 'design_name'
       | 'party_name'
       | 'din_image_url'
+      | 'main_sample_photo_url'
+      | 'combined_matching_photo_url'
+      | 'approved_sale_rate'
       | 'common_warp'
       | 'remarks'
       | 'status'
@@ -380,6 +389,12 @@ export async function syncDinCostingFromLatest(dinNumber: string): Promise<void>
   }
 
   const completed = costing.status === 'final' || costing.final_cost_per_mtr != null
+  const saleRate =
+    costing.ceo_final_selling_rate != null
+      ? Number(costing.ceo_final_selling_rate)
+      : costing.final_cost_per_mtr != null
+        ? Number(costing.final_cost_per_mtr)
+        : null
   await updateDin(din.id, {
     costing_id: costing.id,
     costing_status: completed ? 'Completed' : 'Draft',
@@ -388,12 +403,9 @@ export async function syncDinCostingFromLatest(dinNumber: string): Promise<void>
     base_cost_per_mtr: costing.after_mu_per_mtr != null ? Number(costing.after_mu_per_mtr) : null,
     gst_percent: costing.gst_percent != null ? Number(costing.gst_percent) : null,
     gst_amount: costing.gst_amount != null ? Number(costing.gst_amount) : null,
-    final_cost_per_mtr:
-      costing.ceo_final_selling_rate != null
-        ? Number(costing.ceo_final_selling_rate)
-        : costing.final_cost_per_mtr != null
-          ? Number(costing.final_cost_per_mtr)
-          : null,
+    final_cost_per_mtr: saleRate,
+    // Only expose approved sale rate to sales after finalize — never internal cost breakdown
+    ...(costing.status === 'final' && saleRate != null ? { approved_sale_rate: saleRate } : {}),
     status: completed ? 'Costing Done' : 'Costing Pending',
   })
 }
