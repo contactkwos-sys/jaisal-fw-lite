@@ -230,7 +230,23 @@ export async function createDin(input: {
   matchings?: DinMatchingDraft[]
 }): Promise<DinWithMatchings> {
   await assertDesignMasterWrite()
-  const din_number = input.din_number || (await previewNextDinNumber())
+  const din_number = (input.din_number || (await previewNextDinNumber())).trim()
+
+  // One Design = one master: reopen existing DIN instead of inserting a duplicate
+  const existing = await fetchDinByNumber(din_number)
+  if (existing) {
+    const patch: Parameters<typeof updateDin>[1] = {}
+    if (input.design_name?.trim()) patch.design_name = input.design_name.trim()
+    if (input.party_name?.trim()) patch.party_name = input.party_name.trim()
+    if (input.din_image_url && !existing.din_image_url) patch.din_image_url = input.din_image_url
+    if (input.common_warp?.trim()) patch.common_warp = input.common_warp.trim()
+    if (input.remarks?.trim()) patch.remarks = input.remarks.trim()
+    if (Object.keys(patch).length) await updateDin(existing.id, patch)
+    if (input.matchings?.length) await upsertDinMatchings(existing.id, input.matchings)
+    const full = await fetchDinById(existing.id)
+    return full || existing
+  }
+
   const { data, error } = await supabase
     .from('dins')
     .insert({
@@ -276,6 +292,40 @@ export async function createDin(input: {
 
   const full = await fetchDinById(din.id)
   return full || { ...din, din_matchings: [] }
+}
+
+/**
+ * Ensure a shared `dins` master row exists for a DIN Costing save.
+ * DIN Costing is the preferred entry — creates the Intake-visible master when missing.
+ */
+export async function ensureDinMasterForCosting(input: {
+  dinNumber: string
+  designName?: string | null
+  imageUrl?: string | null
+  source?: string
+  createdBy?: string | null
+}): Promise<{ id: string; created: boolean }> {
+  const din_number = input.dinNumber.trim()
+  if (!din_number) throw new Error('Design / DIN number required')
+  const existing = await fetchDinByNumber(din_number)
+  if (existing) {
+    if (input.imageUrl && !existing.din_image_url) {
+      try {
+        await updateDin(existing.id, { din_image_url: input.imageUrl })
+      } catch {
+        /* non-blocking */
+      }
+    }
+    return { id: existing.id, created: false }
+  }
+  const created = await createDin({
+    din_number,
+    design_name: input.designName?.trim() || din_number,
+    din_image_url: input.imageUrl || null,
+    source: input.source || 'din-costing',
+    created_by: input.createdBy || null,
+  })
+  return { id: created.id, created: true }
 }
 
 export async function updateDin(

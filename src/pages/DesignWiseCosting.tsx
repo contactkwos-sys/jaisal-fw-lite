@@ -26,12 +26,13 @@ import {
 } from '../lib/designWiseCosting'
 import { fetchFormulaMaster, FORMULA_DEFAULTS } from '../lib/formulaMaster'
 import { DinCostingViewOnly, CalcInfo, type DinCostingViewRow } from '../components/dinCosting/DinCostingViewOnly'
-import { syncDinCostingFromLatest } from '../lib/designToOrder'
+import { syncDinCostingFromLatest, ensureDinMasterForCosting } from '../lib/designToOrder'
 import {
   fetchAllRates,
   formatDisplayDate as formatRateDate,
   gstLabel,
   lookupRateForCosting,
+  resolveNumericDenier,
   type RateMasterRow,
 } from '../lib/rateMaster'
 import { rateMasterItemNames } from '../lib/dinIntakeCosting'
@@ -837,7 +838,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         if (iErr) {
           if (/column .* does not exist/i.test(iErr.message)) {
             throw new Error(
-              `${iErr.message} — run public/migration-design-wise-costing.sql on Supabase so Save / Report columns exist`,
+              `${iErr.message} — apply public migrations: migration-design-wise-costing.sql, migration-din-costing-jacquard.sql, migration-rate-master.sql, migration-din-design-ocr-audit.sql`,
             )
           }
           throw iErr
@@ -853,7 +854,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         costing_id: costingId,
         sr_no: i + 1,
         yarn_name: row.yarn_name.trim() || null,
-        denier: n(row.denier) || null,
+        denier: n(resolveNumericDenier(row.denier, row.yarn_name)) || null,
         tar_ends: n(row.tar_ends) || null,
         length_mtr: n(row.length_mtr) || null,
         rate_per_kg: n(row.rate_per_kg) || null,
@@ -864,7 +865,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         costing_id: costingId,
         sr_no: i + 1,
         weft_name: row.weft_name.trim() || null,
-        denier: n(row.denier) || null,
+        denier: n(resolveNumericDenier(row.denier, row.weft_name)) || null,
         pic: n(row.pic) || null,
         width: n(row.width) || null,
         length_mtr: n(row.length_mtr) || null,
@@ -930,6 +931,13 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         if (designErr) {
           // Costing itself is saved — surface design-register sync as a soft warning
           try {
+            await ensureDinMasterForCosting({
+              dinNumber: din,
+              designName: quality,
+              imageUrl: designImgToSave || diaryToSave,
+              source: importToSave || 'din-costing',
+              createdBy: userId,
+            })
             await syncDinCostingFromLatest(din)
           } catch {
             /* optional */
@@ -944,6 +952,13 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
 
       // Sync snapshot onto Design to Order DIN master when present (same DIN number)
       try {
+        await ensureDinMasterForCosting({
+          dinNumber: din,
+          designName: quality,
+          imageUrl: designImgToSave || diaryToSave,
+          source: importToSave || 'din-costing',
+          createdBy: userId,
+        })
         await syncDinCostingFromLatest(din)
       } catch {
         /* DIN table may not be migrated yet — costing still saved */
@@ -958,7 +973,14 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
             : `Costing saved to DIN ${din} · Calculated ${fmtInr(totals.finalCostPerMtr)}/mtr`,
       )
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed')
+      const raw = e instanceof Error ? e.message : 'Save failed'
+      if (/column .* does not exist/i.test(raw)) {
+        setError(
+          `${raw} — apply public migrations: migration-design-wise-costing.sql, migration-din-costing-jacquard.sql, migration-rate-master.sql, migration-din-design-ocr-audit.sql`,
+        )
+      } else {
+        setError(raw)
+      }
     } finally {
       setBusy(false)
     }
@@ -994,9 +1016,12 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
 
   async function handleOcrApply(payload: DinOcrApplyPayload) {
     skipDinAutoloadRef.current = true
-    setSavedId(null)
-    setStatus('draft')
-    setIsLocked(false)
+    const createRevision = Boolean(payload.forceNewRevision)
+    if (createRevision) {
+      setSavedId(null)
+      setStatus('draft')
+      setIsLocked(false)
+    }
 
     const nextWarps = payload.warps.length ? payload.warps : [emptyWarp(1)]
     const nextWefts = payload.wefts.length ? payload.wefts : [emptyWeft(1)]
@@ -1021,7 +1046,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
       document.getElementById('dwc-design-details')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
 
-    // Confirm & Create: fill below + save draft so costing totals persist immediately
+    // Confirm: update current draft when already open; only insert a new revision when asked
     await persist(true, false, {
       dinNumber: payload.dinNumber,
       qualityName: nextQuality,
@@ -1033,12 +1058,12 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
       importSource: payload.importSource,
       ocrExtractedJson: payload.ocrExtracted,
       ocrConfirmedJson: payload.ocrConfirmed,
-      forceNew: true,
+      forceNew: createRevision,
     })
 
     if (payload.missingRates.length) {
       setMessage(
-        `DIN costing created · ${payload.missingRates.length} yarn rate(s) missing — add in Rate Master then Update Rate & Recalculate`,
+        `DIN costing ${createRevision ? 'revision created' : 'saved'} · ${payload.missingRates.length} yarn rate(s) missing — add in Rate Master then Update Rate & Recalculate`,
       )
     }
   }
@@ -1083,12 +1108,19 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     try {
       const rates = await fetchAllRates()
       setMasterRates(rates)
+      let refreshed = 0
+      let stillMissing = 0
       setWarps((prev) =>
         prev.map((row) => {
           if (row.rate_source === 'manual') return row
           if (!row.yarn_name.trim()) return row
           const found = lookupRateForCosting(rates, 'warp', row.yarn_name, costingDate, { denier: row.denier })
-          if (!found) return { ...row, rate_per_kg: '', rate_source: undefined, rate_master_id: undefined }
+          if (!found) {
+            stillMissing += 1
+            // Keep previous rate — do not wipe on failed lookup
+            return { ...row, rate_source: row.rate_per_kg ? row.rate_source : undefined }
+          }
+          refreshed += 1
           return {
             ...row,
             rate_per_kg: String(found.calc.effectiveRate),
@@ -1108,9 +1140,14 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
           const name = row.weft_name.trim()
           if (!name || name === '-' || name === '—' || name === '–') return row
           const found = lookupRateForCosting(rates, 'weft', name, costingDate, { denier: row.denier })
-          if (!found) return { ...row, rate_per_kg: '', rate_source: undefined, rate_master_id: undefined }
+          if (!found) {
+            stillMissing += 1
+            return { ...row, rate_source: row.rate_per_kg ? row.rate_source : undefined }
+          }
+          refreshed += 1
           return {
             ...row,
+            denier: resolveNumericDenier(row.denier || found.row.denier || '', name) || row.denier,
             rate_per_kg: String(found.calc.effectiveRate),
             rate_source: 'rate_master' as const,
             rate_master_id: found.row.id,
@@ -1122,7 +1159,11 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
           }
         }),
       )
-      setMessage('Rates refreshed from Rate Master — costing recalculated')
+      setMessage(
+        stillMissing
+          ? `Rates refreshed (${refreshed} updated) — ${stillMissing} still missing in Rate Master`
+          : `Rates refreshed from Rate Master — ${refreshed} row(s) updated, costing recalculated`,
+      )
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Rate refresh failed')
     } finally {
@@ -1546,7 +1587,33 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
                           Rate Master · {formatRateDate(row.rate_effective_from || '')}
                         </small>
                       ) : row.rate_source === 'manual' ? (
-                        <small className="dwc-rate-meta text-muted">Manual Override</small>
+                        <small className="dwc-rate-meta text-muted">
+                          Manual Override
+                          {!isReadOnly ? (
+                            <>
+                              {' '}
+                              <button
+                                type="button"
+                                className="btn-link"
+                                onClick={() =>
+                                  setWarps((prev) =>
+                                    prev.map((r) =>
+                                      r.key === row.key
+                                        ? applyWarpRateFromMaster({
+                                            ...r,
+                                            rate_source: undefined,
+                                            rate_master_id: undefined,
+                                          })
+                                        : r,
+                                    ),
+                                  )
+                                }
+                              >
+                                Use Rate Master Rate
+                              </button>
+                            </>
+                          ) : null}
+                        </small>
                       ) : isWarpRateMissing(row) ? (
                         <small className="dwc-rate-missing">
                           Rate not available in Rate Master
@@ -1747,7 +1814,33 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
                           Rate Master · {formatRateDate(row.rate_effective_from || '')}
                         </small>
                       ) : row.rate_source === 'manual' ? (
-                        <small className="dwc-rate-meta text-muted">Manual Override</small>
+                        <small className="dwc-rate-meta text-muted">
+                          Manual Override
+                          {!isReadOnly ? (
+                            <>
+                              {' '}
+                              <button
+                                type="button"
+                                className="btn-link"
+                                onClick={() =>
+                                  setWefts((prev) =>
+                                    prev.map((r) =>
+                                      r.key === row.key
+                                        ? applyWeftRateFromMaster({
+                                            ...r,
+                                            rate_source: undefined,
+                                            rate_master_id: undefined,
+                                          })
+                                        : r,
+                                    ),
+                                  )
+                                }
+                              >
+                                Use Rate Master Rate
+                              </button>
+                            </>
+                          ) : null}
+                        </small>
                       ) : isWeftRateMissing(row) ? (
                         <small className="dwc-rate-missing">
                           Rate not available in Rate Master

@@ -28,6 +28,8 @@ export type DinOcrApplyPayload = {
   ocrExtracted: DesignOcrResult
   ocrConfirmed: DesignOcrResult
   missingRates: MissingRateItem[]
+  /** True only when user explicitly chose "Create New Revision". */
+  forceNewRevision?: boolean
 }
 
 type Props = {
@@ -189,7 +191,7 @@ export function DinDesignImportSection({
     }))
   }
 
-  function buildPayload(draft: DesignOcrResult): DinOcrApplyPayload | null {
+  function buildPayload(draft: DesignOcrResult, forceNewRevision = false): DinOcrApplyPayload | null {
     const din = draft.designNumber.value.trim()
     if (!din) return null
     const applied = applyOcrToCostingDraft(draft, {
@@ -208,6 +210,7 @@ export function DinDesignImportSection({
       ocrExtracted: ocrExtracted || draft,
       ocrConfirmed: draft,
       missingRates: applied.missingRates,
+      forceNewRevision,
     }
   }
 
@@ -226,7 +229,7 @@ export function DinDesignImportSection({
       }
     }
 
-    const payload = buildPayload(ocrDraft)
+    const payload = buildPayload(ocrDraft, forceNew)
     if (!payload) return
 
     skipLiveRef.current = true
@@ -234,7 +237,6 @@ export function DinDesignImportSection({
     setLinkedToCosting(true)
     setDuplicateDin(null)
     setError(null)
-    // Allow live sync on subsequent edits
     queueMicrotask(() => {
       skipLiveRef.current = false
     })
@@ -359,6 +361,7 @@ export function DinDesignImportSection({
               Cancel
             </button>
           </div>
+          <p className="text-muted2">Open Existing loads the latest costing for this Design/DIN. Create New Revision adds another costing draft without replacing the master design.</p>
         </div>
       ) : null}
 
