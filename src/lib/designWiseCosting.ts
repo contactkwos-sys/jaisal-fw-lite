@@ -9,6 +9,36 @@ export function n(v: string | number | null | undefined): number {
 }
 
 /**
+ * Resolve denier for weight formulas.
+ * Catalogue "Same" (HSY) means use the numeric denier embedded in the yarn name
+ * (e.g. "440 HSY" → 440). Does not invent rates — only denier for ÷ 9_000_000 math.
+ */
+export function resolveDenierForCalc(
+  denier: string | number | null | undefined,
+  yarnName?: string | null,
+): number {
+  const raw = denier == null ? '' : String(denier).trim()
+  if (raw && /^same$/i.test(raw)) {
+    const m = String(yarnName || '').match(/(\d+(?:\.\d+)?)/)
+    return m ? Number(m[1]) : 0
+  }
+  const direct = n(raw)
+  if (direct > 0) return direct
+  // Blank denier but yarn name starts with denier (e.g. "300 Tex")
+  const fromName = String(yarnName || '').match(/^(\d+(?:\.\d+)?)/)
+  return fromName ? Number(fromName[1]) : 0
+}
+
+/** Persistable numeric denier (null when unresolved) — never store the word "Same". */
+export function denierForDb(
+  denier: string | number | null | undefined,
+  yarnName?: string | null,
+): number | null {
+  const v = resolveDenierForCalc(denier, yarnName)
+  return v > 0 ? v : null
+}
+
+/**
  * Financial / weight rounding — avoids float noise in ₹ and kg displays.
  * Rule: round each monetary step to 2 dp (half-up via Math.round) so UI rows
  * (Weight × Rate = Amount) stay auditable; GST is applied once on after-MU only.
@@ -210,7 +240,7 @@ export function emptyWeft(sr = 1): WeftDraft {
 }
 
 export function computeWarpRow(row: WarpDraft) {
-  const denier = n(row.denier)
+  const denier = resolveDenierForCalc(row.denier, row.yarn_name)
   const tar = n(row.tar_ends)
   const length = n(row.length_mtr)
   const rate = n(row.rate_per_kg)
@@ -226,7 +256,7 @@ export function computeWarpRow(row: WarpDraft) {
 }
 
 export function computeWeftRow(row: WeftDraft) {
-  const denier = n(row.denier)
+  const denier = resolveDenierForCalc(row.denier, row.weft_name)
   const pic = n(row.pic)
   const width = n(row.width)
   const length = n(row.length_mtr)

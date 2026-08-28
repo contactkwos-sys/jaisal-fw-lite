@@ -113,6 +113,23 @@ function chainFromYarnTotals(totalYarnAmount, enteredLength, totalPic, picRate, 
   return { yarnCostPerMtr, conversionCharge, subtotalPerMtr, afterMuPerMtr, gstAmount, finalCostPerMtr }
 }
 
+function resolveDenierForCalc(denier, yarnName) {
+  const raw = denier == null ? '' : String(denier).trim()
+  if (raw && /^same$/i.test(raw)) {
+    const m = String(yarnName || '').match(/(\d+(?:\.\d+)?)/)
+    return m ? Number(m[1]) : 0
+  }
+  const direct = n(raw)
+  if (direct > 0) return direct
+  const fromName = String(yarnName || '').match(/^(\d+(?:\.\d+)?)/)
+  return fromName ? Number(fromName[1]) : 0
+}
+
+function weftWeightWithResolved(row) {
+  const denier = resolveDenierForCalc(row.denier, row.weft_name)
+  return round2(weftWeightKg(denier, n(row.pic), n(row.width), n(row.length_mtr)))
+}
+
 const warps = [
   {
     yarn_name: '150 ROTO B & W',
@@ -206,6 +223,19 @@ checks.push(['Jfg1872 live subtotal = 64.87', jfg1872Live.subtotalPerMtr === 64.
 
 const r0 = computeBuildup(warps, wefts, 0, 0.45, 0, 0)
 checks.push(['Design length 0 → yarn cost 0', r0.yarnCostPerMtr === 0])
+
+// "Same" denier (HSY catalogue) must resolve from yarn name — not silently weight 0
+checks.push(['resolveDenier Same + 440 HSY → 440', resolveDenierForCalc('Same', '440 HSY') === 440])
+checks.push(['resolveDenier Same + 300 Tex → 300', resolveDenierForCalc('Same', '300 Tex') === 300])
+const hsyWeight = weftWeightWithResolved({
+  weft_name: '440 HSY',
+  denier: 'Same',
+  pic: '28',
+  width: '2222',
+  length_mtr: '110',
+})
+const hsyExpected = round2(weftWeightKg(440, 28, 2222, 110))
+checks.push(['HSY Same denier weight matches numeric 440', hsyWeight === hsyExpected && hsyWeight > 0])
 
 let failed = 0
 console.log('DIN Costing — calculation smoke test\n')

@@ -50,6 +50,14 @@ const TECHNICAL_PATTERNS: Array<{ re: RegExp; message: string }> = [
     re: /duplicate key|idx_gmail_senders_email_lower/i,
     message: 'This sender email is already in the approved list.',
   },
+  {
+    re: /duplicate key.*din_number|unique.*din_number|dins_din_number/i,
+    message: 'Design already exists. Open the existing record instead of creating a duplicate.',
+  },
+  {
+    re: /23503|foreign key/i,
+    message: 'Save failed: user session invalid or linked record missing. Sign out and sign in again.',
+  },
 ]
 
 export function logTechnicalError(context: string, error: unknown): void {

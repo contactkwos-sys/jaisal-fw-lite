@@ -12,6 +12,7 @@ import {
   computeWarpRow,
   computeWeftRow,
   computeWastageParams,
+  denierForDb,
   emptyWarp,
   emptyWeft,
   finalCostAuditLine,
@@ -27,6 +28,8 @@ import {
 import { fetchFormulaMaster, FORMULA_DEFAULTS } from '../lib/formulaMaster'
 import { DinCostingViewOnly, CalcInfo, type DinCostingViewRow } from '../components/dinCosting/DinCostingViewOnly'
 import { syncDinCostingFromLatest } from '../lib/designToOrder'
+import { ensureDinMasterForCosting, findSharedDesign, normalizeDesignNumber } from '../lib/designIdentity'
+import { handleUserError } from '../lib/userError'
 import {
   fetchAllRates,
   formatDisplayDate as formatRateDate,
@@ -467,7 +470,15 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
               tar_ends: r.tar_ends != null ? String(r.tar_ends) : '',
               length_mtr: r.length_mtr != null ? String(r.length_mtr) : '',
               rate_per_kg: r.rate_per_kg != null ? String(r.rate_per_kg) : '',
-              rate_source: (r.rate_source as WarpDraft['rate_source']) || '',
+              // Drafts without explicit manual flag re-bind to Rate Master on refresh
+              rate_source:
+                r.rate_source === 'manual'
+                  ? 'manual'
+                  : r.rate_source === 'rate_master' || r.rate_master_id
+                    ? 'rate_master'
+                    : r.rate_per_kg != null
+                      ? 'rate_master'
+                      : '',
               rate_master_id: r.rate_master_id || undefined,
             }))
           : [emptyWarp(1)]
@@ -483,7 +494,14 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
               width: r.width != null ? String(r.width) : '',
               length_mtr: r.length_mtr != null ? String(r.length_mtr) : '',
               rate_per_kg: r.rate_per_kg != null ? String(r.rate_per_kg) : '',
-              rate_source: (r.rate_source as WeftDraft['rate_source']) || '',
+              rate_source:
+                r.rate_source === 'manual'
+                  ? 'manual'
+                  : r.rate_source === 'rate_master' || r.rate_master_id
+                    ? 'rate_master'
+                    : r.rate_per_kg != null
+                      ? 'rate_master'
+                      : '',
               rate_master_id: r.rate_master_id || undefined,
             }))
           : [emptyWeft(1)]
@@ -506,7 +524,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
 
   const loadExisting = useCallback(
     async (din: string) => {
-      const trimmed = din.trim()
+      const trimmed = normalizeDesignNumber(din)
       if (!trimmed) return
       const { data: rows, error: hErr } = await supabase
         .from('design_costing')
@@ -516,8 +534,25 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         .limit(1)
       if (hErr) throw hErr
       const header = rows?.[0]
-      if (!header) return
-      await loadById(header.id)
+      if (header) {
+        await loadById(header.id)
+        return
+      }
+      // Bridge: Design Intake may store the same fabric under dins.design_name / din_number
+      const shared = await findSharedDesign(trimmed)
+      if (shared?.costingId) {
+        await loadById(shared.costingId)
+        return
+      }
+      if (shared?.din) {
+        setDinNumber(shared.din.din_number)
+        if (shared.din.design_name) setQualityName(shared.din.design_name)
+        if (shared.din.din_image_url) {
+          setDesignImageUrl(shared.din.din_image_url)
+          setDiaryUrl((prev) => prev || shared.din!.din_image_url)
+        }
+        setMessage(`Opened Design Intake master ${shared.din.din_number} — enter costing below`)
+      }
     },
     [loadById],
   )
@@ -853,7 +888,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         costing_id: costingId,
         sr_no: i + 1,
         yarn_name: row.yarn_name.trim() || null,
-        denier: n(row.denier) || null,
+        denier: denierForDb(row.denier, row.yarn_name),
         tar_ends: n(row.tar_ends) || null,
         length_mtr: n(row.length_mtr) || null,
         rate_per_kg: n(row.rate_per_kg) || null,
@@ -864,7 +899,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         costing_id: costingId,
         sr_no: i + 1,
         weft_name: row.weft_name.trim() || null,
-        denier: n(row.denier) || null,
+        denier: denierForDb(row.denier, row.weft_name),
         pic: n(row.pic) || null,
         width: n(row.width) || null,
         length_mtr: n(row.length_mtr) || null,
@@ -919,6 +954,20 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         )
       }
 
+      // Ensure shared Design Intake master uses the SAME Design Number (no orphan costing)
+      try {
+        await ensureDinMasterForCosting({
+          designNumber: din,
+          qualityName: quality,
+          imageUrl: designImgToSave || diaryToSave,
+          source: importToSave || 'din_costing',
+          userId,
+        })
+        await syncDinCostingFromLatest(din)
+      } catch {
+        /* DIN master sync is best-effort — costing row is already saved */
+      }
+
       if (!asDraft || finalize) {
         const { error: designErr } = await supabase
           .from('designs')
@@ -928,12 +977,6 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
           })
           .eq('dno', din)
         if (designErr) {
-          // Costing itself is saved — surface design-register sync as a soft warning
-          try {
-            await syncDinCostingFromLatest(din)
-          } catch {
-            /* optional */
-          }
           setMessage(
             `Costing saved to DIN ${din} · Final ${fmtInr(totals.finalCostPerMtr)}/mtr (design register sync: ${designErr.message})`,
           )
@@ -942,23 +985,16 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         }
       }
 
-      // Sync snapshot onto Design to Order DIN master when present (same DIN number)
-      try {
-        await syncDinCostingFromLatest(din)
-      } catch {
-        /* DIN table may not be migrated yet — costing still saved */
-      }
-
       await refreshHistory()
       setMessage(
         finalize
-          ? `Costing finalized & locked · CEO rate ${fmtInr(n(ceoFinalSellingRate) || totals.finalCostPerMtr)}/mtr`
+          ? `Finalized · CEO rate ${fmtInr(n(ceoFinalSellingRate) || totals.finalCostPerMtr)}/mtr`
           : asDraft
-            ? `Draft saved · Calculated ${fmtInr(totals.finalCostPerMtr)}/mtr`
-            : `Costing saved to DIN ${din} · Calculated ${fmtInr(totals.finalCostPerMtr)}/mtr`,
+            ? `Draft saved · ${fmtInr(totals.finalCostPerMtr)}/mtr`
+            : `Costing saved · ${fmtInr(totals.finalCostPerMtr)}/mtr`,
       )
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed')
+      setError(handleUserError('DinCosting.persist', e, 'Save failed — check Design No., rates, and try again'))
     } finally {
       setBusy(false)
     }
@@ -1130,6 +1166,37 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     }
   }
 
+  function resetWarpToRateMaster(rowKey: string) {
+    setWarps((prev) =>
+      prev.map((row) => {
+        if (row.key !== rowKey) return row
+        const cleared = { ...row, rate_source: undefined as WarpDraft['rate_source'], rate_master_id: undefined }
+        return applyWarpRateFromMaster(cleared)
+      }),
+    )
+    setMessage('Rate Source: Rate Master — row recalculated')
+  }
+
+  function resetWeftToRateMaster(rowKey: string) {
+    setWefts((prev) =>
+      prev.map((row) => {
+        if (row.key !== rowKey) return row
+        const cleared = { ...row, rate_source: undefined as WeftDraft['rate_source'], rate_master_id: undefined }
+        return applyWeftRateFromMaster(cleared)
+      }),
+    )
+    setMessage('Rate Source: Rate Master — row recalculated')
+  }
+
+  async function recalculateFromUi() {
+    if (isLocked) {
+      setMessage('Finalized costing is locked — historical rates are preserved')
+      return
+    }
+    await refreshRatesFromMaster()
+    setMessage('Calculation updated — not saved yet. Click Save Draft to persist.')
+  }
+
   function openRateMasterForItem(category: 'warp' | 'weft', itemName: string) {
     if (!onNavigate) return
     onNavigate({ screen: 'rate-master', module: 'masters', filter: `add:${category}:${itemName}` })
@@ -1244,7 +1311,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
               </button>
             ) : null}
             <button type="button" className="primary-save" disabled={busy} onClick={() => void refreshRatesFromMaster()}>
-              Update Rate &amp; Recalculate
+              Use Latest Rate
             </button>
           </div>
         </section>
@@ -1541,12 +1608,26 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
                       />
                       {row.rate_source === 'rate_master' && row.rate_basic != null ? (
                         <small className="dwc-rate-meta text-muted">
-                          {fmtInr(row.rate_basic)}/kg · {gstLabel(row.rate_gst_percent ?? 0)}{' '}
+                          Rate Source: Rate Master · {fmtInr(row.rate_basic)}/kg · {gstLabel(row.rate_gst_percent ?? 0)}{' '}
                           {fmtInr(row.rate_gst_amount ?? 0)} · Freight {fmtInr(row.rate_freight ?? 0)} ·{' '}
-                          Rate Master · {formatRateDate(row.rate_effective_from || '')}
+                          {formatRateDate(row.rate_effective_from || '')}
                         </small>
                       ) : row.rate_source === 'manual' ? (
-                        <small className="dwc-rate-meta text-muted">Manual Override</small>
+                        <small className="dwc-rate-meta text-muted">
+                          Rate Source: Manual Override
+                          {!isReadOnly ? (
+                            <>
+                              {' '}
+                              <button
+                                type="button"
+                                className="btn-link"
+                                onClick={() => resetWarpToRateMaster(row.key)}
+                              >
+                                Use Rate Master Rate
+                              </button>
+                            </>
+                          ) : null}
+                        </small>
                       ) : isWarpRateMissing(row) ? (
                         <small className="dwc-rate-missing">
                           Rate not available in Rate Master
@@ -1742,15 +1823,29 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
                       />
                       {row.rate_source === 'rate_master' && row.rate_basic != null ? (
                         <small className="dwc-rate-meta text-muted">
-                          {fmtInr(row.rate_basic)}/kg · {gstLabel(row.rate_gst_percent ?? 0)}{' '}
+                          Rate Source: Rate Master · {fmtInr(row.rate_basic)}/kg · {gstLabel(row.rate_gst_percent ?? 0)}{' '}
                           {fmtInr(row.rate_gst_amount ?? 0)} · Freight {fmtInr(row.rate_freight ?? 0)} ·{' '}
-                          Rate Master · {formatRateDate(row.rate_effective_from || '')}
+                          {formatRateDate(row.rate_effective_from || '')}
                         </small>
                       ) : row.rate_source === 'manual' ? (
-                        <small className="dwc-rate-meta text-muted">Manual Override</small>
+                        <small className="dwc-rate-meta text-muted">
+                          Rate Source: Manual Override
+                          {!isReadOnly ? (
+                            <>
+                              {' '}
+                              <button
+                                type="button"
+                                className="btn-link"
+                                onClick={() => resetWeftToRateMaster(row.key)}
+                              >
+                                Use Rate Master Rate
+                              </button>
+                            </>
+                          ) : null}
+                        </small>
                       ) : isWeftRateMissing(row) ? (
                         <small className="dwc-rate-missing">
-                          Rate not available in Rate Master
+                          RATE NOT AVAILABLE
                           {onNavigate ? (
                             <>
                               {' '}
@@ -2060,7 +2155,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
           type="button"
           className="dwc-secondary-btn"
           disabled={busy || uploading}
-          onClick={() => setMessage('Recalculated — review updated values below')}
+          onClick={() => void recalculateFromUi()}
         >
           Recalculate
         </button>
