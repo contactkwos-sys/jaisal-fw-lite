@@ -23,6 +23,16 @@ import {
   uploadDinImage,
   type DinMatchingDraft,
 } from '../lib/designToOrder'
+import {
+  applyOcrToCostingDraft,
+  emptyDesignOcrResult,
+  ocrHasDetectedFields,
+  readDesignReference,
+  readDesignReferenceFromUrl,
+  type DesignOcrFeeder,
+  type DesignOcrResult,
+  type DesignOcrWeftRow,
+} from '../lib/designOcr'
 import { canEditDinCosting, canViewDinCosting } from '../lib/designWiseCosting'
 import type { RateMasterRow } from '../lib/rateMaster'
 import {
@@ -71,6 +81,8 @@ export function DinIntakeScreen({ onNavigate }: Props) {
   const [dragOver, setDragOver] = useState(false)
   const [busy, setBusy] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [readingDesign, setReadingDesign] = useState(false)
+  const [ocrDraft, setOcrDraft] = useState<DesignOcrResult>(emptyDesignOcrResult())
   const [masterRates, setMasterRates] = useState<RateMasterRow[]>([])
   const [costingDraft, setCostingDraft] = useState<IntakeCostingDraft>(emptyIntakeCostingDraft())
   const [costingReady, setCostingReady] = useState(false)
@@ -164,6 +176,104 @@ export function DinIntakeScreen({ onNavigate }: Props) {
     void refreshGmail()
   }, [refreshGmail])
 
+  const applyOcrToIntake = useCallback(
+    (ocr: DesignOcrResult) => {
+      setOcrDraft(ocr)
+
+      const jfg = ocr.designNumber.value.trim()
+      const quality = ocr.qualityName.value.trim()
+      if (jfg) setDesignName(jfg)
+      else if (quality) setDesignName(quality)
+
+      if (canWriteCosting && costingReady && ocrHasDetectedFields(ocr)) {
+        setCostingDraft((prev) => {
+          const applied = applyOcrToCostingDraft(ocr, {
+            designLength: prev.designLength,
+            rates: masterRates,
+            costingDate: prev.costingDate,
+            existingWarps: prev.warps,
+          })
+          return {
+            ...prev,
+            wefts: applied.wefts.length ? applied.wefts : prev.wefts,
+            warps: applied.warps.length ? applied.warps : prev.warps,
+          }
+        })
+      }
+
+      if (ocr.readWarning) {
+        setError(ocr.readWarning)
+        setMessage(null)
+      } else if (ocrHasDetectedFields(ocr)) {
+        setMessage('Design sheet read — review detected fields below before saving.')
+        setError(null)
+      } else {
+        setError('Could not read design sheet from this image. Enter details manually or retry with a clearer photo.')
+        setMessage(null)
+      }
+    },
+    [canWriteCosting, costingReady, masterRates],
+  )
+
+  async function runDesignOcr(file: File, hints?: { subject?: string; filename?: string }) {
+    setReadingDesign(true)
+    setError(null)
+    try {
+      const ocr = await readDesignReference(file, hints)
+      applyOcrToIntake(ocr)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Design read failed')
+    } finally {
+      setReadingDesign(false)
+    }
+  }
+
+  function updateOcrDesignNumber(value: string) {
+    setOcrDraft((prev) => ({
+      ...prev,
+      designNumber: { ...prev.designNumber, value: value.toUpperCase(), confidence: 'high' },
+    }))
+    setDesignName(value.toUpperCase())
+  }
+
+  function updateOcrLoomPick(value: string) {
+    setOcrDraft((prev) => ({
+      ...prev,
+      loomPick: { ...prev.loomPick, value, confidence: 'high' },
+    }))
+  }
+
+  function updateOcrFeeder(idx: number, patch: Partial<DesignOcrFeeder>) {
+    setOcrDraft((prev) => ({
+      ...prev,
+      feeders: prev.feeders.map((f, i) => (i === idx ? { ...f, ...patch } : f)),
+    }))
+  }
+
+  function updateOcrWeftRow(idx: number, patch: Partial<DesignOcrWeftRow>) {
+    setOcrDraft((prev) => ({
+      ...prev,
+      weftRows: prev.weftRows.map((r, i) => (i === idx ? { ...r, ...patch } : r)),
+    }))
+  }
+
+  function reapplyOcrToCosting() {
+    if (!canWriteCosting || !costingReady) return
+    const applied = applyOcrToCostingDraft(ocrDraft, {
+      designLength: costingDraft.designLength,
+      rates: masterRates,
+      costingDate: costingDraft.costingDate,
+      existingWarps: costingDraft.warps,
+    })
+    setCostingDraft((prev) => ({
+      ...prev,
+      wefts: applied.wefts.length ? applied.wefts : prev.wefts,
+      warps: applied.warps.length ? applied.warps : prev.warps,
+    }))
+    setMessage('Costing rows updated from OCR review.')
+    setError(null)
+  }
+
   async function handleFile(file: File | null, src: string) {
     if (!file) return
     if (!file.type.startsWith('image/')) {
@@ -177,7 +287,9 @@ export function DinIntakeScreen({ onNavigate }: Props) {
       setImageUrl(url)
       setSource(src)
       setGmailMeta(null)
-      setMessage('DESIGN image uploaded')
+      setOcrDraft(emptyDesignOcrResult())
+      setMessage('DESIGN image uploaded — reading design sheet…')
+      await runDesignOcr(file)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Upload failed')
     } finally {
@@ -189,7 +301,7 @@ export function DinIntakeScreen({ onNavigate }: Props) {
     setMatchings((prev) => prev.map((m) => (m.key === key ? { ...m, ...patch } : m)))
   }
 
-  function applyGmailImport(result: GmailImportResult) {
+  async function applyGmailImport(result: GmailImportResult) {
     setImageUrl(result.imageUrl)
     setSource('gmail')
     setGmailMeta({
@@ -201,7 +313,6 @@ export function DinIntakeScreen({ onNavigate }: Props) {
       messageId: result.messageId,
       attachmentId: result.attachmentId,
     })
-    if (result.subject && !designName) setDesignName(result.subject)
     if (result.senderName && !partyName) setPartyName(result.senderName)
     try {
       const d = new Date(result.receivedAt)
@@ -210,7 +321,29 @@ export function DinIntakeScreen({ onNavigate }: Props) {
       /* keep current date */
     }
     setShowGmailImport(false)
-    setMessage('DESIGN image imported from Gmail — review fields before saving.')
+    setOcrDraft(emptyDesignOcrResult())
+    setMessage('DESIGN image imported from Gmail — reading design sheet…')
+    setReadingDesign(true)
+    setError(null)
+    try {
+      const { ocr, file } = await readDesignReferenceFromUrl(result.imageUrl, {
+        subject: result.subject,
+        filename: result.attachmentFilename,
+      })
+      if (!file) {
+        if (result.subject && !designName) setDesignName(result.subject)
+        setError('Design image imported. OCR could not run — enter values manually.')
+        return
+      }
+      applyOcrToIntake(ocr)
+      if (!ocr.designNumber.value.trim() && !ocr.qualityName.value.trim() && result.subject) {
+        setDesignName(result.subject)
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Gmail import OCR failed')
+    } finally {
+      setReadingDesign(false)
+    }
   }
 
   async function saveDin(e: React.FormEvent) {
@@ -286,6 +419,13 @@ export function DinIntakeScreen({ onNavigate }: Props) {
   const gmailConnected = gmailStatus?.connected
   const gmailReady = gmailConnected && gmailStatus?.accountMatch !== false
   const activeSenders = (gmailStatus?.senders || []).filter((s) => s.email)
+  const showOcrReview = Boolean(imageUrl && !readingDesign)
+
+  function ocrConfidenceLabel(c: string): string {
+    if (c === 'high') return '✓'
+    if (c === 'low') return '?'
+    return '—'
+  }
 
   return (
     <div className="screen dto-screen">
@@ -293,7 +433,8 @@ export function DinIntakeScreen({ onNavigate }: Props) {
         <div>
           <h1>DESIGN Intake</h1>
           <p className="text-muted">
-            Receive DESIGN (formerly DIN) by upload, photo, or Gmail — creates a unique DESIGN master record.
+            Receive DESIGN (formerly DIN) by upload, photo, or Gmail — OCR reads JFG / Pick / Strings into the master
+            record.
           </p>
         </div>
       </header>
@@ -304,16 +445,16 @@ export function DinIntakeScreen({ onNavigate }: Props) {
       <section className="surface dto-panel dto-intake-receive">
         <h2 className="section-title">Receive DESIGN by</h2>
         <div className="dto-receive-actions">
-          <button type="button" className="btn-warp" onClick={() => fileRef.current?.click()} disabled={uploading}>
+          <button type="button" className="btn-warp" onClick={() => fileRef.current?.click()} disabled={uploading || readingDesign}>
             Upload JPG
           </button>
-          <button type="button" className="btn-warp" onClick={() => cameraRef.current?.click()} disabled={uploading}>
+          <button type="button" className="btn-warp" onClick={() => cameraRef.current?.click()} disabled={uploading || readingDesign}>
             Take Photo
           </button>
           <button
             type="button"
             className="btn-warp"
-            disabled={!gmailReady}
+            disabled={!gmailReady || uploading || readingDesign}
             title={gmailReady ? 'Import from Gmail' : 'Connect Gmail first'}
             onClick={() => setShowGmailImport(true)}
           >
@@ -388,9 +529,85 @@ export function DinIntakeScreen({ onNavigate }: Props) {
           {imageUrl ? (
             <ImageLightbox src={imageUrl} alt="DESIGN" thumbClassName="dto-thumb-preview" />
           ) : (
-            <span>Drag &amp; drop DESIGN photo here (JPG/JPEG)</span>
+            <span>{readingDesign ? 'Reading design sheet…' : 'Drag & drop DESIGN photo here (JPG/JPEG)'}</span>
           )}
         </label>
+
+        {readingDesign ? <p className="text-muted dto-ocr-status">Reading design sheet…</p> : null}
+
+        {showOcrReview ? (
+          <div className="dwc-ocr-review dto-intake-ocr">
+            <h3 className="dwc-ocr-subtitle">Design Read — review before saving</h3>
+            <div className="dto-form-grid">
+              <label className="field">
+                <span>
+                  Detected JFG / Design Ref {ocrConfidenceLabel(ocrDraft.designNumber.confidence)}
+                </span>
+                <input
+                  value={ocrDraft.designNumber.value}
+                  onChange={(e) => updateOcrDesignNumber(e.target.value)}
+                  placeholder="e.g. JFG2249"
+                />
+              </label>
+              <label className="field">
+                <span>
+                  Detected Loom Pick {ocrConfidenceLabel(ocrDraft.loomPick.confidence)}
+                </span>
+                <input
+                  className="num"
+                  value={ocrDraft.loomPick.value}
+                  onChange={(e) => updateOcrLoomPick(e.target.value)}
+                  placeholder="e.g. 56"
+                />
+              </label>
+            </div>
+            {ocrDraft.feeders.length ? (
+              <div className="dwc-ocr-feeders">
+                <span className="text-muted2">Feeders</span>
+                {ocrDraft.feeders.map((f, idx) => (
+                  <div key={f.feederNo} className="dwc-ocr-feeder-row">
+                    <span className="num">FD{f.feederNo}</span>
+                    <input
+                      value={f.yarnType}
+                      onChange={(e) => updateOcrFeeder(idx, { yarnType: e.target.value.toUpperCase() })}
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {ocrDraft.weftRows.length ? (
+              <div className="dwc-ocr-weft">
+                <span className="text-muted2">Pick / Strings</span>
+                {ocrDraft.weftRows.map((row, idx) => (
+                  <div key={idx} className="dwc-ocr-weft-row">
+                    <span className="num">#{idx + 1}</span>
+                    <label>
+                      PIC
+                      <input
+                        className="num"
+                        value={row.pic}
+                        onChange={(e) => updateOcrWeftRow(idx, { pic: e.target.value })}
+                      />
+                    </label>
+                    <label>
+                      Strings
+                      <input
+                        className="num"
+                        value={row.strings}
+                        onChange={(e) => updateOcrWeftRow(idx, { strings: e.target.value })}
+                      />
+                    </label>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {canWriteCosting ? (
+              <button type="button" className="btn-warp" onClick={reapplyOcrToCosting}>
+                Apply to Costing Rows
+              </button>
+            ) : null}
+          </div>
+        ) : null}
 
         {gmailMeta ? (
           <div className="dto-gmail-import-meta surface">
@@ -426,7 +643,7 @@ export function DinIntakeScreen({ onNavigate }: Props) {
       {showGmailImport && gmailStatus ? (
         <GmailImportPanel
           senders={gmailStatus.senders}
-          onImported={applyGmailImport}
+          onImported={(r) => void applyGmailImport(r)}
           onViewDesign={(dinId) => onNavigate({ screen: 'dto-hub', module: 'design-to-order', filter: dinId })}
           onClose={() => setShowGmailImport(false)}
         />
@@ -580,7 +797,7 @@ export function DinIntakeScreen({ onNavigate }: Props) {
 
         <div className="dto-form-actions">
           <span className="text-muted">Logged in as {profile?.full_name || 'User'}</span>
-          <button type="submit" className="primary-save" disabled={busy || uploading}>
+          <button type="submit" className="primary-save" disabled={busy || uploading || readingDesign}>
             Save DESIGN
           </button>
         </div>
