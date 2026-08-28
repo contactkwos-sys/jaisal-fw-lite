@@ -14,6 +14,12 @@
   color: var(--rm-accent);
 }
 
+.rm-custom-tag {
+  font-size: 0.75rem;
+  font-weight: 500;
+  margin-left: 0.25rem;
+}
+
 .rm-top-bar {
   display: flex;
   flex-wrap: wrap;

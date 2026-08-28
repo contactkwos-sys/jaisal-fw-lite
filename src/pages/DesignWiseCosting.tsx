@@ -31,7 +31,7 @@ import {
   fetchAllRates,
   formatDisplayDate as formatRateDate,
   gstLabel,
-  lookupRate,
+  lookupRateForCosting,
   type RateMasterRow,
 } from '../lib/rateMaster'
 import { rateMasterItemNames } from '../lib/dinIntakeCosting'
@@ -229,7 +229,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
   const applyWarpRateFromMaster = useCallback(
     (row: WarpDraft): WarpDraft => {
       if (!row.yarn_name.trim() || !costingDate) return row
-      const found = lookupRate(masterRates, 'warp', row.yarn_name, costingDate, { denier: row.denier })
+      const found = lookupRateForCosting(masterRates, 'warp', row.yarn_name, costingDate, { denier: row.denier })
       if (!found) return row
       return {
         ...row,
@@ -249,7 +249,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
   const applyWeftRateFromMaster = useCallback(
     (row: WeftDraft): WeftDraft => {
       if (!row.weft_name.trim() || !costingDate) return row
-      const found = lookupRate(masterRates, 'weft', row.weft_name, costingDate, { denier: row.denier })
+      const found = lookupRateForCosting(masterRates, 'weft', row.weft_name, costingDate, { denier: row.denier })
       if (!found) return row
       return {
         ...row,
@@ -998,8 +998,8 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         prev.map((row) => {
           if (row.rate_source === 'manual') return row
           if (!row.yarn_name.trim()) return row
-          const found = lookupRate(rates, 'warp', row.yarn_name, costingDate, { denier: row.denier })
-          if (!found) return row
+          const found = lookupRateForCosting(rates, 'warp', row.yarn_name, costingDate, { denier: row.denier })
+          if (!found) return { ...row, rate_per_kg: '', rate_source: undefined, rate_master_id: undefined }
           return {
             ...row,
             rate_per_kg: String(found.calc.effectiveRate),
@@ -1017,8 +1017,8 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         prev.map((row) => {
           if (row.rate_source === 'manual') return row
           if (!row.weft_name.trim()) return row
-          const found = lookupRate(rates, 'weft', row.weft_name, costingDate, { denier: row.denier })
-          if (!found) return row
+          const found = lookupRateForCosting(rates, 'weft', row.weft_name, costingDate, { denier: row.denier })
+          if (!found) return { ...row, rate_per_kg: '', rate_source: undefined, rate_master_id: undefined }
           return {
             ...row,
             rate_per_kg: String(found.calc.effectiveRate),
@@ -1038,6 +1038,23 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     } finally {
       setBusy(false)
     }
+  }
+
+  function openRateMasterForItem(category: 'warp' | 'weft', itemName: string) {
+    if (!onNavigate) return
+    onNavigate({ screen: 'rate-master', module: 'masters', filter: `add:${category}:${itemName}` })
+  }
+
+  function isWarpRateMissing(row: WarpDraft): boolean {
+    if (isLocked || !row.yarn_name.trim()) return false
+    if (row.rate_source === 'manual' && n(row.rate_per_kg) > 0) return false
+    return !lookupRateForCosting(masterRates, 'warp', row.yarn_name, costingDate, { denier: row.denier })
+  }
+
+  function isWeftRateMissing(row: WeftDraft): boolean {
+    if (isLocked || !row.weft_name.trim()) return false
+    if (row.rate_source === 'manual' && n(row.rate_per_kg) > 0) return false
+    return !lookupRateForCosting(masterRates, 'weft', row.weft_name, costingDate, { denier: row.denier })
   }
 
   if (!canView) {
@@ -1113,6 +1130,15 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
             {missingRates.map((m, i) => (
               <li key={`${m.category}-${m.itemName}-${i}`}>
                 Rate not available in Rate Master for <strong>{m.itemName}</strong> ({m.category})
+                {onNavigate ? (
+                  <button
+                    type="button"
+                    className="btn-link dwc-add-rate-link"
+                    onClick={() => openRateMasterForItem(m.category, m.itemName)}
+                  >
+                    Add Rate
+                  </button>
+                ) : null}
               </li>
             ))}
           </ul>
@@ -1430,6 +1456,22 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
                         </small>
                       ) : row.rate_source === 'manual' ? (
                         <small className="dwc-rate-meta text-muted">Manual Override</small>
+                      ) : isWarpRateMissing(row) ? (
+                        <small className="dwc-rate-missing">
+                          Rate not available in Rate Master
+                          {onNavigate ? (
+                            <>
+                              {' '}
+                              <button
+                                type="button"
+                                className="btn-link"
+                                onClick={() => openRateMasterForItem('warp', row.yarn_name)}
+                              >
+                                Add Rate
+                              </button>
+                            </>
+                          ) : null}
+                        </small>
                       ) : null}
                     </td>
                     <td>
@@ -1615,6 +1657,22 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
                         </small>
                       ) : row.rate_source === 'manual' ? (
                         <small className="dwc-rate-meta text-muted">Manual Override</small>
+                      ) : isWeftRateMissing(row) ? (
+                        <small className="dwc-rate-missing">
+                          Rate not available in Rate Master
+                          {onNavigate ? (
+                            <>
+                              {' '}
+                              <button
+                                type="button"
+                                className="btn-link"
+                                onClick={() => openRateMasterForItem('weft', row.weft_name)}
+                              >
+                                Add Rate
+                              </button>
+                            </>
+                          ) : null}
+                        </small>
                       ) : null}
                     </td>
                     <td>

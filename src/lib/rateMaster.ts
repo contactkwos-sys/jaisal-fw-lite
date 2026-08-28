@@ -145,6 +145,60 @@ export function pickLatestRate(
   )
 }
 
+/** True for catalogue "Others" rows — must not auto-apply to DIN Costing. */
+export function isOthersRateItem(itemName: string): boolean {
+  const n = normalizeItemName(itemName)
+  return n === normalizeItemName('Others (Warp)') || n === normalizeItemName('Others (Weft)')
+}
+
+/** DIN Costing: rate is usable when basic_rate > 0 (excludes unset / placeholder rows). */
+export function isUsableCostingRate(row: RateMasterRow): boolean {
+  return row.basic_rate > 0
+}
+
+/**
+ * Strict rate lookup for DIN Costing — no "Others" fallback, no ₹0 placeholder rates.
+ * Supports partial name match (e.g. OCR "HSY" → "440 HSY") when basic_rate > 0.
+ */
+export function lookupRateForCosting(
+  rates: RateMasterRow[],
+  category: RateCategory,
+  yarnName: string,
+  asOfDate: string,
+  opts?: { denier?: string; supplier?: string },
+): RateLookupResult | null {
+  const trimmed = yarnName.trim()
+  if (!trimmed) return null
+
+  const exact = pickLatestRate(rates, category, trimmed, asOfDate, opts)
+  if (exact && !isOthersRateItem(exact.item_name) && isUsableCostingRate(exact)) {
+    return { row: exact, calc: calcEffectiveRate(exact.basic_rate, exact.gst_percent, exact.freight_per_kg) }
+  }
+
+  const yarnNorm = normalizeItemName(trimmed)
+  const partial = rates
+    .filter(
+      (r) =>
+        r.category === category &&
+        r.is_active &&
+        r.effective_from <= asOfDate &&
+        !isOthersRateItem(r.item_name) &&
+        isUsableCostingRate(r) &&
+        (normalizeItemName(r.item_name).includes(yarnNorm) ||
+          yarnNorm.includes(normalizeItemName(r.item_name))),
+    )
+    .sort((a, b) => b.effective_from.localeCompare(a.effective_from))[0]
+
+  if (partial) {
+    return {
+      row: partial,
+      calc: calcEffectiveRate(partial.basic_rate, partial.gst_percent, partial.freight_per_kg),
+    }
+  }
+
+  return null
+}
+
 /** Fuzzy match: exact name, partial, then Others fallback */
 export function lookupRate(
   rates: RateMasterRow[],
@@ -340,4 +394,11 @@ export function formatDisplayDate(iso: string): string {
   const d = new Date(iso.includes('T') ? iso : `${iso}T00:00:00`)
   if (Number.isNaN(d.getTime())) return iso
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+/** All distinct active item names in Rate Master for a category (includes custom entries like MARBLE). */
+export function allRateMasterItemNames(rates: RateMasterRow[], category: RateCategory): string[] {
+  return [
+    ...new Set(rates.filter((r) => r.category === category && r.is_active).map((r) => r.item_name)),
+  ].sort((a, b) => a.localeCompare(b))
 }

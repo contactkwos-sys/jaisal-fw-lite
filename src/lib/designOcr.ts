@@ -7,7 +7,7 @@ import { emptyWeft, type WeftDraft, type WarpDraft } from './designWiseCosting'
 import {
   applyWeftItemFromMaster,
 } from './dinIntakeCosting'
-import { lookupRate, type RateMasterRow } from './rateMaster'
+import { lookupRateForCosting, type RateMasterRow } from './rateMaster'
 import { supabase } from './supabase'
 
 export type DesignImportSource = 'gmail' | 'photo' | 'file' | 'direct' | 'diary'
@@ -429,14 +429,14 @@ export function detectMissingRates(
     const name = row.yarn_name.trim()
     if (!name) return
     if (row.rate_source === 'manual' && n(row.rate_per_kg) > 0) return
-    const found = lookupRate(rates, 'warp', name, costingDate, { denier: row.denier })
+    const found = lookupRateForCosting(rates, 'warp', name, costingDate, { denier: row.denier })
     if (!found && !n(row.rate_per_kg)) missing.push({ category: 'warp', itemName: name, rowIndex: idx })
   })
   wefts.forEach((row, idx) => {
     const name = row.weft_name.trim()
     if (!name) return
     if (row.rate_source === 'manual' && n(row.rate_per_kg) > 0) return
-    const found = lookupRate(rates, 'weft', name, costingDate, { denier: row.denier })
+    const found = lookupRateForCosting(rates, 'weft', name, costingDate, { denier: row.denier })
     if (!found && !n(row.rate_per_kg)) missing.push({ category: 'weft', itemName: name, rowIndex: idx })
   })
   return missing

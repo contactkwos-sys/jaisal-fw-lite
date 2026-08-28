@@ -833,6 +833,17 @@
   gap: 0.5rem;
 }
 
+.dwc-rate-missing {
+  display: block;
+  color: var(--danger, #c0392b);
+  font-size: 0.78rem;
+  margin-top: 0.25rem;
+}
+
+.dwc-add-rate-link {
+  margin-left: 0.35rem;
+}
+
 @media (max-width: 768px) {
   .dwc-import-actions {
     grid-template-columns: 1fr 1fr;
