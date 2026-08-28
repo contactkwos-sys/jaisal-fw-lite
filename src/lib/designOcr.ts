@@ -8,6 +8,7 @@ import {
   applyWeftItemFromMaster,
 } from './dinIntakeCosting'
 import { lookupRateForCosting, type RateMasterRow } from './rateMaster'
+import { uploadDinStorageObject } from './dinStorage'
 import { supabase } from './supabase'
 
 export type DesignImportSource = 'gmail' | 'photo' | 'file' | 'direct' | 'diary'
@@ -505,14 +506,17 @@ export async function uploadDesignReferenceImage(
   const ext = file.name.split('.').pop() || 'jpg'
   const folder = source === 'gmail' ? 'gmail' : source
   const path = `${folder}/${Date.now()}-${crypto.randomUUID()}.${ext}`
-  const bucket = source === 'diary' ? 'costing-diary-images' : 'din-images'
-  const { error } = await supabase.storage.from(bucket).upload(path, file, {
-    upsert: false,
-    contentType: file.type || undefined,
-  })
-  if (error) throw error
-  const { data: pub } = supabase.storage.from(bucket).getPublicUrl(path)
-  return pub.publicUrl
+  if (source === 'diary') {
+    const { error } = await supabase.storage.from('costing-diary-images').upload(path, file, {
+      upsert: false,
+      contentType: file.type || undefined,
+    })
+    if (error) throw error
+    const { data: pub } = supabase.storage.from('costing-diary-images').getPublicUrl(path)
+    return pub.publicUrl
+  }
+
+  return uploadDinStorageObject(path, file)
 }
 
 /** Fetch image from URL (Gmail import) and run OCR. */
