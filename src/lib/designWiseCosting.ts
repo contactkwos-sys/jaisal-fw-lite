@@ -16,7 +16,10 @@ export const DEFAULT_CUSTOMER_USABLE_MTR = 100
 
 /**
  * Costing denier offset: Working/Costing Denier = Base (Entered) Denier + 10.
- * Always derived from base_denier — never re-add on Recalculate.
+ * ONLY derived from base_denier — never add offset to costing denier / denier column.
+ * Recalculate must re-derive from the same base (300 → 310 forever, never 320).
+ *
+ * DB fields: base_denier (entered) + denier (costing_denier snapshot = base + 10).
  */
 export const DENIER_COSTING_OFFSET = 10
 
@@ -33,13 +36,39 @@ export function costingDenierFromBase(baseDenier: string | number | null | undef
 }
 
 /**
+ * Coerce an incoming denier candidate into a true BASE denier.
+ * If Rate Master / legacy data already stored costing (name 300 + candidate 310),
+ * recover the yarn-name base so we never do 300 → 310 → 320.
+ */
+export function coerceBaseDenier(
+  candidate: string | number | null | undefined,
+  yarnName?: string | null,
+): string {
+  const raw = candidate == null ? '' : String(candidate).trim()
+  if (!raw || /^same$/i.test(raw)) {
+    const fromName = resolveDenierForCalc('Same', yarnName)
+    return fromName > 0 ? String(fromName) : ''
+  }
+  const cand = n(raw)
+  if (!(cand > 0)) return ''
+  const fromName = resolveDenierForCalc('', yarnName)
+  // Candidate already looks like costing denier of the yarn-name base → use name base
+  if (fromName > 0 && cand === fromName + DENIER_COSTING_OFFSET) {
+    return String(fromName)
+  }
+  return String(cand)
+}
+
+/**
  * Resolve denier used in weight formulas.
- * Prefer base_denier → base + 10. Legacy rows without base_denier use denier as-is
- * (or catalogue "Same" → number from yarn name) — avoids re-applying +10 on historical data.
+ * Prefer base_denier → base + 10 (ONCE). Legacy rows without base_denier use denier as-is
+ * — never add +10 on top of an already-stored costing denier.
  */
 export function resolveCostingDenier(row: {
   base_denier?: string | null
   denier?: string | number | null
+  /** Alias: denier column stores costing_denier */
+  costing_denier?: string | number | null
   yarn_name?: string | null
   weft_name?: string | null
 }): number {
@@ -47,18 +76,36 @@ export function resolveCostingDenier(row: {
   if (baseRaw != null && String(baseRaw).trim() !== '') {
     return costingDenierFromBase(baseRaw)
   }
-  return resolveDenierForCalc(row.denier, row.yarn_name || row.weft_name)
+  // Legacy / snapshot only — use stored costing denier as-is (NO second +10)
+  const stored = row.denier ?? row.costing_denier
+  return resolveDenierForCalc(stored, row.yarn_name || row.weft_name)
 }
 
 /** Display string for costing denier column. */
 export function formatCostingDenier(row: {
   base_denier?: string | null
   denier?: string | number | null
+  costing_denier?: string | number | null
   yarn_name?: string | null
   weft_name?: string | null
 }): string {
   const c = resolveCostingDenier(row)
   return c > 0 ? String(c) : ''
+}
+
+/**
+ * Persistable costing denier for DB `denier` column (generated weight formulas).
+ * Always base + 10 when base set; never adds offset to an existing costing value.
+ */
+export function persistCostingDenier(
+  row: { base_denier?: string | null; denier?: string | number | null },
+  yarnName?: string | null,
+): number | null {
+  if (row.base_denier != null && String(row.base_denier).trim() !== '') {
+    const costing = costingDenierFromBase(row.base_denier)
+    return costing > 0 ? costing : null
+  }
+  return denierForDb(row.denier, yarnName)
 }
 
 /**
@@ -333,8 +380,9 @@ export function emptyWeft(
 }
 
 /**
- * Apply base denier edit: store base separately and sync costing denier = base + 10.
- * Recalculate always re-derives from base — never base+10+10.
+ * Apply base denier edit from the user: store base as typed and sync costing = base + 10.
+ * Does NOT coerce — if the user enters 310 as base, costing is 320 (once).
+ * Recalculate re-derives from the same base — never stacks.
  */
 export function withBaseDenier<T extends { base_denier: string; denier: string }>(
   row: T,
@@ -347,6 +395,40 @@ export function withBaseDenier<T extends { base_denier: string; denier: string }
     base_denier: trimmed,
     denier: costing > 0 ? String(costing) : '',
   }
+}
+
+/**
+ * Re-sync costing denier from stored base (idempotent).
+ * Safe to call on Recalculate / load / save — never stacks +10.
+ */
+export function syncCostingDenierFromBase<T extends { base_denier: string; denier: string }>(
+  row: T,
+): T {
+  if (!row.base_denier.trim()) return row
+  return withBaseDenier(row, row.base_denier)
+}
+
+/**
+ * Fill base denier from Rate Master / catalogue / OCR only when empty.
+ * Coerces mistaken costing values (RM seed 310 for "300 Tex" → base 300).
+ * Never overwrites an existing base (prevents stacking on Recalculate).
+ */
+export function ensureBaseDenier<T extends { base_denier: string; denier: string }>(
+  row: T,
+  candidateBase: string,
+  yarnName?: string | null,
+): T {
+  if (row.base_denier.trim()) return syncCostingDenierFromBase(row)
+  const fromRow =
+    'yarn_name' in row
+      ? String((row as { yarn_name?: string }).yarn_name || '')
+      : 'weft_name' in row
+        ? String((row as { weft_name?: string }).weft_name || '')
+        : ''
+  const yarn = (yarnName != null && String(yarnName).trim() !== '' ? String(yarnName) : fromRow) || undefined
+  const base = coerceBaseDenier(candidateBase, yarn)
+  if (!base) return row
+  return withBaseDenier(row, base)
 }
 
 export function computeWarpRow(row: WarpDraft) {

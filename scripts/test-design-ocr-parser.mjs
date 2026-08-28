@@ -4,7 +4,8 @@
  */
 
 const DESIGN_NO_HYPHEN_RE = /\b([A-Z]{2,5})[\s\-]+(\d{3,6})(?:-[A-Za-z0-9]+)?\b/gi
-const LOOM_PICK_RE = /(?:loom[\s-]*pick|loom\s*pick)[\s:=-]*(\d+(?:\.\d+)?)/i
+const LOOM_PICK_RE = /(?:total\s+)?(?:loom[\s-]*pick|loom\s*pick)[\s:=-]*(\d+(?:\.\d+)?)/i
+const TOTAL_LOOM_PICK_RE = /total\s+loom[\s-]*pick[\s:=-]*(\d+(?:\.\d+)?)/i
 const FEEDER_RE = /(?:feeder|fd)[\s.-]*(\d+)\s*[=:\-]?\s*([A-Z0-9][A-Z0-9./-]{0,15})/gi
 const PICK_STRINGS_HEADER = /pick\s*strings/i
 const TOTAL_LINE_RE = /^total\s*[:.]?\s*(\d+(?:\.\d+)?)\s*[/\s]\s*(\d+(?:\.\d+)?)/im
@@ -58,6 +59,9 @@ function extractTotals(text) {
 }
 
 function extractLoomPick(text) {
+  // Prefer TOTAL LOOM PICK — never invent from Σ Colour PIC
+  const totalLoom = text.match(TOTAL_LOOM_PICK_RE)
+  if (totalLoom?.[1]) return totalLoom[1]
   const loom = text.match(LOOM_PICK_RE)
   if (loom?.[1]) return loom[1]
   const totals = extractTotals(text)
@@ -234,4 +238,20 @@ assert(colour.weftRows[2].pic === '37', 'Colour 3 pick')
 assert(colour.totalPick === '112' && colour.totalStrings === '1116', 'Colour sheet totals')
 assert(isBlankYarnName('-') && !isBlankYarnName('ZARI'), 'Blank yarn helper')
 
-console.log('✓ Design OCR parser tests passed (A/B + hyphen + Colour 112-pick sheet)')
+/** JFG2249 acceptance — TOTAL LOOM PICK separate from Colour PIC sum */
+const formatJfg2249 = `
+Design Number: JFG2249
+TOTAL LOOM PICK = 112
+Colour 1  300 Tex   25   2000
+Colour 2  ZARI      25   2000
+`
+assert(extractDesignNumbers(formatJfg2249) === 'JFG2249', 'JFG2249 Design Number')
+assert(extractLoomPick(formatJfg2249) === '112', 'JFG2249 TOTAL LOOM PICK = 112')
+const jfgColour = extractColourTable(formatJfg2249)
+assert(jfgColour.feeders.length === 2, 'JFG2249 2 colour rows')
+assert(jfgColour.weftRows[0].pic === '25' && jfgColour.weftRows[1].pic === '25', 'JFG2249 colour PICs')
+const weftPicSum = jfgColour.weftRows.reduce((s, r) => s + Number(r.pic), 0)
+assert(weftPicSum === 50, 'JFG2249 Total Weft PIC = 50')
+assert(extractLoomPick(formatJfg2249) !== String(weftPicSum), 'Loom Pick must not equal Weft PIC sum')
+
+console.log('✓ Design OCR parser tests passed (A/B + hyphen + Colour 112-pick + JFG2249)')

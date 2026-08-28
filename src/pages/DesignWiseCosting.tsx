@@ -14,9 +14,9 @@ import {
   computeWarpRow,
   computeWeftRow,
   computeWastageParams,
-  denierForDb,
   emptyWarp,
   emptyWeft,
+  ensureBaseDenier,
   finalCostAuditLine,
   finalCostHint,
   formatCostingDenier,
@@ -26,6 +26,8 @@ import {
   loomPickWeftPicWarning,
   n,
   parseDiaryNumbers,
+  persistCostingDenier,
+  syncCostingDenierFromBase,
   withBaseDenier,
   type WarpDraft,
   type WeftDraft,
@@ -243,13 +245,12 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     (row: WarpDraft): WarpDraft => {
       if (!row.yarn_name.trim() || !costingDate) return row
       const found = lookupRateForCosting(masterRates, 'warp', row.yarn_name, costingDate, {
-        denier: row.base_denier || row.denier,
+        denier: row.base_denier || undefined,
       })
-      if (!found) return row
-      let next = { ...row }
-      if (!next.base_denier.trim() && found.row.denier && found.row.denier.toLowerCase() !== 'same') {
-        const base = String(found.row.denier).trim()
-        if (Number(base) > 0) next = withBaseDenier(next, base)
+      if (!found) return syncCostingDenierFromBase(row)
+      let next = syncCostingDenierFromBase(row)
+      if (found.row.denier) {
+        next = ensureBaseDenier(next, String(found.row.denier), row.yarn_name)
       }
       return {
         ...next,
@@ -270,15 +271,19 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     (row: WeftDraft): WeftDraft => {
       if (!row.weft_name.trim() || !costingDate) return row
       const found = lookupRateForCosting(masterRates, 'weft', row.weft_name, costingDate, {
-        denier: row.base_denier || row.denier,
+        denier: row.base_denier || undefined,
       })
-      if (!found) return row
-      let next = { ...row }
-      if (!next.width) next.width = String(DEFAULT_WIDTH)
-      if (!next.length_mtr) next.length_mtr = String(DEFAULT_LENGTH_MTR)
-      if (!next.base_denier.trim() && found.row.denier && found.row.denier.toLowerCase() !== 'same') {
-        const base = String(found.row.denier).trim()
-        if (Number(base) > 0) next = withBaseDenier(next, base)
+      if (!found) {
+        let next = syncCostingDenierFromBase(row)
+        if (!next.width) next = { ...next, width: String(DEFAULT_WIDTH) }
+        if (!next.length_mtr) next = { ...next, length_mtr: String(DEFAULT_LENGTH_MTR) }
+        return next
+      }
+      let next = syncCostingDenierFromBase(row)
+      if (!next.width) next = { ...next, width: String(DEFAULT_WIDTH) }
+      if (!next.length_mtr) next = { ...next, length_mtr: String(DEFAULT_LENGTH_MTR) }
+      if (found.row.denier) {
+        next = ensureBaseDenier(next, String(found.row.denier), row.weft_name)
       }
       return {
         ...next,
@@ -487,39 +492,44 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
 
       const mappedWarps: WarpDraft[] =
         (warpRows ?? []).length > 0
-          ? (warpRows ?? []).map((r, i) => ({
-              key: r.id || crypto.randomUUID(),
-              sr_no: r.sr_no ?? i + 1,
-              yarn_name: r.yarn_name || '',
-              base_denier: r.base_denier != null ? String(r.base_denier) : '',
-              denier: r.denier != null ? String(r.denier) : '',
-              tar_ends: r.tar_ends != null ? String(r.tar_ends) : '',
-              length_mtr: r.length_mtr != null ? String(r.length_mtr) : String(DEFAULT_LENGTH_MTR),
-              rate_per_kg: r.rate_per_kg != null ? String(r.rate_per_kg) : '',
-              // Drafts without explicit manual flag re-bind to Rate Master on refresh
-              rate_source:
-                r.rate_source === 'manual'
-                  ? 'manual'
-                  : r.rate_source === 'rate_master' || r.rate_master_id
-                    ? 'rate_master'
-                    : r.rate_per_kg != null
+          ? (warpRows ?? []).map((r, i) => {
+              const base = r.base_denier != null ? String(r.base_denier) : ''
+              const row: WarpDraft = {
+                key: r.id || crypto.randomUUID(),
+                sr_no: r.sr_no ?? i + 1,
+                yarn_name: r.yarn_name || '',
+                base_denier: base,
+                denier: r.denier != null ? String(r.denier) : '',
+                tar_ends: r.tar_ends != null ? String(r.tar_ends) : '',
+                length_mtr: r.length_mtr != null ? String(r.length_mtr) : String(DEFAULT_LENGTH_MTR),
+                rate_per_kg: r.rate_per_kg != null ? String(r.rate_per_kg) : '',
+                // Drafts without explicit manual flag re-bind to Rate Master on refresh
+                rate_source:
+                  r.rate_source === 'manual'
+                    ? 'manual'
+                    : r.rate_source === 'rate_master' || r.rate_master_id
                       ? 'rate_master'
-                      : '',
-              rate_master_id: r.rate_master_id || undefined,
-            }))
+                      : r.rate_per_kg != null
+                        ? 'rate_master'
+                        : '',
+                rate_master_id: r.rate_master_id || undefined,
+              }
+              return base ? syncCostingDenierFromBase(row) : row
+            })
           : [emptyWarp(1)]
 
       const mappedWefts: WeftDraft[] =
         (weftRows ?? []).length > 0
           ? (weftRows ?? []).map((r, i) => {
               const feederNo = r.feeder_no != null ? Number(r.feeder_no) : i + 1
-              return {
+              const base = r.base_denier != null ? String(r.base_denier) : ''
+              const row: WeftDraft = {
                 key: r.id || crypto.randomUUID(),
                 sr_no: r.sr_no ?? i + 1,
                 feeder_label: r.feeder_label || `Colour ${feederNo}`,
                 feeder_no: Number.isFinite(feederNo) ? feederNo : i + 1,
                 weft_name: r.weft_name || '',
-                base_denier: r.base_denier != null ? String(r.base_denier) : '',
+                base_denier: base,
                 denier: r.denier != null ? String(r.denier) : '',
                 pic: r.pic != null ? String(r.pic) : '',
                 width: r.width != null ? String(r.width) : String(DEFAULT_WIDTH),
@@ -536,6 +546,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
                 rate_master_id: r.rate_master_id || undefined,
                 strings_ref: r.strings_ref != null ? String(r.strings_ref) : '',
               }
+              return base ? syncCostingDenierFromBase(row) : row
             })
           : [emptyWeft(1)]
 
@@ -682,16 +693,16 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
       const parsed = parseDiaryNumbers(text)
       if (parsed.denier || parsed.tar || parsed.length || parsed.pic || parsed.width) {
         setWarps((prev) => {
-          const row = { ...prev[0] }
-          if (parsed.denier) row.denier = parsed.denier
+          let row = { ...prev[0] }
+          if (parsed.denier) row = withBaseDenier(row, parsed.denier)
           if (parsed.tar) row.tar_ends = parsed.tar
           if (parsed.length) row.length_mtr = parsed.length
           if (parsed.rate) row.rate_per_kg = parsed.rate
           return [row, ...prev.slice(1)]
         })
         setWefts((prev) => {
-          const row = { ...prev[0] }
-          if (parsed.denier && !parsed.tar) row.denier = parsed.denier
+          let row = { ...prev[0] }
+          if (parsed.denier && !parsed.tar) row = withBaseDenier(row, parsed.denier)
           if (parsed.pic) row.pic = parsed.pic
           if (parsed.width) row.width = parsed.width
           if (parsed.length) row.length_mtr = parsed.length
@@ -956,13 +967,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
       const persistDenier = (
         row: { base_denier?: string; denier: string },
         yarnName: string,
-      ): number | null => {
-        if (row.base_denier != null && String(row.base_denier).trim() !== '') {
-          const base = n(row.base_denier)
-          return base > 0 ? base + 10 : null
-        }
-        return denierForDb(row.denier, yarnName)
-      }
+      ): number | null => persistCostingDenier(row, yarnName)
 
       const warpPayload = warpsToSave.map((row, i) => ({
         costing_id: costingId,
@@ -1276,12 +1281,15 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
       setMasterRates(rates)
       setWarps((prev) =>
         prev.map((row) => {
-          if (row.rate_source === 'manual') return row
-          if (!row.yarn_name.trim()) return row
-          const found = lookupRateForCosting(rates, 'warp', row.yarn_name, costingDate, { denier: row.denier })
-          if (!found) return { ...row, rate_per_kg: '', rate_source: undefined, rate_master_id: undefined }
+          const synced = syncCostingDenierFromBase(row)
+          if (synced.rate_source === 'manual') return synced
+          if (!synced.yarn_name.trim()) return synced
+          const found = lookupRateForCosting(rates, 'warp', synced.yarn_name, costingDate, {
+            denier: synced.base_denier || undefined,
+          })
+          if (!found) return { ...synced, rate_per_kg: '', rate_source: undefined, rate_master_id: undefined }
           return {
-            ...row,
+            ...synced,
             rate_per_kg: String(found.calc.effectiveRate),
             rate_source: 'rate_master' as const,
             rate_master_id: found.row.id,
@@ -1295,13 +1303,16 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
       )
       setWefts((prev) =>
         prev.map((row) => {
-          if (row.rate_source === 'manual') return row
-          const name = row.weft_name.trim()
-          if (!name || name === '-' || name === '—' || name === '–') return row
-          const found = lookupRateForCosting(rates, 'weft', name, costingDate, { denier: row.denier })
-          if (!found) return { ...row, rate_per_kg: '', rate_source: undefined, rate_master_id: undefined }
+          const synced = syncCostingDenierFromBase(row)
+          if (synced.rate_source === 'manual') return synced
+          const name = synced.weft_name.trim()
+          if (!name || name === '-' || name === '—' || name === '–') return synced
+          const found = lookupRateForCosting(rates, 'weft', name, costingDate, {
+            denier: synced.base_denier || undefined,
+          })
+          if (!found) return { ...synced, rate_per_kg: '', rate_source: undefined, rate_master_id: undefined }
           return {
-            ...row,
+            ...synced,
             rate_per_kg: String(found.calc.effectiveRate),
             rate_source: 'rate_master' as const,
             rate_master_id: found.row.id,
@@ -1361,7 +1372,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     if (isLocked || !row.yarn_name.trim()) return false
     if (row.rate_source === 'manual' && n(row.rate_per_kg) > 0) return false
     return !lookupRateForCosting(masterRates, 'warp', row.yarn_name, costingDate, {
-      denier: row.base_denier || row.denier,
+      denier: row.base_denier || undefined,
     })
   }
 
@@ -1369,7 +1380,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     if (isLocked || !row.weft_name.trim()) return false
     if (row.rate_source === 'manual' && n(row.rate_per_kg) > 0) return false
     return !lookupRateForCosting(masterRates, 'weft', row.weft_name, costingDate, {
-      denier: row.base_denier || row.denier,
+      denier: row.base_denier || undefined,
     })
   }
 
@@ -2137,37 +2148,40 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
       </section>
 
       <section className="dwc-panel dwc-summary-panel">
-        <h2 className="section-title">Weight &amp; Yarn Amount Summary</h2>
+        <h2 className="section-title">INTERNAL COST — 110 Meter Basis</h2>
         <div className="dwc-totals-grid">
           <div>
-            <span className="text-muted">Total Warp Weight (kg)</span>
+            <span className="text-muted">Total Warp Weight (kg) · 110m</span>
             <strong className="num">{fmtQty(buildup.totalWarpWeightKg)}</strong>
           </div>
           <div>
-            <span className="text-muted">Total Weft Weight (kg)</span>
+            <span className="text-muted">Total Weft Weight (kg) · 110m</span>
             <strong className="num">{fmtQty(buildup.totalWeftWeightKg)}</strong>
           </div>
           <div>
-            <span className="text-muted">Total Yarn Weight (kg)</span>
+            <span className="text-muted">Total Yarn Weight (kg) · 110m</span>
             <strong className="num dwc-emphasis">{fmtQty(buildup.totalWeightKg)}</strong>
           </div>
           <div>
-            <span className="text-muted">Total Warp Amount (₹)</span>
+            <span className="text-muted">Total Warp Amount (₹) · 110m</span>
             <strong className="num">{fmtMoney(buildup.totalWarpAmount)}</strong>
           </div>
           <div>
-            <span className="text-muted">Total Weft Amount (₹)</span>
+            <span className="text-muted">Total Weft Amount (₹) · 110m</span>
             <strong className="num">{fmtMoney(buildup.totalWeftAmount)}</strong>
           </div>
           <div>
-            <span className="text-muted">Total Yarn Amount (₹)</span>
+            <span className="text-muted">INTERNAL Total Yarn Cost (₹) · 110m basis</span>
             <strong className="num dwc-emphasis">{fmtMoney(buildup.totalYarnAmount)}</strong>
           </div>
         </div>
       </section>
 
       <section className="dwc-panel dwc-buildup">
-        <h2 className="section-title">Per Meter Costing Buildup (100 mtr basis)</h2>
+        <h2 className="section-title">CUSTOMER SELLING RATE — 100 Meter Basis</h2>
+        <p className="dwc-hint" style={{ marginTop: 0 }}>
+          Internal yarn + weaving on 110m production ÷ 100 usable meters (factor 1.10)
+        </p>
         <div className="dwc-buildup-grid">
           <label className="field">
             <span className="text-muted">

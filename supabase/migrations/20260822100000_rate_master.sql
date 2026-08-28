@@ -75,7 +75,7 @@ begin
       ('weft', '440 HSY', 'Same', null, 0, 5, 0, 2.25, 2.25, current_date),
       ('weft', '550 HSY', 'Same', null, 0, 5, 0, 2.25, 2.25, current_date),
       ('weft', '660 HSY', 'Same', null, 0, 5, 0, 2.25, 2.25, current_date),
-      ('weft', '300 Tex', '310', 'Santosh Zari', 195, 5, 9.75, 2.25, 207.00, current_date),
+      ('weft', '300 Tex', '300', 'Santosh Zari', 195, 5, 9.75, 2.25, 207.00, current_date),
       ('weft', '300 NSY', null, null, 0, 5, 0, 2.25, 2.25, current_date),
       ('weft', 'Others (Weft)', null, null, 0, 5, 0, 2.25, 2.25, current_date);
   end if;

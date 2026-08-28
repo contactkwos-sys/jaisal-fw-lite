@@ -7,11 +7,12 @@ import {
   DEFAULT_LENGTH_MTR,
   DEFAULT_WIDTH,
   computeBuildup,
-  denierForDb,
   emptyWarp,
   emptyWeft,
+  ensureBaseDenier,
+  persistCostingDenier,
   resolveDenierForCalc,
-  withBaseDenier,
+  syncCostingDenierFromBase,
   type WarpDraft,
   type WeftDraft,
 } from './designWiseCosting'
@@ -68,31 +69,39 @@ export function rateMasterItemNames(rates: RateMasterRow[], category: 'warp' | '
   return [...new Set([...fromCat, ...fromDb])].sort((a, b) => a.localeCompare(b))
 }
 
+/**
+ * Fill base denier once from catalogue / Rate Master / yarn name.
+ * Catalogue numeric base wins over a mistaken Rate Master costing value (e.g. seed 310).
+ * Uses ensureBaseDenier → coerceBaseDenier so 300 Tex + RM 310 → base 300, costing 310.
+ */
 function applyCatalogueOrMasterBaseDenier(
   row: WarpDraft | WeftDraft,
   yarnName: string,
   masterDenier: string | null | undefined,
   catalogueDenier?: string,
 ): WarpDraft | WeftDraft {
-  if (row.base_denier.trim()) return row
-  // Catalogue / master "Same" → numeric from yarn name → store as base (costing = base+10)
-  if (catalogueDenier && /^same$/i.test(catalogueDenier)) {
+  if (row.base_denier.trim()) return syncCostingDenierFromBase(row)
+
+  // "Same" → numeric from yarn name (HSY)
+  if (
+    (catalogueDenier && /^same$/i.test(catalogueDenier)) ||
+    (masterDenier && /^same$/i.test(masterDenier))
+  ) {
     const resolved = resolveDenierForCalc('Same', yarnName)
-    if (resolved > 0) return withBaseDenier(row, String(resolved))
+    if (resolved > 0) return ensureBaseDenier(row, String(resolved), yarnName)
   }
-  if (masterDenier && /^same$/i.test(masterDenier)) {
-    const resolved = resolveDenierForCalc('Same', yarnName)
-    if (resolved > 0) return withBaseDenier(row, String(resolved))
-  }
-  const fromMaster = rememberedBaseDenier(masterDenier)
-  if (fromMaster) return withBaseDenier(row, fromMaster)
+
+  // Prefer catalogue base denier (source of truth) over Rate Master denier
   const fromCat = rememberedBaseDenier(catalogueDenier)
-  if (fromCat) return withBaseDenier(row, fromCat)
-  // Blank denier but yarn name starts with a number (e.g. 300 Tex)
-  if (!row.denier.trim()) {
-    const fromName = resolveDenierForCalc('', yarnName)
-    if (fromName > 0) return withBaseDenier(row, String(fromName))
-  }
+  if (fromCat) return ensureBaseDenier(row, fromCat, yarnName)
+
+  const fromMaster = rememberedBaseDenier(masterDenier)
+  if (fromMaster) return ensureBaseDenier(row, fromMaster, yarnName)
+
+  // Yarn name starts with denier (e.g. 300 Tex) when nothing else set
+  const fromName = resolveDenierForCalc('', yarnName)
+  if (fromName > 0) return ensureBaseDenier(row, String(fromName), yarnName)
+
   return row
 }
 
@@ -107,7 +116,7 @@ export function applyWarpItemFromMaster(
   if (!name || !asOfDate) return next
   const cat = WARP_CATALOGUE.find((c) => c.item_name === name)
   const found = lookupRateForCosting(rates, 'warp', name, asOfDate, {
-    denier: next.base_denier || next.denier,
+    denier: next.base_denier || undefined,
   })
   next = applyCatalogueOrMasterBaseDenier(next, name, found?.row.denier, cat?.denier) as WarpDraft
   if (!found) return next
@@ -137,7 +146,7 @@ export function applyWeftItemFromMaster(
   if (!next.length_mtr) next.length_mtr = String(DEFAULT_LENGTH_MTR)
   const cat = WEFT_CATALOGUE.find((c) => c.item_name === name)
   const found = lookupRateForCosting(rates, 'weft', name, asOfDate, {
-    denier: next.base_denier || next.denier,
+    denier: next.base_denier || undefined,
   })
   next = applyCatalogueOrMasterBaseDenier(next, name, found?.row.denier, cat?.denier) as WeftDraft
   if (!found) return next
@@ -187,9 +196,8 @@ function mapWarpRow(r: Record<string, unknown>, i: number): WarpDraft {
     rate_source: (r.rate_source as WarpDraft['rate_source']) || undefined,
     rate_master_id: (r.rate_master_id as string) || undefined,
   }
-  // Legacy: only denier stored — treat as base so +10 applies going forward when user edits;
-  // until then resolveCostingDenier uses denier as-is when base_denier empty.
-  return row
+  // Re-derive costing from base (idempotent) — never trust a stacked denier snapshot
+  return base ? syncCostingDenierFromBase(row) : row
 }
 
 function mapWeftRow(r: Record<string, unknown>, i: number): WeftDraft {
@@ -198,7 +206,7 @@ function mapWeftRow(r: Record<string, unknown>, i: number): WeftDraft {
       ? String(r.base_denier)
       : ''
   const feederNo = r.feeder_no != null ? Number(r.feeder_no) : i + 1
-  return {
+  const row: WeftDraft = {
     key: crypto.randomUUID(),
     sr_no: Number(r.sr_no) || i + 1,
     feeder_label: String(r.feeder_label || `Colour ${feederNo}`),
@@ -214,6 +222,7 @@ function mapWeftRow(r: Record<string, unknown>, i: number): WeftDraft {
     rate_master_id: (r.rate_master_id as string) || undefined,
     strings_ref: r.strings_ref != null ? String(r.strings_ref) : '',
   }
+  return base ? syncCostingDenierFromBase(row) : row
 }
 
 export async function loadExistingCostingForDin(dinNumber: string): Promise<IntakeCostingDraft | null> {
@@ -334,16 +343,12 @@ function numericOrNull(v: string | number | null | undefined): number | null {
   return Number.isFinite(x) ? x : null
 }
 
-/** Persist denier for generated columns: prefer costing (base+10) when base set; else resolve Same. */
+/** Persist costing denier for DB `denier` column — always via central persistCostingDenier. */
 function persistDenier(
   row: { base_denier?: string; denier: string },
   yarnName: string,
 ): number | null {
-  if (row.base_denier != null && String(row.base_denier).trim() !== '') {
-    const base = Number(row.base_denier)
-    if (Number.isFinite(base) && base > 0) return base + 10
-  }
-  return denierForDb(row.denier, yarnName)
+  return persistCostingDenier(row, yarnName)
 }
 
 export async function saveIntakeCostingDraft(input: {
