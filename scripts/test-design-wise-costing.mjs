@@ -70,6 +70,20 @@ function weftWeightWithResolved(row) {
   return round2(weftWeightKg(denier, n(row.pic), n(row.width), n(row.length_mtr)))
 }
 
+function resolveProductionLengthMtr(designLength, warps, wefts, fallback = DEFAULT_LENGTH_MTR) {
+  const entered = n(designLength)
+  if (entered > 0) return entered
+  for (const row of wefts || []) {
+    const L = n(row.length_mtr)
+    if (L > 0) return L
+  }
+  for (const row of warps || []) {
+    const L = n(row.length_mtr)
+    if (L > 0) return L
+  }
+  return fallback > 0 ? fallback : DEFAULT_LENGTH_MTR
+}
+
 function computeWastageParams(enteredLengthMtr, wastageMtr = 10, wastagePercent = 10) {
   const entered = n(enteredLengthMtr)
   const wastage = n(wastageMtr)
@@ -123,7 +137,8 @@ function computeBuildup(
 
   const totalWeightKg = round2(totalWarpWeightKg + totalWeftWeightKg)
   const totalYarnAmount = round2(totalWarpAmount + totalWeftAmount)
-  const wastage = computeWastageParams(enteredLengthMtr, wastageMtr, wastagePercent)
+  const lengthForCosting = resolveProductionLengthMtr(enteredLengthMtr, warps, wefts)
+  const wastage = computeWastageParams(lengthForCosting, wastageMtr, wastagePercent)
   const usable = wastage.usableLengthMtr
   const yarnCostPerMtr = usable > 0 ? round2(totalYarnAmount / usable) : 0
   const conversionCharge = round2(totalPic * n(picConversionRate))
@@ -205,6 +220,15 @@ checks.push(['Strings-as-width would inflate weight (detect bug)', badW > goodW 
 checks.push(['Correct width 52 used in final case', wefts.every((w) => w.width === '52')])
 
 checks.push(['Customer meter = 110m cost ÷ 100', round2(6500 / 100) === 65])
+
+// Empty Design Length must NOT zero Yarn Cost/Mtr — fall back to row length / 110
+const rZeroLen = computeBuildup(warps, wefts, 0, 0.45, 0, 0)
+checks.push(['Empty length still usable 100', rZeroLen.usableLengthMtr === 100])
+checks.push([
+  'Empty length still has yarn ₹/mtr',
+  rZeroLen.yarnCostPerMtr === round2(rZeroLen.totalYarnAmount / 100) && rZeroLen.yarnCostPerMtr > 0,
+])
+checks.push(['Empty length still includes yarn in final', rZeroLen.finalCostPerMtr > rZeroLen.conversionCharge])
 
 checks.push(['resolveDenier Same + 440 HSY → 440', resolveDenierForCalc('Same', '440 HSY') === 440])
 checks.push(['resolveDenier Same + 300 Tex → 300', resolveDenierForCalc('Same', '300 Tex') === 300])
