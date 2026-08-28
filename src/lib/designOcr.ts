@@ -64,17 +64,38 @@ export type DesignOcrApplyResult = {
 }
 
 const DESIGN_NO_RE = /\b([A-Z]{2,5}\d{3,6})\b/g
-/** e.g. JFG-2249, jfg 2249 — normalized to JFG2249 */
-const DESIGN_NO_HYPHEN_RE = /\b([A-Z]{2,5})[\s\-]+(\d{3,6})\b/gi
+/** e.g. JFG-2249, jfg 2249, JFG-1674-wxb — normalized to JFG2249 / JFG1674 */
+const DESIGN_NO_HYPHEN_RE = /\b([A-Z]{2,5})[\s\-]+(\d{3,6})(?:-[A-Za-z0-9]+)?\b/gi
 const PHONE_RE = /\b\d{10,}\b/
 const LOOM_PICK_RE = /(?:loom[\s-]*pick|loom\s*pick)[\s:=-]*(\d+(?:\.\d+)?)/i
 const PICK_ONLY_RE = /\b(\d+(?:\.\d+)?)\s*pick\b/i
-/** Yarn codes may be letters (HSY) or numeric denier/codes (37, 80/2). */
+/** Yarn codes may be letters (HSY, ZAREE) or numeric denier/codes (37, 80/2). */
 const FEEDER_RE =
   /(?:feeder|fd)[\s.-]*(\d+)\s*[=:\-]?\s*([A-Z0-9][A-Z0-9./-]{0,15})/gi
-const PICK_STRINGS_HEADER = /pick\s*strings/i
+/** Colour / Color N rows: yarn (optional) + Pick + Strings */
+const COLOUR_ROW_RE =
+  /^(?:colour|color|col\.?)\s*(\d+)\s*(?:[|:.\-]\s*|\s+)(.*)$/i
+const PICK_STRINGS_HEADER = /pick\s*strings|(?:\d+\s*[-–]?\s*pick).*(?:pick|strings)/i
 const TOTAL_LINE_RE = /^total\s*[:.]?\s*(\d+(?:\.\d+)?)\s*[/\s]\s*(\d+(?:\.\d+)?)/im
 const TOTAL_NEXT_LINE_RE = /^total\s*[:.]?\s*$/im
+const TOTAL_COLOUR_RE = /^total\s*[:.]?\s*(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)/im
+
+/** Blank feeder yarn on sheet (no visible text in colour cell) → dash placeholder. */
+export function isBlankYarnName(name: string | null | undefined): boolean {
+  const v = (name || '').trim()
+  return !v || v === '-' || v === '—' || v === '–' || v === '.' || v === '_'
+}
+
+/** Normalize common OCR yarn spellings for Rate Master match. */
+export function normalizeYarnLabel(raw: string): string {
+  const t = raw.trim()
+  if (isBlankYarnName(t)) return '-'
+  const upper = t.toUpperCase().replace(/\s+/g, ' ')
+  if (/^(ZAREE|ZARI|JARI|ZARIE|जरी)$/i.test(t) || upper === 'ZAREE' || upper === 'ZARI' || upper === 'JARI') {
+    return 'ZARI'
+  }
+  return upper
+}
 
 function emptyField(): OcrField {
   return { value: '', confidence: 'missing' }
@@ -159,8 +180,9 @@ function scanDesignNumberCandidates(
 function extractDesignNumbers(text: string, subject?: string, filename?: string): OcrField {
   const candidates: Array<{ value: string; source: string; score: number }> = []
 
-  if (subject) candidates.push(...scanDesignNumberCandidates(subject, 'email_subject', 6))
-  if (filename) candidates.push(...scanDesignNumberCandidates(filename, 'filename', 4))
+  // Filename / subject are more reliable than noisy browser OCR (e.g. HG1674 vs JFG1674)
+  if (subject) candidates.push(...scanDesignNumberCandidates(subject, 'email_subject', 10))
+  if (filename) candidates.push(...scanDesignNumberCandidates(filename, 'filename', 12))
 
   const lines = text.split(/\r?\n/)
   lines.forEach((line, idx) => {
@@ -170,11 +192,31 @@ function extractDesignNumbers(text: string, subject?: string, filename?: string)
   return pickBestDesignNumber(candidates, subject, filename)
 }
 
-function extractLoomPick(text: string): OcrField {
+function extractLoomPick(text: string, fallbackFromRows?: string): OcrField {
   const loom = text.match(LOOM_PICK_RE)
   if (loom?.[1]) return { value: loom[1], confidence: 'high', source: 'loom_pick' }
+
+  const totals = extractTotals(text)
+  const nPickMatches = [...text.matchAll(/\b(\d{2,4})\s*[-–]?\s*pick\b/gi)].map((m) => m[1])
+  if (nPickMatches.length) {
+    if (totals.totalPick.value && nPickMatches.includes(totals.totalPick.value)) {
+      return { value: totals.totalPick.value, confidence: 'high', source: 'n_pick_header' }
+    }
+    // Loom pick is the design total — take the largest N-pick header (e.g. 112-pick over stray 37)
+    const best = nPickMatches.reduce((a, b) => (Number(b) > Number(a) ? b : a))
+    return { value: best, confidence: 'high', source: 'n_pick_header' }
+  }
+
+  if (totals.totalPick.value) {
+    return { value: totals.totalPick.value, confidence: totals.totalPick.confidence, source: 'total_pick' }
+  }
+
   const pickOnly = text.match(PICK_ONLY_RE)
   if (pickOnly?.[1]) return { value: pickOnly[1], confidence: 'low', source: 'pick_label' }
+
+  if (fallbackFromRows) {
+    return { value: fallbackFromRows, confidence: 'low', source: 'sum_colour_picks' }
+  }
   return emptyField()
 }
 
@@ -184,12 +226,94 @@ function extractFeeders(text: string): DesignOcrFeeder[] {
   const re = new RegExp(FEEDER_RE.source, 'gi')
   while ((m = re.exec(text)) !== null) {
     const no = Number(m[1])
-    const yarn = (m[2] || '').trim().toUpperCase()
-    if (!no || !yarn || feeders.some((f) => f.feederNo === no)) continue
+    const yarn = normalizeYarnLabel(m[2] || '')
+    if (!no || feeders.some((f) => f.feederNo === no)) continue
     feeders.push({ feederNo: no, yarnType: yarn, confidence: 'high' })
   }
   feeders.sort((a, b) => a.feederNo - b.feederNo)
   return feeders
+}
+
+/**
+ * Parse Colour 1 / Colour 2 / Colour 3 table rows (common jacquard sheet layout).
+ * Empty yarn cell → "-" dash; yarn like "zaree" → ZARI; Pick → pic; Strings optional.
+ */
+export function extractColourTable(text: string): {
+  feeders: DesignOcrFeeder[]
+  weftRows: DesignOcrWeftRow[]
+  totalPick: string
+  totalStrings: string
+} {
+  type ColourEntry = { no: number; yarn: string; pic: string; strings: string; confidence: FieldConfidence }
+  const entries: ColourEntry[] = []
+  let totalPick = ''
+  let totalStrings = ''
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+
+  for (const line of lines) {
+    const totalInline = line.match(TOTAL_COLOUR_RE) || line.match(TOTAL_LINE_RE)
+    if (totalInline && /^total/i.test(line)) {
+      totalPick = totalInline[1]
+      totalStrings = totalInline[2]
+      continue
+    }
+
+    const colour = line.match(COLOUR_ROW_RE)
+    if (!colour) continue
+    const no = Number(colour[1])
+    if (!no || no > 6) continue
+    if (entries.some((e) => e.no === no)) continue
+
+    const rest = (colour[2] || '').trim()
+    const nums = [...rest.matchAll(/(\d+(?:\.\d+)?)/g)].map((x) => x[1])
+    if (nums.length >= 2) {
+      const pic = nums[nums.length - 2]
+      const strings = nums[nums.length - 1]
+      if (Number(pic) === 0 && Number(strings) === 0) continue
+
+      let yarnRaw = rest
+      const lastTwo = new RegExp(
+        `${pic.replace('.', '\\.')}\\s+${strings.replace('.', '\\.')}\\s*$`,
+      )
+      yarnRaw = yarnRaw.replace(lastTwo, '').trim()
+      yarnRaw = yarnRaw.replace(/^[\s|:.\-]+|[\s|:.\-]+$/g, '').trim()
+      if (/^\d+(\.\d+)?$/.test(yarnRaw) || yarnRaw.length > 24) yarnRaw = ''
+
+      entries.push({
+        no,
+        yarn: normalizeYarnLabel(yarnRaw),
+        pic,
+        strings: Number(strings) > 0 ? strings : '',
+        confidence: 'high',
+      })
+    } else if (nums.length === 1 && Number(nums[0]) > 0) {
+      let yarnRaw = rest.replace(nums[0], '').trim().replace(/^[\s|:.\-]+|[\s|:.\-]+$/g, '')
+      if (/^\d+(\.\d+)?$/.test(yarnRaw)) yarnRaw = ''
+      entries.push({
+        no,
+        yarn: normalizeYarnLabel(yarnRaw),
+        pic: nums[0],
+        strings: '',
+        confidence: 'low',
+      })
+    }
+  }
+
+  entries.sort((a, b) => a.no - b.no)
+  return {
+    feeders: entries.map((e) => ({
+      feederNo: e.no,
+      yarnType: e.yarn,
+      confidence: e.yarn === '-' ? 'low' : 'high',
+    })),
+    weftRows: entries.map((e) => ({
+      pic: e.pic,
+      strings: e.strings,
+      confidence: e.confidence,
+    })),
+    totalPick,
+    totalStrings,
+  }
 }
 
 /** Parse Pick / Strings table rows in document order (exclude Total line). */
@@ -241,7 +365,7 @@ function extractWeftPickRows(text: string): DesignOcrWeftRow[] {
 }
 
 function extractTotals(text: string): { totalPick: OcrField; totalStrings: OcrField } {
-  const inline = text.match(TOTAL_LINE_RE)
+  const inline = text.match(TOTAL_COLOUR_RE) || text.match(TOTAL_LINE_RE)
   if (inline) {
     return {
       totalPick: { value: inline[1], confidence: 'high', source: 'total_line' },
@@ -273,6 +397,7 @@ function extractFormatAStringPair(text: string): DesignOcrWeftRow | null {
 /**
  * Parse OCR / vision text into structured design fields.
  * Preserves Pick/Strings row order for weft mapping.
+ * Supports Colour 1/2/3 tables (112-pick sheets) and Feeder / Pick-Strings formats.
  */
 export function parseDesignReferenceText(
   text: string,
@@ -283,13 +408,37 @@ export function parseDesignReferenceText(
   if (!normalized) return result
 
   result.designNumber = extractDesignNumbers(normalized, hints?.subject, hints?.filename)
-  result.loomPick = extractLoomPick(normalized)
-  result.feeders = extractFeeders(normalized)
-  result.weftRows = extractWeftPickRows(normalized)
+
+  const colour = extractColourTable(normalized)
+  const classicFeeders = extractFeeders(normalized)
+  const classicWefts = extractWeftPickRows(normalized)
+
+  if (colour.feeders.length >= 1) {
+    result.feeders = colour.feeders
+    result.weftRows = colour.weftRows
+  } else {
+    result.feeders = classicFeeders
+    result.weftRows = classicWefts
+  }
 
   const totals = extractTotals(normalized)
-  result.totalPick = totals.totalPick
-  result.totalStrings = totals.totalStrings
+  result.totalPick = colour.totalPick
+    ? { value: colour.totalPick, confidence: 'high', source: 'colour_total' }
+    : totals.totalPick
+  result.totalStrings = colour.totalStrings
+    ? { value: colour.totalStrings, confidence: 'high', source: 'colour_total' }
+    : totals.totalStrings
+
+  const sumPics = result.weftRows.reduce((s, r) => s + (Number(r.pic) || 0), 0)
+  const sumFallback = sumPics > 0 ? String(Math.round(sumPics * 100) / 100) : ''
+  result.loomPick = extractLoomPick(
+    normalized,
+    result.totalPick.value || sumFallback || undefined,
+  )
+  // Prefer explicit total pick as loom pick when header missing
+  if (!result.loomPick.value && result.totalPick.value) {
+    result.loomPick = { ...result.totalPick, source: result.totalPick.source || 'total_pick' }
+  }
 
   if (!result.weftRows.length) {
     const formatA = extractFormatAStringPair(normalized)
@@ -335,7 +484,7 @@ export function mergeDesignOcrPayload(
   if (api.feeders?.length) {
     merged.feeders = api.feeders.map((f) => ({
       feederNo: f.feederNo,
-      yarnType: (f.yarnType || '').toUpperCase(),
+      yarnType: normalizeYarnLabel(f.yarnType || ''),
       confidence: f.confidence || 'high',
     }))
   }
@@ -449,7 +598,7 @@ export async function readDesignReference(
   return attachReadMeta(parsed, 'tesseract', warning)
 }
 
-/** Map OCR review → weft rows (Pick → PIC, Strings → Width) preserving order. */
+/** Map OCR review → weft rows (Pick → PIC, Strings → Width optional) preserving order. */
 export function mapOcrToWeftRows(
   ocr: DesignOcrResult,
   designLength: string,
@@ -457,7 +606,6 @@ export function mapOcrToWeftRows(
   costingDate: string,
 ): WeftDraft[] {
   const defaultPic = (ocr.loomPick.value || ocr.totalPick.value || '').trim()
-  const defaultStrings = (ocr.totalStrings.value || '').trim()
   const maxFeederNo = ocr.feeders.reduce((m, f) => Math.max(m, f.feederNo), 0)
 
   let sourceRows: DesignOcrWeftRow[]
@@ -474,7 +622,7 @@ export function mapOcrToWeftRows(
     sourceRows = [
       {
         pic: defaultPic,
-        strings: defaultStrings,
+        strings: '',
         confidence: 'low' as const,
       },
     ]
@@ -489,16 +637,20 @@ export function mapOcrToWeftRows(
   for (let i = 0; i < sourceRows.length; i++) {
     const src = sourceRows[i]
     const feeder = ocr.feeders.find((f) => f.feederNo === i + 1)
-    const pic = (src.pic || '').trim() || (i === 0 ? defaultPic : '')
-    const width = (src.strings || '').trim() || (i === 0 ? defaultStrings : '')
+    const pic = (src.pic || '').trim() || (i === 0 && sourceRows.length === 1 ? defaultPic : '')
+    // Strings / width is optional — never block costing; leave blank when missing
+    const width = (src.strings || '').trim()
+    const rawYarn = feeder ? normalizeYarnLabel(feeder.yarnType) : ''
     let row: WeftDraft = {
       ...emptyWeft(i + 1),
       pic,
       width,
       length_mtr: designLength,
-      weft_name: feeder?.yarnType || '',
+      weft_name: rawYarn,
     }
-    if (row.weft_name) row = applyWeftItemFromMaster(row, row.weft_name, rates, costingDate)
+    if (rawYarn && !isBlankYarnName(rawYarn)) {
+      row = applyWeftItemFromMaster(row, rawYarn, rates, costingDate)
+    }
     rows.push(row)
   }
 
@@ -515,14 +667,14 @@ export function detectMissingRates(
   const missing: MissingRateItem[] = []
   warps.forEach((row, idx) => {
     const name = row.yarn_name.trim()
-    if (!name) return
+    if (isBlankYarnName(name)) return
     if (row.rate_source === 'manual' && n(row.rate_per_kg) > 0) return
     const found = lookupRateForCosting(rates, 'warp', name, costingDate, { denier: row.denier })
     if (!found && !n(row.rate_per_kg)) missing.push({ category: 'warp', itemName: name, rowIndex: idx })
   })
   wefts.forEach((row, idx) => {
     const name = row.weft_name.trim()
-    if (!name) return
+    if (isBlankYarnName(name)) return
     if (row.rate_source === 'manual' && n(row.rate_per_kg) > 0) return
     const found = lookupRateForCosting(rates, 'weft', name, costingDate, { denier: row.denier })
     if (!found && !n(row.rate_per_kg)) missing.push({ category: 'weft', itemName: name, rowIndex: idx })
@@ -548,10 +700,21 @@ export function applyOcrToCostingDraft(
   const wefts = mapOcrToWeftRows(ocr, opts.designLength, opts.rates, opts.costingDate)
   const warps = opts.existingWarps?.length ? opts.existingWarps : []
 
+  // Always sync feeder yarn labels onto weft rows (live edit / re-apply)
   for (const feeder of ocr.feeders) {
     const idx = feeder.feederNo - 1
-    if (idx >= 0 && idx < wefts.length && !wefts[idx].weft_name) {
-      wefts[idx] = applyWeftItemFromMaster(wefts[idx], feeder.yarnType, opts.rates, opts.costingDate)
+    if (idx < 0 || idx >= wefts.length) continue
+    const yarn = normalizeYarnLabel(feeder.yarnType)
+    if (isBlankYarnName(yarn)) {
+      wefts[idx] = {
+        ...wefts[idx],
+        weft_name: '-',
+        rate_per_kg: '',
+        rate_source: undefined,
+        rate_master_id: undefined,
+      }
+    } else {
+      wefts[idx] = applyWeftItemFromMaster(wefts[idx], yarn, opts.rates, opts.costingDate)
     }
   }
 

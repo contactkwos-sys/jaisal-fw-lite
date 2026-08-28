@@ -1,9 +1,10 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { GmailImportPanel } from '../GmailImportPanel'
 import {
   applyOcrToCostingDraft,
   checkDuplicateDin,
   emptyDesignOcrResult,
+  normalizeYarnLabel,
   readDesignReference,
   readDesignReferenceFromUrl,
   uploadDesignReferenceImage,
@@ -17,23 +18,27 @@ import { fetchGmailStatus, type GmailImportResult, type GmailStatus } from '../.
 import type { RateMasterRow } from '../../lib/rateMaster'
 import type { WarpDraft, WeftDraft } from '../../lib/designWiseCosting'
 
+export type DinOcrApplyPayload = {
+  dinNumber: string
+  qualityName: string
+  warps: WarpDraft[]
+  wefts: WeftDraft[]
+  designImageUrl: string | null
+  importSource: DesignImportSource
+  ocrExtracted: DesignOcrResult
+  ocrConfirmed: DesignOcrResult
+  missingRates: MissingRateItem[]
+}
+
 type Props = {
   disabled?: boolean
   designLength: string
   costingDate: string
   masterRates: RateMasterRow[]
   existingWarps: WarpDraft[]
-  onApply: (payload: {
-    dinNumber: string
-    qualityName: string
-    warps: WarpDraft[]
-    wefts: WeftDraft[]
-    designImageUrl: string | null
-    importSource: DesignImportSource
-    ocrExtracted: DesignOcrResult
-    ocrConfirmed: DesignOcrResult
-    missingRates: MissingRateItem[]
-  }) => void | Promise<void>
+  onApply: (payload: DinOcrApplyPayload) => void | Promise<void>
+  /** After first Confirm, OCR edits push into costing + Rate Master immediately. */
+  onLiveSync?: (payload: DinOcrApplyPayload) => void
   onOpenExisting?: (dinNumber: string) => void
   onOpenRateMaster?: () => void
 }
@@ -51,6 +56,7 @@ export function DinDesignImportSection({
   masterRates,
   existingWarps,
   onApply,
+  onLiveSync,
   onOpenExisting,
   onOpenRateMaster,
 }: Props) {
@@ -68,6 +74,8 @@ export function DinDesignImportSection({
   const [gmailStatus, setGmailStatus] = useState<GmailStatus | null>(null)
   const [duplicateDin, setDuplicateDin] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
+  const [linkedToCosting, setLinkedToCosting] = useState(false)
+  const skipLiveRef = useRef(false)
 
   const openGmail = useCallback(async () => {
     setError(null)
@@ -89,6 +97,7 @@ export function DinDesignImportSection({
     setBusy(true)
     setError(null)
     setDuplicateDin(null)
+    setLinkedToCosting(false)
     try {
       const imageUrl = await uploadDesignReferenceImage(file, source)
       setDesignPreviewUrl(imageUrl)
@@ -146,7 +155,12 @@ export function DinDesignImportSection({
   function updateFeeder(idx: number, patch: Partial<DesignOcrFeeder>) {
     setOcrDraft((prev) => ({
       ...prev,
-      feeders: prev.feeders.map((f, i) => (i === idx ? { ...f, ...patch } : f)),
+      feeders: prev.feeders.map((f, i) => {
+        if (i !== idx) return f
+        const next = { ...f, ...patch }
+        if (patch.yarnType != null) next.yarnType = normalizeYarnLabel(patch.yarnType)
+        return next
+      }),
     }))
   }
 
@@ -156,7 +170,7 @@ export function DinDesignImportSection({
       if (nextNo > 6) return prev
       return {
         ...prev,
-        feeders: [...prev.feeders, { feederNo: nextNo, yarnType: '', confidence: 'high' }],
+        feeders: [...prev.feeders, { feederNo: nextNo, yarnType: '-', confidence: 'high' }],
       }
     })
   }
@@ -175,6 +189,28 @@ export function DinDesignImportSection({
     }))
   }
 
+  function buildPayload(draft: DesignOcrResult): DinOcrApplyPayload | null {
+    const din = draft.designNumber.value.trim()
+    if (!din) return null
+    const applied = applyOcrToCostingDraft(draft, {
+      designLength,
+      rates: masterRates,
+      costingDate,
+      existingWarps,
+    })
+    return {
+      dinNumber: din,
+      qualityName: draft.qualityName.value,
+      warps: applied.warps,
+      wefts: applied.wefts,
+      designImageUrl: designPreviewUrl,
+      importSource: importSource || 'file',
+      ocrExtracted: ocrExtracted || draft,
+      ocrConfirmed: draft,
+      missingRates: applied.missingRates,
+    }
+  }
+
   async function confirmAndApply(forceNew = false) {
     const din = ocrDraft.designNumber.value.trim()
     if (!din) {
@@ -190,27 +226,29 @@ export function DinDesignImportSection({
       }
     }
 
-    const applied = applyOcrToCostingDraft(ocrDraft, {
-      designLength,
-      rates: masterRates,
-      costingDate,
-      existingWarps,
-    })
+    const payload = buildPayload(ocrDraft)
+    if (!payload) return
 
-    await onApply({
-      dinNumber: din,
-      qualityName: ocrDraft.qualityName.value,
-      warps: applied.warps,
-      wefts: applied.wefts,
-      designImageUrl: designPreviewUrl,
-      importSource: importSource || 'file',
-      ocrExtracted: ocrExtracted || ocrDraft,
-      ocrConfirmed: ocrDraft,
-      missingRates: applied.missingRates,
-    })
+    skipLiveRef.current = true
+    await onApply(payload)
+    setLinkedToCosting(true)
     setDuplicateDin(null)
     setError(null)
+    // Allow live sync on subsequent edits
+    queueMicrotask(() => {
+      skipLiveRef.current = false
+    })
   }
+
+  // Live: editing OCR after Confirm instantly refreshes costing rows + Rate Master rates
+  useEffect(() => {
+    if (!linkedToCosting || disabled || skipLiveRef.current || !onLiveSync) return
+    const payload = buildPayload(ocrDraft)
+    if (!payload) return
+    onLiveSync(payload)
+    // Only re-run when OCR fields change — not when linkedToCosting first flips (Confirm already applied)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ocrDraft])
 
   const hasReview = Boolean(designPreviewUrl || ocrDraft.designNumber.value || ocrDraft.weftRows.length)
 
@@ -378,7 +416,7 @@ export function DinDesignImportSection({
 
               <div className="dwc-ocr-feeders">
                 <div className="dwc-ocr-block-head">
-                  <span>Detected Feeders</span>
+                  <span>Detected Feeders (Colour 1→FD1… — dash if yarn blank)</span>
                   <button type="button" className="btn-ghost btn-sm" onClick={addFeeder}>
                     + Feeder
                   </button>
@@ -389,8 +427,8 @@ export function DinDesignImportSection({
                       <span className="num">FD{f.feederNo}</span>
                       <input
                         value={f.yarnType}
-                        onChange={(e) => updateFeeder(idx, { yarnType: e.target.value.toUpperCase() })}
-                        placeholder="Yarn type"
+                        onChange={(e) => updateFeeder(idx, { yarnType: e.target.value })}
+                        placeholder="Yarn / - if blank"
                       />
                     </div>
                   ))
@@ -401,7 +439,7 @@ export function DinDesignImportSection({
 
               <div className="dwc-ocr-weft">
                 <div className="dwc-ocr-block-head">
-                  <span>Detected Weft (Pick → PIC, Strings → Width)</span>
+                  <span>Detected Weft (Pick → PIC; Strings optional)</span>
                   <button type="button" className="btn-ghost btn-sm" onClick={addWeftRow}>
                     + Row
                   </button>
@@ -425,7 +463,7 @@ export function DinDesignImportSection({
                           className="num"
                           value={row.strings}
                           onChange={(e) => updateWeftRow(idx, { strings: e.target.value })}
-                          placeholder="Strings"
+                          placeholder="Optional"
                         />
                       </label>
                     </div>
@@ -450,6 +488,9 @@ export function DinDesignImportSection({
               </button>
               <p className="text-muted2 dwc-confirm-hint">
                 Fills Design Details, Weft/Warp rows and Wastage below, then saves costing automatically.
+                {linkedToCosting
+                  ? ' Edits here now update costing + Rate Master rates instantly.'
+                  : ''}
               </p>
             </div>
           </div>
