@@ -75,6 +75,9 @@ export type DesignOcrApplyResult = {
 const DESIGN_NO_RE = /\b([A-Z]{2,5}\d{3,6})\b/g
 /** e.g. JFG-2249, jfg 2249, JFG-1674-wxb — normalized to JFG2249 / JFG1674 */
 const DESIGN_NO_HYPHEN_RE = /\b([A-Z]{2,5})[\s\-]+(\d{3,6})(?:-[A-Za-z0-9]+)?\b/gi
+/** Explicit header: "Design Number - JFG2248" / "Design Number - [XXXX]" / "DESI No." */
+const DESIGN_NUMBER_LABEL_RE =
+  /(?:design\s*(?:number|no\.?|num)|desi(?:gn)?\s*(?:no\.?|number)?)\s*[-:=]?\s*\[?\s*([A-Za-z]{2,5}[\s\-]?\d{3,6}|\d{3,6})\s*\]?/i
 const PHONE_RE = /\b\d{10,}\b/
 const LOOM_PICK_RE =
   /(?:total\s+)?(?:loom[\s-]*pick|loom\s*pick)[\s:=-]*(\d+(?:\.\d+)?)/i
@@ -84,11 +87,33 @@ const FEEDER_RE =
   /(?:feeder|fd)[\s.-]*(\d+)\s*[=:\-]?\s*([A-Z0-9][A-Z0-9./-]{0,15})/gi
 /** Colour / Color N rows: yarn (optional) + Pick + Strings */
 const COLOUR_ROW_RE =
-  /^(?:colour|color|col\.?)\s*(\d+)\s*(?:[|:.\-]\s*|\s+)(.*)$/i
+  /^(?:colour|color|col\.?|feeder|fd)\s*(\d+)\s*(?:[|:.\-]\s*|\s+)(.*)$/i
 const PICK_STRINGS_HEADER = /pick\s*strings|(?:\d+\s*[-–]?\s*pick).*(?:pick|strings)/i
 const TOTAL_LINE_RE = /^total\s*[:.]?\s*(\d+(?:\.\d+)?)\s*[/\s]\s*(\d+(?:\.\d+)?)/im
 const TOTAL_NEXT_LINE_RE = /^total\s*[:.]?\s*$/im
 const TOTAL_COLOUR_RE = /^total\s*[:.]?\s*(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)/im
+
+/** Sum of feeder/colour PIC values — used to auto-fill TOTAL LOOM PICK when header missing. */
+export function sumWeftPics(rows: Array<{ pic?: string | null }> | null | undefined): string {
+  if (!rows?.length) return ''
+  const sum = rows.reduce((s, r) => s + (Number(r?.pic) || 0), 0)
+  if (sum <= 0) return ''
+  return String(Math.round(sum * 100) / 100)
+}
+
+/** Fill loomPick from feeder PIC sum when OCR did not read an explicit total. */
+export function ensureLoomPickFromFeederSum(ocr: DesignOcrResult): DesignOcrResult {
+  if (ocr.loomPick.value.trim()) return ocr
+  const sum = sumWeftPics(ocr.weftRows)
+  if (!sum) return ocr
+  return {
+    ...ocr,
+    loomPick: { value: sum, confidence: 'high', source: 'sum_feeder_picks' },
+    totalPick: ocr.totalPick.value.trim()
+      ? ocr.totalPick
+      : { value: sum, confidence: 'high', source: 'sum_feeder_picks' },
+  }
+}
 
 /** Blank feeder yarn on sheet (no visible text in colour cell) → dash placeholder. */
 export function isBlankYarnName(name: string | null | undefined): boolean {
@@ -160,6 +185,23 @@ function scanDesignNumberCandidates(
 ): Array<{ value: string; source: string; score: number }> {
   const candidates: Array<{ value: string; source: string; score: number }> = []
   const upper = text.toUpperCase()
+
+  const labeled = text.match(DESIGN_NUMBER_LABEL_RE)
+  if (labeled?.[1]) {
+    const raw = labeled[1].trim().toUpperCase().replace(/[\[\]]/g, '').replace(/[\s\-]+/g, '')
+    const compact = raw.match(/^([A-Z]{2,5}\d{3,6})$/)
+    const hyphenParts = labeled[1].trim().match(/^([A-Za-z]{2,5})[\s\-]?(\d{3,6})$/)
+    const norm = compact
+      ? compact[1]
+      : hyphenParts
+        ? `${hyphenParts[1].toUpperCase()}${hyphenParts[2]}`
+        : ''
+    if (norm) {
+      let score = baseScore + 20
+      if (lineIdx != null && lineIdx <= 2) score += 5
+      candidates.push({ value: norm, source: 'design_number_label', score })
+    }
+  }
 
   let m: RegExpExecArray | null
   const compactRe = new RegExp(DESIGN_NO_RE.source, 'g')
@@ -446,7 +488,7 @@ export function parseDesignReferenceText(
     ? { value: colour.totalStrings, confidence: 'high', source: 'colour_total' }
     : totals.totalStrings
 
-  // TOTAL LOOM PICK from header only — never replace with Σ weft PIC
+  // Prefer explicit TOTAL LOOM PICK / N-pick header; if missing, fill from Σ feeder picks (editable)
   result.loomPick = extractLoomPick(normalized)
 
   if (!result.weftRows.length) {
@@ -460,7 +502,7 @@ export function parseDesignReferenceText(
   }
 
   result.rawText = normalized
-  return result
+  return ensureLoomPickFromFeederSum(result)
 }
 
 /** Merge vision API JSON with regex parser (vision wins when confident). */
@@ -504,10 +546,40 @@ export function mergeDesignOcrPayload(
   }
 
   merged.rawText = text || api.rawText
-  return merged
+  return ensureLoomPickFromFeederSum(merged)
 }
 
-async function fileToBase64(file: File): Promise<{ base64: string; mediaType: string }> {
+/** Downscale / recompress large camera photos so Edge Function + Anthropic stay under size/timeout limits. */
+async function prepareImageForOcr(file: File): Promise<{ base64: string; mediaType: string }> {
+  if (typeof createImageBitmap === 'undefined' || typeof OffscreenCanvas === 'undefined') {
+    return fileToBase64Raw(file)
+  }
+  try {
+    const bitmap = await createImageBitmap(file)
+    const maxEdge = 1600
+    const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height))
+    const w = Math.max(1, Math.round(bitmap.width * scale))
+    const h = Math.max(1, Math.round(bitmap.height * scale))
+    const canvas = new OffscreenCanvas(w, h)
+    const ctx = canvas.getContext('2d')
+    if (!ctx) {
+      bitmap.close()
+      return fileToBase64Raw(file)
+    }
+    ctx.drawImage(bitmap, 0, 0, w, h)
+    bitmap.close()
+    const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.82 })
+    const buf = await blob.arrayBuffer()
+    const bytes = new Uint8Array(buf)
+    let binary = ''
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
+    return { base64: btoa(binary), mediaType: 'image/jpeg' }
+  } catch {
+    return fileToBase64Raw(file)
+  }
+}
+
+async function fileToBase64Raw(file: File): Promise<{ base64: string; mediaType: string }> {
   const buf = await file.arrayBuffer()
   const bytes = new Uint8Array(buf)
   let binary = ''
@@ -548,7 +620,28 @@ function attachReadMeta(
   return { ...result, readSource, readWarning }
 }
 
-/** Invoke design-ocr edge function; falls back to client Tesseract + regex parser. */
+function describeEdgeInvokeError(error: { message?: string } | null, data: unknown): string | undefined {
+  if (data && typeof data === 'object' && 'error' in data && (data as { error?: unknown }).error) {
+    const err = String((data as { error: unknown }).error)
+    const detail =
+      'detail' in (data as object) ? String((data as { detail?: unknown }).detail || '') : ''
+    if (/ANTHROPIC_API_KEY/i.test(err)) {
+      return 'Design OCR Edge Function is live but ANTHROPIC_API_KEY is not set in Supabase secrets. Add the key, then retry — do not rely on browser OCR.'
+    }
+    return detail ? `${err}: ${detail}` : err
+  }
+  if (!error?.message) return undefined
+  const msg = error.message
+  if (/Failed to send a request to the Edge Function/i.test(msg)) {
+    return 'Could not reach design-ocr Edge Function (network/CORS/deploy). Confirm the function is deployed, then retry.'
+  }
+  if (/not found|404/i.test(msg)) {
+    return 'design-ocr Edge Function is not deployed on this Supabase project.'
+  }
+  return msg
+}
+
+/** Invoke design-ocr edge function; browser Tesseract only as last-resort emergency fallback. */
 export async function readDesignReference(
   file: File,
   hints?: { subject?: string; filename?: string },
@@ -569,37 +662,39 @@ export async function readDesignReference(
 
   let edgeError: string | undefined
   try {
-    const { base64, mediaType } = await fileToBase64(file)
+    const { base64, mediaType } = await prepareImageForOcr(file)
     const { data, error } = await supabase.functions.invoke('design-ocr', {
       body: {
         image_base64: base64,
         media_type: mediaType,
         subject: hints?.subject,
-        filename: hints?.filename,
+        filename: hints?.filename || file.name,
       },
     })
-    if (error) {
-      edgeError = error.message || 'Design OCR service unavailable'
-    } else if (data?.error) {
-      edgeError = String(data.error)
-    } else if (data) {
-      const text = String(data.raw_text || '')
+    edgeError = describeEdgeInvokeError(error, data)
+    if (!edgeError && data) {
+      const text = String((data as { raw_text?: string }).raw_text || '')
       const merged = mergeDesignOcrPayload(data as Partial<DesignOcrResult>, text, hints)
-      return attachReadMeta(merged, 'edge')
+      return attachReadMeta(ensureLoomPickFromFeederSum(merged), 'edge')
     }
   } catch (e) {
     edgeError = e instanceof Error ? e.message : 'Design OCR service unavailable'
+    if (/Failed to send a request to the Edge Function/i.test(edgeError)) {
+      edgeError =
+        'Could not reach design-ocr Edge Function (network/CORS/deploy). Confirm the function is deployed, then retry.'
+    }
   }
 
+  // Last resort only — user asked not to depend on browser OCR for design sheets
   const text = await ocrViaTesseract(file)
-  const parsed = parseDesignReferenceText(text, hints)
+  const parsed = ensureLoomPickFromFeederSum(parseDesignReferenceText(text, hints))
   const warning =
     edgeError && !ocrHasDetectedFields(parsed)
-      ? `${edgeError}. Browser OCR also could not read this sheet — enter details manually or retry with a clearer photo.`
+      ? `${edgeError} Browser OCR also could not read this sheet — enter Design No. / feeder picks manually.`
       : edgeError
-        ? `${edgeError}. Showing browser OCR results — review fields below.`
+        ? `${edgeError} Showing weak browser-OCR fallback — review every field.`
         : !ocrHasDetectedFields(parsed)
-          ? 'Could not read design sheet from this image. Try a clearer photo, or open DIN Costing for manual entry.'
+          ? 'Could not read design sheet from this image. Try a clearer photo.'
           : undefined
   return attachReadMeta(parsed, 'tesseract', warning)
 }

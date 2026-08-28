@@ -4,9 +4,11 @@ import {
   applyOcrToCostingDraft,
   checkDuplicateDin,
   emptyDesignOcrResult,
+  ensureLoomPickFromFeederSum,
   normalizeYarnLabel,
   readDesignReference,
   readDesignReferenceFromUrl,
+  sumWeftPics,
   uploadDesignReferenceImage,
   type DesignImportSource,
   type DesignOcrFeeder,
@@ -106,15 +108,56 @@ export function DinDesignImportSection({
       setDesignPreviewUrl(imageUrl)
       setImportSource(source)
 
-      const ocr = await readDesignReference(file, hints)
+      const ocr = ensureLoomPickFromFeederSum(await readDesignReference(file, hints))
       setOcrExtracted(JSON.parse(JSON.stringify(ocr)) as DesignOcrResult)
       setOcrDraft(ocr)
       if (ocr.readWarning) setError(ocr.readWarning)
+      // Upload → auto-fill Design No. / feeder picks / TOTAL LOOM PICK into costing when readable
+      if (ocr.designNumber.value.trim()) {
+        await autoApplyAfterRead(ocr, imageUrl, source)
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Design read failed')
     } finally {
       setBusy(false)
     }
+  }
+
+  async function autoApplyAfterRead(
+    ocr: DesignOcrResult,
+    imageUrl: string,
+    source: DesignImportSource,
+  ) {
+    const din = ocr.designNumber.value.trim()
+    if (!din) return
+    const dup = await checkDuplicateDin(din).catch(() => ({ exists: false as const }))
+    if (dup.exists) {
+      setDuplicateDin(din)
+      return
+    }
+    const applied = applyOcrToCostingDraft(ocr, {
+      designLength,
+      rates: masterRates,
+      costingDate,
+      existingWarps,
+    })
+    skipLiveRef.current = true
+    await onApply({
+      dinNumber: din,
+      qualityName: ocr.qualityName.value,
+      loomPick: ocr.loomPick.value || sumWeftPics(ocr.weftRows),
+      warps: applied.warps,
+      wefts: applied.wefts,
+      designImageUrl: imageUrl,
+      importSource: source,
+      ocrExtracted: ocr,
+      ocrConfirmed: ocr,
+      missingRates: applied.missingRates,
+    })
+    setLinkedToCosting(true)
+    queueMicrotask(() => {
+      skipLiveRef.current = false
+    })
   }
 
   async function handleGmailImported(result: GmailImportResult) {
@@ -133,6 +176,8 @@ export function DinDesignImportSection({
       if (ocr.readWarning) setError(ocr.readWarning)
       else if (!file) {
         setError('Design image imported. OCR could not run — enter values manually in review below.')
+      } else if (ocr.designNumber.value.trim()) {
+        await autoApplyAfterRead(ocr, result.imageUrl, 'gmail')
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Gmail import OCR failed')
@@ -179,10 +224,22 @@ export function DinDesignImportSection({
   }
 
   function updateWeftRow(idx: number, patch: Partial<DesignOcrWeftRow>) {
-    setOcrDraft((prev) => ({
-      ...prev,
-      weftRows: prev.weftRows.map((r, i) => (i === idx ? { ...r, ...patch } : r)),
-    }))
+    setOcrDraft((prev) => {
+      const weftRows = prev.weftRows.map((r, i) => (i === idx ? { ...r, ...patch } : r))
+      const sum = sumWeftPics(weftRows)
+      const loomFromSum =
+        !prev.loomPick.value.trim() ||
+        prev.loomPick.source === 'sum_feeder_picks' ||
+        prev.loomPick.confidence === 'missing'
+      return {
+        ...prev,
+        weftRows,
+        loomPick:
+          loomFromSum && sum
+            ? { value: sum, confidence: 'high', source: 'sum_feeder_picks' }
+            : prev.loomPick,
+      }
+    })
   }
 
   function addWeftRow() {
@@ -258,11 +315,11 @@ export function DinDesignImportSection({
   const hasReview = Boolean(designPreviewUrl || ocrDraft.designNumber.value || ocrDraft.weftRows.length)
 
   return (
-    <section className="dwc-panel dwc-import-panel">
-      <h2 className="section-title">Design Import</h2>
+    <section className="dwc-panel dwc-import-panel dwc-compact-block">
+      <h2 className="section-title">1 · Design Import</h2>
       <p className="text-muted2 dwc-import-hint">
-        Upload a design reference — OCR reads Design No., TOTAL LOOM PICK, Feeder/Colour &amp; Pick values.
-        Strings are kept for reference only and are not used in costing.
+        Upload → OCR fills Design No., Feeder/Colour + PIC rows, and TOTAL LOOM PICK (sum of feeder picks).
+        Review below, then Warp/Weft + Internal Cost update on the same page.
       </p>
 
       <div className="dwc-import-actions">
@@ -408,18 +465,21 @@ export function DinDesignImportSection({
               <label className="field">
                 <span>
                   TOTAL LOOM PICK {confidenceLabel(ocrDraft.loomPick.confidence)}
+                  {ocrDraft.loomPick.source === 'sum_feeder_picks' ? (
+                    <em className="dwc-auto-tag"> Σ feeder picks</em>
+                  ) : null}
                   {ocrDraft.loomPick.confidence === 'low' ? (
                     <em className="dwc-low-conf"> Please confirm</em>
                   ) : null}
                   {ocrDraft.loomPick.confidence === 'missing' && !ocrDraft.loomPick.value ? (
-                    <em className="dwc-low-conf"> Could not confidently read this field.</em>
+                    <em className="dwc-low-conf"> Enter manually or add feeder PIC rows</em>
                   ) : null}
                 </span>
                 <input
                   className="num"
                   value={ocrDraft.loomPick.value}
                   onChange={(e) => updateLoomPick(e.target.value)}
-                  placeholder="e.g. 112"
+                  placeholder="Auto from Σ feeder picks"
                 />
               </label>
 

@@ -51,12 +51,14 @@ import {
   type DinOcrApplyPayload,
   type MissingRateItem,
 } from '../components/dinCosting/DinDesignImportSection'
+import { RateMasterYarnSelect } from '../components/dinCosting/RateMasterYarnSelect'
 import {
   detectMissingRates,
   checkDuplicateDin,
   type DesignImportSource,
   type DesignOcrResult,
 } from '../lib/designOcr'
+import { applyEditDeleteOrQueue } from '../lib/pendingApprovals'
 import type { NavTarget } from '../lib/nav'
 
 type Props = { initialDin?: string; viewOnly?: boolean; onNavigate?: (t: NavTarget) => void }
@@ -217,6 +219,10 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
   const [ocrExtractedJson, setOcrExtractedJson] = useState<DesignOcrResult | null>(null)
   const [ocrConfirmedJson, setOcrConfirmedJson] = useState<DesignOcrResult | null>(null)
   const [missingRates, setMissingRates] = useState<MissingRateItem[]>([])
+  const [savedCreatedAt, setSavedCreatedAt] = useState<string | null>(null)
+
+  const warpYarnOptions = useMemo(() => rateMasterItemNames(masterRates, 'warp'), [masterRates])
+  const weftYarnOptions = useMemo(() => rateMasterItemNames(masterRates, 'weft'), [masterRates])
 
   useEffect(() => {
     void fetchFormulaMaster()
@@ -435,6 +441,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
 
   const applyHeader = useCallback((header: Record<string, unknown>) => {
     setSavedId(String(header.id))
+    setSavedCreatedAt(header.created_at ? String(header.created_at) : null)
     setDinNumber(String(header.din_number || ''))
     setQualityName(String(header.quality_name || ''))
     setCostingDate(String(header.costing_date || todayISO()))
@@ -668,6 +675,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     setProductionMeters('')
     setIsLocked(false)
     setSavedId(null)
+    setSavedCreatedAt(null)
     setStatus('draft')
     setLengthError(null)
     setError(null)
@@ -1131,21 +1139,44 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     }
   }
 
-  async function deleteCosting(id: string, rowStatus: string | null) {
+  async function deleteCosting(
+    id: string,
+    rowStatus: string | null,
+    createdAt?: string | null,
+  ) {
     if (rowStatus === 'final' && !canDeleteFinal) {
       setError('Only authorized users (CEO / Manager) can delete finalized costings')
       return
     }
-    const ok = window.confirm('Are you sure you want to delete this costing?')
+    const ok = window.confirm(
+      isCeo
+        ? 'Delete this design costing permanently?'
+        : 'Delete this design costing? If older than 7 days, CEO approval is required (same rule as Cash Book).',
+    )
     if (!ok) return
     setBusy(true)
     setError(null)
     try {
-      const { error: dErr } = await supabase.from('design_costing').delete().eq('id', id)
-      if (dErr) throw dErr
+      const requestedBy = profile?.id || session?.user?.id || 'unknown'
+      const result = await applyEditDeleteOrQueue({
+        isCeo,
+        createdAt: createdAt || savedCreatedAt || new Date().toISOString(),
+        tableName: 'design_costing',
+        recordId: id,
+        action: 'delete',
+        requestedBy,
+        apply: async () => {
+          const { error: dErr } = await supabase.from('design_costing').delete().eq('id', id)
+          if (dErr) throw dErr
+        },
+      })
       if (savedId === id) resetForm()
       await refreshHistory()
-      setMessage('Costing deleted')
+      setMessage(
+        result === 'applied'
+          ? 'Costing deleted'
+          : 'Delete sent for CEO approval — not deleted until CEO approves',
+      )
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Delete failed')
     } finally {
@@ -1164,6 +1195,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     // Update existing draft for same DIN unless Save As New / Create New Revision
     if (payload.forceNew) {
       setSavedId(null)
+      setSavedCreatedAt(null)
       setStatus('draft')
       setIsLocked(false)
     } else {
@@ -1417,13 +1449,12 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
   const wastageDisplay = computeWastageParams(n(designLength), n(wastageMtr), n(wastagePercent))
 
   return (
-    <div className="screen dwc-screen">
+    <div className="screen dwc-screen dwc-single-page">
       <header className="screen-header dwc-header">
         <div>
-          <h1>DIN Costing (Jacquard Repair Design)</h1>
+          <h1>DIN Costing</h1>
           <p className="text-muted">
-            CEO Dashboard → Warp + Weft yarn cost → TOTAL WEFT PIC → Weaving charge → Final ₹/meter (100 m
-            customer basis · 110 m production)
+            One page: Import → Design No. + Loom Pick → Warp/Weft (Rate Master) → Internal Cost + Final Customer Rate
           </p>
         </div>
         {savedId ? (
@@ -1489,8 +1520,8 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         </section>
       ) : null}
 
-      <section className="dwc-panel" id="dwc-design-details">
-        <h2 className="section-title">Design Details</h2>
+      <section className="dwc-panel dwc-compact-block" id="dwc-design-details">
+        <h2 className="section-title">2 · Design Details</h2>
         <div className="dwc-details-row">
           <label className="field">
             <span className="text-muted">DESI / Design No. (formerly DIN)</span>
@@ -1602,8 +1633,8 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         </div>
       </section>
 
-      <section className="dwc-panel dwc-wastage-card">
-        <h2 className="section-title">Wastage / Lossage Adjustment</h2>
+      <details className="dwc-panel dwc-wastage-card dwc-accordion">
+        <summary className="section-title">Wastage / Lossage (fixed 10%)</summary>
         <div className="dwc-wastage-grid">
           <div>
             <span className="text-muted">Entered Production Length</span>
@@ -1636,10 +1667,10 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
           {fmtQty(wastageDisplay.wastagePercent, 0)}% wastage). Per-meter rate on{' '}
           {fmtQty(wastageDisplay.usableLengthMtr, 0)} mtr usable basis.
         </p>
-      </section>
+      </details>
 
-      <section className="dwc-panel">
-        <h2 className="section-title">Diary Page Upload</h2>
+      <details className="dwc-panel dwc-accordion">
+        <summary className="section-title">Diary Page Upload (optional)</summary>
         <div className="dwc-upload-row">
           <label
             className={dragOver ? 'dwc-dropzone drag-over' : 'dwc-dropzone'}
@@ -1672,11 +1703,11 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
           )}
         </div>
         {ocrNote ? <p className="form-ok text-sage">{ocrNote}</p> : null}
-      </section>
+      </details>
 
-      <section className="dwc-panel">
+      <section className="dwc-panel dwc-compact-block">
         <div className="dwc-panel-head">
-          <h2 className="section-title">Warp Details</h2>
+          <h2 className="section-title">3 · Warp Details</h2>
         </div>
         <div className="dwc-table-wrap">
           <table className="dwc-table">
@@ -1702,26 +1733,28 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
                   <tr key={row.key}>
                     <td className="num">{idx + 1}</td>
                     <td>
-                      <input
-                        list="dwc-warp-rate-items"
+                      <RateMasterYarnSelect
                         value={row.yarn_name}
+                        options={warpYarnOptions}
                         disabled={isReadOnly}
-                        placeholder="Item from Rate Master"
-                        onChange={(e) => {
-                          const name = e.target.value
+                        placeholder="Select yarn from Rate Master"
+                        aria-label="Warp yarn name"
+                        onChange={(name) => {
                           setWarps((prev) =>
                             prev.map((r) => {
                               if (r.key !== row.key) return r
-                              const updated = { ...r, yarn_name: name }
-                              return applyWarpRateFromMaster(updated)
+                              return { ...r, yarn_name: name }
                             }),
                           )
                         }}
-                        onBlur={() =>
+                        onSelect={(name) => {
                           setWarps((prev) =>
-                            prev.map((r) => (r.key === row.key ? applyWarpRateFromMaster(r) : r)),
+                            prev.map((r) => {
+                              if (r.key !== row.key) return r
+                              return applyWarpRateFromMaster({ ...r, yarn_name: name })
+                            }),
                           )
-                        }
+                        }}
                       />
                     </td>
                     <td>
@@ -1894,9 +1927,9 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         </button>
       </section>
 
-      <section className="dwc-panel">
+      <section className="dwc-panel dwc-compact-block">
         <div className="dwc-panel-head">
-          <h2 className="section-title">Weft Details</h2>
+          <h2 className="section-title">4 · Weft Details</h2>
           <span className="dwc-pic-total">TOTAL WEFT PIC: {fmtQty(buildup.totalPic, 0)}</span>
         </div>
         <div className="dwc-table-wrap">
@@ -1938,26 +1971,28 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
                       />
                     </td>
                     <td>
-                      <input
-                        list="dwc-weft-rate-items"
+                      <RateMasterYarnSelect
                         value={row.weft_name}
+                        options={weftYarnOptions}
                         disabled={isReadOnly}
-                        placeholder="Select yarn (blank OK)"
-                        onChange={(e) => {
-                          const name = e.target.value
+                        placeholder="Select yarn from Rate Master"
+                        aria-label="Weft yarn name"
+                        onChange={(name) => {
                           setWefts((prev) =>
                             prev.map((r) => {
                               if (r.key !== row.key) return r
-                              const updated = { ...r, weft_name: name }
-                              return applyWeftRateFromMaster(updated)
+                              return { ...r, weft_name: name }
                             }),
                           )
                         }}
-                        onBlur={() =>
+                        onSelect={(name) => {
                           setWefts((prev) =>
-                            prev.map((r) => (r.key === row.key ? applyWeftRateFromMaster(r) : r)),
+                            prev.map((r) => {
+                              if (r.key !== row.key) return r
+                              return applyWeftRateFromMaster({ ...r, weft_name: name })
+                            }),
                           )
-                        }
+                        }}
                       />
                     </td>
                     <td>
@@ -2147,8 +2182,8 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         </button>
       </section>
 
-      <section className="dwc-panel dwc-summary-panel">
-        <h2 className="section-title">INTERNAL COST — 110 Meter Basis</h2>
+      <section className="dwc-panel dwc-summary-panel dwc-compact-block">
+        <h2 className="section-title">5 · Internal Cost (110 m)</h2>
         <div className="dwc-totals-grid">
           <div>
             <span className="text-muted">Total Warp Weight (kg) · 110m</span>
@@ -2177,8 +2212,8 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         </div>
       </section>
 
-      <section className="dwc-panel dwc-buildup">
-        <h2 className="section-title">CUSTOMER SELLING RATE — 100 Meter Basis</h2>
+      <section className="dwc-panel dwc-buildup dwc-compact-block" id="dwc-customer-rate">
+        <h2 className="section-title">6 · Final Customer Rate (100 m)</h2>
         <p className="dwc-hint" style={{ marginTop: 0 }}>
           Internal yarn + weaving on 110m production ÷ 100 usable meters (factor 1.10)
         </p>
@@ -2448,7 +2483,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
             type="button"
             className="dwc-danger-btn"
             disabled={busy || (status === 'final' && !canDeleteFinal)}
-            onClick={() => void deleteCosting(savedId, status)}
+            onClick={() => void deleteCosting(savedId, status, savedCreatedAt)}
           >
             Delete
           </button>
@@ -2696,7 +2731,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
                             type="button"
                             className="dwc-link-btn dwc-link-danger"
                             disabled={row.status === 'final' && !canDeleteFinal}
-                            onClick={() => void deleteCosting(row.id, row.status)}
+                            onClick={() => void deleteCosting(row.id, row.status, row.created_at)}
                           >
                             Delete
                           </button>
