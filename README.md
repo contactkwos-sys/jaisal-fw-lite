@@ -38,10 +38,19 @@ Redeploy / deploy these from the Supabase Dashboard (Edge Functions → Deploy f
 | `pin-login` | https://raw.githubusercontent.com/contactkwos-sys/jaisal-fw-lite/main/supabase/functions/pin-login/index.ts | Already ACTIVE (unchanged) |
 | `roles-gate` | https://raw.githubusercontent.com/contactkwos-sys/jaisal-fw-lite/main/supabase/functions/roles-gate/index.ts | Redeployed (update/delete actions) |
 | `pin-reset` | https://raw.githubusercontent.com/contactkwos-sys/jaisal-fw-lite/main/supabase/functions/pin-reset/index.ts | Deployed |
+| `gmail-intake` | https://raw.githubusercontent.com/contactkwos-sys/jaisal-fw-lite/main/supabase/functions/gmail-intake/index.ts | Deployed (Gmail OAuth + import) |
 
 Also mirrored under `public/functions/` for copy/paste deploy.
 
-**Manual deploy needed (if CLI deploy unavailable):** `pin-login`, `roles-gate`, `pin-reset`
+**Manual deploy needed (if CLI deploy unavailable):** `pin-login`, `roles-gate`, `pin-reset`, `gmail-intake`
+
+**Gmail edge function secrets** (Supabase Dashboard → Edge Functions → gmail-intake → Secrets):
+
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — Google Cloud OAuth credentials
+- `GMAIL_TOKEN_SECRET` — 32+ char secret for encrypting OAuth tokens
+- Optional: `GMAIL_INTAKE_EMAIL` (default `jaisalind2@gmail.com`), `GMAIL_SUCCESS_REDIRECT`, `GOOGLE_REDIRECT_URI`
+
+**Gmail database migration:** run `public/migration-gmail-design-intake.sql` (or `supabase/migrations/20260822100000_gmail_design_intake.sql`) if `gmail_approved_senders` is missing.
 
 `roles-gate` now supports `list` / `create` / `update` / `delete`.  
 `pin-reset` (new in Phase 6) hashes a 4-digit PIN with PBKDF2 and upserts `public.users` + auth metadata.

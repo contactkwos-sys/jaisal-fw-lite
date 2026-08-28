@@ -10,6 +10,7 @@ import {
   type ApprovedSender,
   type GmailStatus,
 } from '../lib/gmailIntake'
+import { toUserError } from '../lib/userError'
 
 export function GmailAdminSection() {
   const { isCeo, profile } = useAuth()
@@ -17,6 +18,7 @@ export function GmailAdminSection() {
   const [senders, setSenders] = useState<ApprovedSender[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [statusWarning, setStatusWarning] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draftName, setDraftName] = useState('')
@@ -25,14 +27,28 @@ export function GmailAdminSection() {
   const [newName, setNewName] = useState('')
   const [newEmail, setNewEmail] = useState('')
 
-  const refresh = useCallback(async () => {
-    const [st, list] = await Promise.all([fetchGmailStatus(), fetchApprovedSenders()])
-    setStatus(st)
+  const refreshSenders = useCallback(async () => {
+    const list = await fetchApprovedSenders()
     setSenders(list)
   }, [])
 
+  const refreshStatus = useCallback(async () => {
+    try {
+      const st = await fetchGmailStatus()
+      setStatus(st)
+      setStatusWarning(null)
+    } catch (e) {
+      setStatus(null)
+      setStatusWarning(toUserError(e, 'Could not load Gmail connection status'))
+    }
+  }, [])
+
+  const refresh = useCallback(async () => {
+    await Promise.allSettled([refreshStatus(), refreshSenders()])
+  }, [refreshSenders, refreshStatus])
+
   useEffect(() => {
-    void refresh().catch((e: Error) => setError(e.message))
+    void refresh().catch((e: Error) => setError(toUserError(e)))
   }, [refresh])
 
   async function connect() {
@@ -42,7 +58,7 @@ export function GmailAdminSection() {
       const url = await getGmailAuthUrl()
       window.location.href = url
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Connect failed')
+      setError(toUserError(e, 'Connect failed'))
       setBusy(false)
     }
   }
@@ -56,7 +72,7 @@ export function GmailAdminSection() {
       setMessage('Gmail disconnected')
       await refresh()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Disconnect failed')
+      setError(toUserError(e, 'Disconnect failed'))
     } finally {
       setBusy(false)
     }
@@ -84,28 +100,39 @@ export function GmailAdminSection() {
       setMessage('Sender updated')
       await refresh()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed')
+      setError(toUserError(e, 'Save failed'))
     } finally {
       setBusy(false)
     }
   }
 
   async function addSender() {
+    const name = newName.trim()
+    const email = newEmail.trim()
+    if (!name) {
+      setError('Sender name is required')
+      return
+    }
+    if (!email) {
+      setError('Sender email is required')
+      return
+    }
     setBusy(true)
     setError(null)
     try {
       await upsertApprovedSender({
-        name: newName,
-        email: newEmail,
+        name,
+        email,
         is_active: true,
         created_by: profile?.id || null,
       })
       setNewName('')
       setNewEmail('')
       setMessage('Sender added')
-      await refresh()
+      await refreshSenders()
+      void refreshStatus()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Add failed')
+      setError(toUserError(e, 'Add failed'))
     } finally {
       setBusy(false)
     }
@@ -123,7 +150,7 @@ export function GmailAdminSection() {
       })
       await refresh()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Update failed')
+      setError(toUserError(e, 'Update failed'))
     } finally {
       setBusy(false)
     }
@@ -167,6 +194,7 @@ export function GmailAdminSection() {
           )}
         </div>
       </article>
+      {statusWarning ? <p className="form-error">{statusWarning}</p> : null}
 
       <h3 className="section-title">Approved Design Senders</h3>
       <div className="gmail-sender-list">
@@ -252,7 +280,7 @@ export function GmailAdminSection() {
         <button
           type="button"
           className="primary-save"
-          disabled={busy || !newName.trim()}
+          disabled={busy || !newName.trim() || !newEmail.trim()}
           onClick={() => void addSender()}
         >
           + Add Sender
