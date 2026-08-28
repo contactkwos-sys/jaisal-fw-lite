@@ -1166,7 +1166,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     }
   }
 
-  function useRateMasterForWarp(rowKey: string) {
+  function resetWarpToRateMaster(rowKey: string) {
     setWarps((prev) =>
       prev.map((row) => {
         if (row.key !== rowKey) return row
@@ -1177,7 +1177,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     setMessage('Rate Source: Rate Master — row recalculated')
   }
 
-  function useRateMasterForWeft(rowKey: string) {
+  function resetWeftToRateMaster(rowKey: string) {
     setWefts((prev) =>
       prev.map((row) => {
         if (row.key !== rowKey) return row
@@ -1621,7 +1621,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
                               <button
                                 type="button"
                                 className="btn-link"
-                                onClick={() => useRateMasterForWarp(row.key)}
+                                onClick={() => resetWarpToRateMaster(row.key)}
                               >
                                 Use Rate Master Rate
                               </button>
@@ -1836,7 +1836,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
                               <button
                                 type="button"
                                 className="btn-link"
-                                onClick={() => useRateMasterForWeft(row.key)}
+                                onClick={() => resetWeftToRateMaster(row.key)}
                               >
                                 Use Rate Master Rate
                               </button>

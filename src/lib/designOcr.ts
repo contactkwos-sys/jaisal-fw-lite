@@ -7,6 +7,7 @@ import { emptyWeft, type WeftDraft, type WarpDraft } from './designWiseCosting'
 import {
   applyWeftItemFromMaster,
 } from './dinIntakeCosting'
+import { findSharedDesign } from './designIdentity'
 import { lookupRateForCosting, type RateMasterRow } from './rateMaster'
 import { uploadDinStorageObject } from './dinStorage'
 import { supabase } from './supabase'
@@ -753,7 +754,6 @@ export async function checkDuplicateDin(dinNumber: string): Promise<{
   }
 
   // Shared identity: Design Intake / designs register may already hold this number
-  const { findSharedDesign } = await import('./designIdentity')
   const shared = await findSharedDesign(trimmed)
   if (shared) {
     return {
