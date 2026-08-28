@@ -35,8 +35,18 @@ import {
   type RateMasterRow,
 } from '../lib/rateMaster'
 import { rateMasterItemNames } from '../lib/dinIntakeCosting'
+import {
+  DinDesignImportSection,
+  type MissingRateItem,
+} from '../components/dinCosting/DinDesignImportSection'
+import {
+  detectMissingRates,
+  type DesignImportSource,
+  type DesignOcrResult,
+} from '../lib/designOcr'
+import type { NavTarget } from '../lib/nav'
 
-type Props = { initialDin?: string; viewOnly?: boolean }
+type Props = { initialDin?: string; viewOnly?: boolean; onNavigate?: (t: NavTarget) => void }
 
 type DesignOpt = { id: string; dno: string; colour: string | null }
 
@@ -145,7 +155,7 @@ function isDinFilter(value: string | undefined): value is string {
   return true
 }
 
-export function DesignWiseCosting({ initialDin = '', viewOnly = false }: Props) {
+export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigate }: Props) {
   const { session, profile, isCeo, isManager, roleName } = useAuth()
   const canDeleteFinal = isCeo || isManager
   const canEdit = canEditDinCosting(roleName || '', isCeo, isManager)
@@ -187,6 +197,11 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false }: Props) 
   /** After "Save As New", skip one DIN blur auto-load so the form is not overwritten. */
   const skipDinAutoloadRef = useRef(false)
   const [masterRates, setMasterRates] = useState<RateMasterRow[]>([])
+  const [designImageUrl, setDesignImageUrl] = useState<string | null>(null)
+  const [importSource, setImportSource] = useState<DesignImportSource | null>(null)
+  const [ocrExtractedJson, setOcrExtractedJson] = useState<DesignOcrResult | null>(null)
+  const [ocrConfirmedJson, setOcrConfirmedJson] = useState<DesignOcrResult | null>(null)
+  const [missingRates, setMissingRates] = useState<MissingRateItem[]>([])
 
   useEffect(() => {
     void fetchFormulaMaster()
@@ -252,7 +267,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false }: Props) 
   )
 
   useEffect(() => {
-    if (!masterRates.length || !costingDate) return
+    if (!masterRates.length || !costingDate || isLocked) return
     setWarps((prev) =>
       prev.map((row) => {
         if (row.rate_source === 'manual') return row
@@ -269,7 +284,12 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false }: Props) 
         return row
       }),
     )
-  }, [costingDate, masterRates, applyWarpRateFromMaster, applyWeftRateFromMaster])
+  }, [costingDate, masterRates, applyWarpRateFromMaster, applyWeftRateFromMaster, isLocked])
+
+  useEffect(() => {
+    if (isLocked) return
+    setMissingRates(detectMissingRates(warps, wefts, masterRates, costingDate))
+  }, [warps, wefts, masterRates, costingDate, isLocked])
 
   useEffect(() => {
     void (async () => {
@@ -385,6 +405,10 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false }: Props) 
     setQualityName(String(header.quality_name || ''))
     setCostingDate(String(header.costing_date || todayISO()))
     setDiaryUrl((header.diary_image_url as string | null) || null)
+    setDesignImageUrl((header.design_image_url as string | null) || null)
+    setImportSource((header.import_source as DesignImportSource | null) || null)
+    setOcrExtractedJson((header.ocr_extracted_json as DesignOcrResult | null) || null)
+    setOcrConfirmedJson((header.ocr_confirmed_json as DesignOcrResult | null) || null)
     setStatus(header.status === 'final' ? 'final' : 'draft')
     setIsLocked(Boolean(header.is_locked))
 
@@ -544,6 +568,11 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false }: Props) 
     setDesignLength('')
     setDiaryUrl(null)
     setOcrNote(null)
+    setDesignImageUrl(null)
+    setImportSource(null)
+    setOcrExtractedJson(null)
+    setOcrConfirmedJson(null)
+    setMissingRates([])
     setWarps([emptyWarp(1)])
     setWefts([emptyWeft(1)])
     setPicConversionRate('0.45')
@@ -695,6 +724,10 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false }: Props) 
         quality_name: qualityName.trim() || null,
         costing_date: costingDate,
         diary_image_url: diaryUrl,
+        design_image_url: designImageUrl,
+        import_source: importSource,
+        ocr_extracted_json: ocrExtractedJson,
+        ocr_confirmed_json: ocrConfirmedJson,
         design_length_mtr: totals.enteredLengthMtr,
         wastage_mtr: totals.wastageMtr,
         wastage_percent: totals.wastagePercent,
@@ -923,6 +956,90 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false }: Props) 
     if (match?.colour && !qualityName) setQualityName(match.colour)
   }
 
+  function handleOcrApply(payload: {
+    dinNumber: string
+    qualityName: string
+    warps: WarpDraft[]
+    wefts: WeftDraft[]
+    designImageUrl: string | null
+    importSource: DesignImportSource
+    ocrExtracted: DesignOcrResult
+    ocrConfirmed: DesignOcrResult
+    missingRates: MissingRateItem[]
+  }) {
+    skipDinAutoloadRef.current = true
+    setSavedId(null)
+    setStatus('draft')
+    setIsLocked(false)
+    setDinNumber(payload.dinNumber)
+    if (payload.qualityName) setQualityName(payload.qualityName)
+    setWarps(payload.warps.length ? payload.warps : [emptyWarp(1)])
+    setWefts(payload.wefts.length ? payload.wefts : [emptyWeft(1)])
+    setDesignImageUrl(payload.designImageUrl)
+    if (payload.designImageUrl && !diaryUrl) setDiaryUrl(payload.designImageUrl)
+    setImportSource(payload.importSource)
+    setOcrExtractedJson(payload.ocrExtracted)
+    setOcrConfirmedJson(payload.ocrConfirmed)
+    setMissingRates(payload.missingRates)
+    setMessage(
+      payload.missingRates.length
+        ? `Design OCR applied — ${payload.missingRates.length} yarn rate(s) missing in Rate Master`
+        : 'Design OCR applied — review and save costing below',
+    )
+  }
+
+  async function refreshRatesFromMaster() {
+    setBusy(true)
+    setError(null)
+    try {
+      const rates = await fetchAllRates()
+      setMasterRates(rates)
+      setWarps((prev) =>
+        prev.map((row) => {
+          if (row.rate_source === 'manual') return row
+          if (!row.yarn_name.trim()) return row
+          const found = lookupRate(rates, 'warp', row.yarn_name, costingDate, { denier: row.denier })
+          if (!found) return row
+          return {
+            ...row,
+            rate_per_kg: String(found.calc.effectiveRate),
+            rate_source: 'rate_master' as const,
+            rate_master_id: found.row.id,
+            rate_basic: found.calc.basicRate,
+            rate_gst_percent: found.calc.gstPercent,
+            rate_gst_amount: found.calc.gstAmount,
+            rate_freight: found.calc.freightPerKg,
+            rate_effective_from: found.row.effective_from,
+          }
+        }),
+      )
+      setWefts((prev) =>
+        prev.map((row) => {
+          if (row.rate_source === 'manual') return row
+          if (!row.weft_name.trim()) return row
+          const found = lookupRate(rates, 'weft', row.weft_name, costingDate, { denier: row.denier })
+          if (!found) return row
+          return {
+            ...row,
+            rate_per_kg: String(found.calc.effectiveRate),
+            rate_source: 'rate_master' as const,
+            rate_master_id: found.row.id,
+            rate_basic: found.calc.basicRate,
+            rate_gst_percent: found.calc.gstPercent,
+            rate_gst_amount: found.calc.gstAmount,
+            rate_freight: found.calc.freightPerKg,
+            rate_effective_from: found.row.effective_from,
+          }
+        }),
+      )
+      setMessage('Rates refreshed from Rate Master — costing recalculated')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Rate refresh failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   if (!canView) {
     return (
       <div className="screen">
@@ -969,6 +1086,52 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false }: Props) 
           </span>
         ) : null}
       </header>
+
+      {!isReadOnly ? (
+        <DinDesignImportSection
+          disabled={isReadOnly}
+          designLength={designLength || String(formulaDefaults.default_base_length_mtr)}
+          costingDate={costingDate}
+          masterRates={masterRates}
+          existingWarps={warps}
+          onApply={handleOcrApply}
+          onOpenExisting={(din) => {
+            skipDinAutoloadRef.current = false
+            setDinNumber(din)
+            void loadExisting(din).catch((e: Error) => setError(e.message))
+          }}
+          onOpenRateMaster={
+            onNavigate ? () => onNavigate({ screen: 'rate-master', module: 'masters' }) : undefined
+          }
+        />
+      ) : null}
+
+      {missingRates.length > 0 && !isLocked ? (
+        <section className="dwc-panel dwc-missing-rates" role="alert">
+          <h2 className="section-title">Missing Rates</h2>
+          <ul className="dwc-missing-rates-list">
+            {missingRates.map((m, i) => (
+              <li key={`${m.category}-${m.itemName}-${i}`}>
+                Rate not available in Rate Master for <strong>{m.itemName}</strong> ({m.category})
+              </li>
+            ))}
+          </ul>
+          <div className="dwc-missing-rates-actions">
+            {onNavigate ? (
+              <button
+                type="button"
+                className="btn-warp"
+                onClick={() => onNavigate({ screen: 'rate-master', module: 'masters' })}
+              >
+                Open Rate Master
+              </button>
+            ) : null}
+            <button type="button" className="primary-save" disabled={busy} onClick={() => void refreshRatesFromMaster()}>
+              Update Rate &amp; Recalculate
+            </button>
+          </div>
+        </section>
+      ) : null}
 
       <section className="dwc-panel">
         <h2 className="section-title">Design Details</h2>
