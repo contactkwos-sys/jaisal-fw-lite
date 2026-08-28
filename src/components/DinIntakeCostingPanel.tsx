@@ -209,6 +209,31 @@ export function DinIntakeCostingPanel({ draft, rates, canWrite, onChange, onOpen
                         })
                       }
                     />
+                    {row.rate_source === 'manual' && !readOnly ? (
+                      <small className="text-muted">
+                        Rate Source: Manual Override{' '}
+                        <button
+                          type="button"
+                          className="link-btn"
+                          onClick={() =>
+                            patch({
+                              warps: draft.warps.map((r) =>
+                                r.key === row.key
+                                  ? applyWarpItemFromMaster(
+                                      { ...r, rate_source: undefined, rate_master_id: undefined },
+                                      r.yarn_name,
+                                      rates,
+                                      draft.costingDate,
+                                    )
+                                  : r,
+                              ),
+                            })
+                          }
+                        >
+                          Use Rate Master Rate
+                        </button>
+                      </small>
+                    ) : null}
                   </td>
                   <td className="num">{fmtMoney(calc.amount)}</td>
                   <td>
@@ -378,6 +403,31 @@ export function DinIntakeCostingPanel({ draft, rates, canWrite, onChange, onOpen
                         })
                       }
                     />
+                    {row.rate_source === 'manual' && !readOnly ? (
+                      <small className="text-muted">
+                        Rate Source: Manual Override{' '}
+                        <button
+                          type="button"
+                          className="link-btn"
+                          onClick={() =>
+                            patch({
+                              wefts: draft.wefts.map((r) =>
+                                r.key === row.key
+                                  ? applyWeftItemFromMaster(
+                                      { ...r, rate_source: undefined, rate_master_id: undefined },
+                                      r.weft_name,
+                                      rates,
+                                      draft.costingDate,
+                                    )
+                                  : r,
+                              ),
+                            })
+                          }
+                        >
+                          Use Rate Master Rate
+                        </button>
+                      </small>
+                    ) : null}
                   </td>
                   <td className="num">{fmtMoney(calc.amount)}</td>
                   <td>

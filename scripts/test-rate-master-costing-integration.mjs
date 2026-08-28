@@ -62,18 +62,25 @@ function lookupRateForCosting(rates, category, yarnName, asOfDate, opts = {}) {
   }
 
   const yarnNorm = normalizeItemName(trimmed)
-  const partial = rates
-    .filter(
-      (r) =>
-        r.category === category &&
-        r.is_active &&
-        r.effective_from <= asOfDate &&
-        !isOthersRateItem(r.item_name) &&
-        r.basic_rate > 0 &&
-        (normalizeItemName(r.item_name).includes(yarnNorm) ||
-          yarnNorm.includes(normalizeItemName(r.item_name))),
-    )
-    .sort((a, b) => b.effective_from.localeCompare(a.effective_from))[0]
+  const denierNorm = normalizeDenier(opts.denier)
+  let partialCandidates = rates.filter(
+    (r) =>
+      r.category === category &&
+      r.is_active &&
+      r.effective_from <= asOfDate &&
+      !isOthersRateItem(r.item_name) &&
+      r.basic_rate > 0 &&
+      (normalizeItemName(r.item_name).includes(yarnNorm) ||
+        yarnNorm.includes(normalizeItemName(r.item_name))),
+  )
+  if (denierNorm) {
+    const byDenier = partialCandidates.filter((r) => {
+      const rd = normalizeDenier(r.denier)
+      return !rd || rd === 'same' || rd === denierNorm || denierNorm === 'same'
+    })
+    if (byDenier.length) partialCandidates = byDenier
+  }
+  const partial = partialCandidates.sort((a, b) => b.effective_from.localeCompare(a.effective_from))[0]
 
   if (partial) {
     return { row: partial, calc: calcEffectiveRate(partial.basic_rate, partial.gst_percent, partial.freight_per_kg) }
@@ -144,6 +151,14 @@ checks.push(['TEST F: Sep draft uses newer rate', sepRate?.calc.effectiveRate ==
 
 // TEST G: Locked costing — rates stored on row, no auto-refresh (logic: isLocked skips refresh)
 checks.push(['TEST G: Historical rate protection flag', true])
+
+// TEST H: Partial match respects denier when provided
+const ratesHsy = [
+  { category: 'weft', item_name: '440 HSY', denier: 'Same', basic_rate: 210, gst_percent: 5, freight_per_kg: 2.25, effective_from: '2026-08-01', is_active: true },
+  { category: 'weft', item_name: '550 HSY', denier: 'Same', basic_rate: 230, gst_percent: 5, freight_per_kg: 2.25, effective_from: '2026-08-01', is_active: true },
+]
+const hsy440 = lookupRateForCosting(ratesHsy, 'weft', 'HSY', date, { denier: '440' })
+checks.push(['TEST H: HSY+denier 440 picks 440 HSY', hsy440?.row.item_name === '440 HSY'])
 
 let failed = 0
 console.log('Rate Master ↔ DIN Costing integration tests\n')

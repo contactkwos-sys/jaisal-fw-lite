@@ -5,8 +5,10 @@
 
 import {
   computeBuildup,
+  denierForDb,
   emptyWarp,
   emptyWeft,
+  resolveDenierForCalc,
   type WarpDraft,
   type WeftDraft,
 } from './designWiseCosting'
@@ -70,7 +72,10 @@ export function applyWarpItemFromMaster(
   const next: WarpDraft = { ...row, yarn_name: name }
   if (!name || !asOfDate) return next
   const cat = WARP_CATALOGUE.find((c) => c.item_name === name)
-  if (cat?.denier && !next.denier) next.denier = cat.denier
+  if (cat?.denier && !next.denier) {
+    const resolved = resolveDenierForCalc(cat.denier, name)
+    next.denier = resolved > 0 ? String(resolved) : cat.denier
+  }
   const found = lookupRateForCosting(rates, 'warp', name, asOfDate, { denier: next.denier })
   if (!found) return next
   return {
@@ -97,12 +102,23 @@ export function applyWeftItemFromMaster(
   const next: WeftDraft = { ...row, weft_name: name }
   if (!name || !asOfDate) return next
   const cat = WEFT_CATALOGUE.find((c) => c.item_name === name)
-  if (cat?.denier && !next.denier) next.denier = cat.denier === 'Same' ? 'Same' : cat.denier
+  if (cat?.denier && !next.denier) {
+    const resolved = resolveDenierForCalc(cat.denier, name)
+    next.denier = resolved > 0 ? String(resolved) : cat.denier === 'Same' ? String(resolved || '') : cat.denier
+  }
+  if (!next.denier) {
+    const resolved = resolveDenierForCalc('', name)
+    if (resolved > 0) next.denier = String(resolved)
+  }
   const found = lookupRateForCosting(rates, 'weft', name, asOfDate, { denier: next.denier })
   if (!found) return next
+  const denierFromMaster =
+    found.row.denier && !/^same$/i.test(found.row.denier)
+      ? found.row.denier
+      : String(resolveDenierForCalc(found.row.denier, name) || '')
   return {
     ...next,
-    denier: next.denier || found.row.denier || '',
+    denier: next.denier || denierFromMaster,
     rate_per_kg: String(found.calc.effectiveRate),
     rate_source: 'rate_master',
     rate_master_id: found.row.id,
@@ -294,7 +310,7 @@ export async function saveIntakeCostingDraft(input: {
     costing_id: costingId,
     sr_no: i + 1,
     yarn_name: row.yarn_name.trim() || null,
-    denier: Number(row.denier) || null,
+    denier: denierForDb(row.denier, row.yarn_name),
     tar_ends: Number(row.tar_ends) || null,
     length_mtr: Number(row.length_mtr) || null,
     rate_per_kg: Number(row.rate_per_kg) || null,
@@ -305,7 +321,7 @@ export async function saveIntakeCostingDraft(input: {
     costing_id: costingId,
     sr_no: i + 1,
     weft_name: row.weft_name.trim() || null,
-    denier: Number(row.denier) || null,
+    denier: denierForDb(row.denier, row.weft_name),
     pic: Number(row.pic) || null,
     width: Number(row.width) || null,
     length_mtr: Number(row.length_mtr) || null,

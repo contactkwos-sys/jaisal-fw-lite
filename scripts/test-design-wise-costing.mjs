@@ -113,6 +113,23 @@ function chainFromYarnTotals(totalYarnAmount, enteredLength, totalPic, picRate, 
   return { yarnCostPerMtr, conversionCharge, subtotalPerMtr, afterMuPerMtr, gstAmount, finalCostPerMtr }
 }
 
+function resolveDenierForCalc(denier, yarnName) {
+  const raw = denier == null ? '' : String(denier).trim()
+  if (raw && /^same$/i.test(raw)) {
+    const m = String(yarnName || '').match(/(\d+(?:\.\d+)?)/)
+    return m ? Number(m[1]) : 0
+  }
+  const direct = n(raw)
+  if (direct > 0) return direct
+  const fromName = String(yarnName || '').match(/^(\d+(?:\.\d+)?)/)
+  return fromName ? Number(fromName[1]) : 0
+}
+
+function weftWeightWithResolved(row) {
+  const denier = resolveDenierForCalc(row.denier, row.weft_name)
+  return round2(weftWeightKg(denier, n(row.pic), n(row.width), n(row.length_mtr)))
+}
+
 const warps = [
   {
     yarn_name: '150 ROTO B & W',

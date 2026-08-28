@@ -20,9 +20,12 @@ import {
   fetchWarpYarnOptions,
   previewNextDinNumber,
   syncDinCostingFromLatest,
+  updateDin,
   uploadDinImage,
+  upsertDinMatchings,
   type DinMatchingDraft,
 } from '../lib/designToOrder'
+import { findSharedDesign, isBusinessDesignNumber, normalizeDesignNumber } from '../lib/designIdentity'
 import {
   applyOcrToCostingDraft,
   emptyDesignOcrResult,
@@ -180,10 +183,33 @@ export function DinIntakeScreen({ onNavigate }: Props) {
     (ocr: DesignOcrResult) => {
       setOcrDraft(ocr)
 
-      const jfg = ocr.designNumber.value.trim()
+      const jfg = normalizeDesignNumber(ocr.designNumber.value)
       const quality = ocr.qualityName.value.trim()
-      if (jfg) setDesignName(jfg)
-      else if (quality) setDesignName(quality)
+      if (jfg) {
+        setDesignName(jfg)
+        // Business Design Number is the shared identity with DIN Costing
+        if (isBusinessDesignNumber(jfg)) setDinNumber(jfg)
+      } else if (quality) {
+        setDesignName(quality)
+      }
+
+      if (jfg && isBusinessDesignNumber(jfg)) {
+        void findSharedDesign(jfg)
+          .then((hit) => {
+            if (!hit) return
+            setMessage(
+              `Design ${hit.designNumber} already exists — saving will update the same master (no duplicate).`,
+            )
+            if (hit.costingId) {
+              void loadExistingCostingForDin(hit.designNumber).then((existing) => {
+                if (existing) setCostingDraft(existing)
+              })
+            }
+          })
+          .catch(() => {
+            /* ignore lookup errors */
+          })
+      }
 
       if (canWriteCosting && costingReady && ocrHasDetectedFields(ocr)) {
         setCostingDraft((prev) => {
@@ -229,11 +255,13 @@ export function DinIntakeScreen({ onNavigate }: Props) {
   }
 
   function updateOcrDesignNumber(value: string) {
+    const next = value.toUpperCase()
     setOcrDraft((prev) => ({
       ...prev,
-      designNumber: { ...prev.designNumber, value: value.toUpperCase(), confidence: 'high' },
+      designNumber: { ...prev.designNumber, value: next, confidence: 'high' },
     }))
-    setDesignName(value.toUpperCase())
+    setDesignName(next)
+    if (isBusinessDesignNumber(next)) setDinNumber(normalizeDesignNumber(next))
   }
 
   function updateOcrLoomPick(value: string) {
@@ -372,23 +400,46 @@ export function DinIntakeScreen({ onNavigate }: Props) {
             m.weft_4.trim(),
         )
 
-      const din = await createDin({
-        din_number: dinNumber,
-        received_date: receivedDate,
-        design_name: designName,
-        party_name: partyName,
-        din_image_url: imageUrl,
-        common_warp: warp,
-        remarks,
-        source,
-        source_email: source === 'gmail' ? DIN_INTAKE_EMAIL : undefined,
-        source_email_from: gmailMeta?.senderEmail || undefined,
-        gmail_message_id: gmailMeta?.messageId,
-        gmail_attachment_id: gmailMeta?.attachmentId,
-        gmail_import_id: gmailMeta?.importId,
-        created_by: session?.user?.id || null,
-        matchings: cleaned.length ? cleaned : undefined,
-      })
+      // Prefer business Design Number (JFG…) as shared identity with DIN Costing
+      const ocrDesign = normalizeDesignNumber(ocrDraft.designNumber.value)
+      const preferredNumber =
+        (isBusinessDesignNumber(dinNumber) && normalizeDesignNumber(dinNumber)) ||
+        (isBusinessDesignNumber(ocrDesign) && ocrDesign) ||
+        (isBusinessDesignNumber(designName) && normalizeDesignNumber(designName)) ||
+        normalizeDesignNumber(dinNumber)
+
+      const existing = preferredNumber ? await findSharedDesign(preferredNumber) : null
+
+      let din
+      if (existing?.din) {
+        await updateDin(existing.din.id, {
+          design_name: designName || existing.din.design_name,
+          party_name: partyName || existing.din.party_name,
+          din_image_url: imageUrl,
+          common_warp: warp || existing.din.common_warp,
+          remarks: remarks || existing.din.remarks,
+        })
+        if (cleaned.length) await upsertDinMatchings(existing.din.id, cleaned)
+        din = { ...existing.din, din_number: existing.din.din_number }
+      } else {
+        din = await createDin({
+          din_number: preferredNumber,
+          received_date: receivedDate,
+          design_name: designName || preferredNumber,
+          party_name: partyName,
+          din_image_url: imageUrl,
+          common_warp: warp,
+          remarks,
+          source,
+          source_email: source === 'gmail' ? DIN_INTAKE_EMAIL : undefined,
+          source_email_from: gmailMeta?.senderEmail || undefined,
+          gmail_message_id: gmailMeta?.messageId,
+          gmail_attachment_id: gmailMeta?.attachmentId,
+          gmail_import_id: gmailMeta?.importId,
+          created_by: session?.user?.id || null,
+          matchings: cleaned.length ? cleaned : undefined,
+        })
+      }
 
       if (gmailMeta?.importId) {
         await linkGmailImportToDin(gmailMeta.importId, din.id)
@@ -408,13 +459,17 @@ export function DinIntakeScreen({ onNavigate }: Props) {
         const draftToSave = applied
           ? {
               ...costingDraft,
+              costingId: costingDraft.costingId || existing?.costingId || null,
               wefts: applied.wefts.length ? applied.wefts : costingDraft.wefts,
               warps: applied.warps.length ? applied.warps : costingDraft.warps,
             }
-          : costingDraft
+          : {
+              ...costingDraft,
+              costingId: costingDraft.costingId || existing?.costingId || null,
+            }
 
         if (intakeDraftHasYarn(draftToSave)) {
-          await saveIntakeCostingDraft({
+          const costingId = await saveIntakeCostingDraft({
             dinNumber: din.din_number,
             qualityName: designName || din.din_number,
             diaryImageUrl: imageUrl,
@@ -422,15 +477,17 @@ export function DinIntakeScreen({ onNavigate }: Props) {
             userId: session?.user?.id || null,
           })
           await syncDinCostingFromLatest(din.din_number)
-          setCostingDraft(draftToSave)
-          costingNote = ' · costing draft saved & calculated'
+          setCostingDraft({ ...draftToSave, costingId })
+          costingNote = existing?.din
+            ? ' · existing design updated · costing draft saved'
+            : ' · costing draft saved & calculated'
         }
       }
 
       setMessage(`Saved ${din.din_number}${costingNote}`)
       onNavigate({ screen: 'dto-hub', module: 'design-to-order' })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Save failed')
+      setError(handleUserError('DinIntake.save', err, 'Save failed — check Design No. and try again'))
     } finally {
       setBusy(false)
     }
