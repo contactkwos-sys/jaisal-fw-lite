@@ -419,7 +419,7 @@ export function DinIntakeScreen({ onNavigate }: Props) {
   const gmailConnected = gmailStatus?.connected
   const gmailReady = gmailConnected && gmailStatus?.accountMatch !== false
   const activeSenders = (gmailStatus?.senders || []).filter((s) => s.email)
-  const showOcrReview = Boolean(imageUrl && (ocrHasDetectedFields(ocrDraft) || readingDesign))
+  const showOcrReview = Boolean(imageUrl && !readingDesign)
 
   function ocrConfidenceLabel(c: string): string {
     if (c === 'high') return '✓'
