@@ -26,6 +26,7 @@ import {
   loomPickWeftPicWarning,
   n,
   parseDiaryNumbers,
+  resolveProductionLengthMtr,
   withBaseDenier,
   type WarpDraft,
   type WeftDraft,
@@ -175,7 +176,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
   const [dinNumber, setDinNumber] = useState(initialDin)
   const [costingDate, setCostingDate] = useState(todayISO())
   const [qualityName, setQualityName] = useState('')
-  const [designLength, setDesignLength] = useState('')
+  const [designLength, setDesignLength] = useState(String(DEFAULT_LENGTH_MTR))
   const [loomPick, setLoomPick] = useState('')
   const [designOpts, setDesignOpts] = useState<DesignOpt[]>([])
   const [diaryUrl, setDiaryUrl] = useState<string | null>(null)
@@ -331,19 +332,45 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     })()
   }, [])
 
+  const effectiveDesignLength = useMemo(
+    () =>
+      resolveProductionLengthMtr(
+        designLength,
+        warps,
+        wefts,
+        formulaDefaults.default_base_length_mtr || DEFAULT_LENGTH_MTR,
+      ),
+    [designLength, warps, wefts, formulaDefaults.default_base_length_mtr],
+  )
+
+  // Keep Design Length field in sync when blank but yarn rows already carry length (e.g. 110)
+  useEffect(() => {
+    if (n(designLength) > 0) return
+    if (effectiveDesignLength > 0) setDesignLength(String(effectiveDesignLength))
+  }, [designLength, effectiveDesignLength])
+
   const buildup = useMemo(
     () =>
       computeBuildup(
         warps,
         wefts,
-        n(designLength),
+        effectiveDesignLength,
         n(picConversionRate),
         n(muPercent),
         n(gstPercent),
         n(wastageMtr),
         n(wastagePercent),
       ),
-    [warps, wefts, designLength, picConversionRate, muPercent, gstPercent, wastageMtr, wastagePercent],
+    [
+      warps,
+      wefts,
+      effectiveDesignLength,
+      picConversionRate,
+      muPercent,
+      gstPercent,
+      wastageMtr,
+      wastagePercent,
+    ],
   )
 
   const profit = useMemo(
@@ -442,7 +469,13 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     setIsLocked(Boolean(header.is_locked))
 
     const lengthVal = header.design_length_mtr
-    setDesignLength(lengthVal != null && lengthVal !== '' ? String(lengthVal) : '')
+    const lengthNum = n(lengthVal as string | number | null | undefined)
+    // Keep saved positive length; never leave blank/0 (that zeroes Yarn Cost/Mtr)
+    setDesignLength(
+      lengthNum > 0
+        ? String(lengthNum)
+        : String(formulaDefaults.default_base_length_mtr || DEFAULT_LENGTH_MTR),
+    )
     setLoomPick(header.loom_pick != null && header.loom_pick !== '' ? String(header.loom_pick) : '')
 
     setWastageMtr(String(header.wastage_mtr ?? formulaDefaults.default_wastage_mtr))
@@ -466,7 +499,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     setPicConversionRate(String(rate ?? 0.45))
     setMuPercent(String(header.mu_percent ?? 0))
     setGstPercent(String(header.gst_percent ?? 0))
-  }, [formulaDefaults.default_wastage_mtr, formulaDefaults.default_wastage_percent])
+  }, [formulaDefaults.default_wastage_mtr, formulaDefaults.default_wastage_percent, formulaDefaults.default_base_length_mtr])
 
   const loadById = useCallback(
     async (id: string, quiet = false) => {
@@ -733,7 +766,13 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
   function validateBeforeSave(overrides?: PersistOverrides): boolean {
     const din = (overrides?.dinNumber ?? dinNumber).trim()
     const quality = (overrides?.qualityName ?? qualityName).trim()
-    const length = overrides?.designLength ?? designLength
+    const lengthRaw = overrides?.designLength ?? designLength
+    const length = resolveProductionLengthMtr(
+      lengthRaw,
+      overrides?.warps ?? warps,
+      overrides?.wefts ?? wefts,
+      formulaDefaults.default_base_length_mtr || DEFAULT_LENGTH_MTR,
+    )
     if (!din) {
       setError('DIN / Design No. required')
       return false
@@ -746,11 +785,13 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
       setError('Quality Name is required')
       return false
     }
-    if (n(length) <= 0) {
+    if (length <= 0) {
       setLengthError('Design Length must be greater than zero')
       setError('Design Length must be greater than zero (cannot divide by zero)')
       return false
     }
+    // Heal blank Design Length in the form before save
+    if (n(lengthRaw) <= 0) setDesignLength(String(length))
     setLengthError(null)
     if (n(picConversionRate) < 0 || n(muPercent) < 0 || n(gstPercent) < 0) {
       setError('Conversion Rate, MU % and GST % cannot be negative')
@@ -796,6 +837,13 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
       const lengthStr = overrides?.designLength ?? designLength
       const warpsToSave = overrides?.warps ?? warps
       const weftsToSave = overrides?.wefts ?? wefts
+      const resolvedLength = resolveProductionLengthMtr(
+        lengthStr,
+        warpsToSave,
+        weftsToSave,
+        formulaDefaults.default_base_length_mtr || DEFAULT_LENGTH_MTR,
+      )
+      if (n(lengthStr) <= 0) setDesignLength(String(resolvedLength))
       const diaryToSave = overrides?.diaryUrl !== undefined ? overrides.diaryUrl : diaryUrl
       const designImgToSave =
         overrides?.designImageUrl !== undefined ? overrides.designImageUrl : designImageUrl
@@ -809,7 +857,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
       const totals = computeBuildup(
         warpsToSave,
         weftsToSave,
-        n(lengthStr),
+        resolvedLength,
         n(picConversionRate),
         n(muPercent),
         n(gstPercent),
@@ -1403,7 +1451,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     return <DinCostingViewOnly rows={viewRows} onRefresh={() => void refreshHistory()} />
   }
 
-  const wastageDisplay = computeWastageParams(n(designLength), n(wastageMtr), n(wastagePercent))
+  const wastageDisplay = computeWastageParams(effectiveDesignLength, n(wastageMtr), n(wastagePercent))
 
   return (
     <div className="screen dwc-screen">
