@@ -227,6 +227,22 @@ Total              112   1116
 assert(extractDesignNumbers(formatColour, 'jfg1674-.jpg') === 'JFG1674', 'Colour sheet DIN from JFG-1674-wxb')
 assert(extractLoomPick(formatColour) === '112', 'Colour sheet loom pick = 112 total')
 const colour = extractColourTable(formatColour)
+
+/** Design Number label + feeder pick sum auto-fill */
+const formatDesignNumberLabel = `
+Design Number - JFG2248
+Colour 1 - 28 0
+Colour 2 zaree 40 0
+Colour 3 - 44 0
+`
+assert(extractDesignNumbers(formatDesignNumberLabel) === 'JFG2248', 'Design Number - label')
+const colourLabel = extractColourTable(formatDesignNumberLabel)
+assert(colourLabel.feeders.length === 3, 'Design Number sheet 3 feeders')
+assert(colourLabel.weftRows.map((r) => r.pic).join(',') === '28,40,44', 'Feeder picks')
+const sumPics = colourLabel.weftRows.reduce((s, r) => s + Number(r.pic || 0), 0)
+assert(sumPics === 112, 'Σ feeder picks = 112 for TOTAL LOOM PICK')
+assert(extractLoomPick(formatDesignNumberLabel) === '' || Number(extractLoomPick(formatDesignNumberLabel)) >= 0, 'no false loom header required')
+
 assert(colour.feeders.length === 3, 'Colour sheet 3 active feeders')
 assert(colour.feeders[0].yarnType === '-', 'Colour 1 yarn is dash (blank cell)')
 assert(colour.feeders[1].yarnType === 'ZARI', 'Colour 2 yarn zaree → ZARI')

@@ -861,6 +861,94 @@
   margin-left: 0.35rem;
 }
 
+/* Single-page compact DIN Costing */
+.dwc-single-page {
+  gap: 0.65rem;
+}
+
+.dwc-compact-block {
+  padding: 0.75rem 0.9rem;
+}
+
+.dwc-accordion {
+  padding: 0.55rem 0.9rem;
+}
+
+.dwc-accordion > summary {
+  cursor: pointer;
+  list-style: none;
+  font-weight: 650;
+  padding: 0.25rem 0;
+}
+
+.dwc-accordion > summary::-webkit-details-marker {
+  display: none;
+}
+
+.dwc-accordion > summary::after {
+  content: '▾';
+  float: right;
+  opacity: 0.55;
+}
+
+.dwc-accordion[open] > summary::after {
+  content: '▴';
+}
+
+.dwc-accordion > :not(summary) {
+  margin-top: 0.65rem;
+}
+
+/* Rate Master yarn autocomplete (Cash Book item-ac pattern) */
+.dwc-yarn-ac {
+  position: relative;
+  min-width: 9rem;
+}
+
+.dwc-yarn-ac input {
+  width: 100%;
+  min-width: 8.5rem;
+}
+
+.dwc-yarn-ac-list {
+  position: absolute;
+  z-index: 40;
+  left: 0;
+  right: 0;
+  top: calc(100% + 2px);
+  margin: 0;
+  padding: 0.2rem 0;
+  list-style: none;
+  max-height: 12rem;
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm, 6px);
+  box-shadow: var(--shadow-sm);
+}
+
+.dwc-yarn-ac-list button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 0.4rem 0.65rem;
+  cursor: pointer;
+  color: var(--text);
+  font: inherit;
+}
+
+.dwc-yarn-ac-list button:hover {
+  background: var(--teal-soft, #e8f5f3);
+}
+
+.dwc-yarn-ac-empty {
+  padding: 0.45rem 0.65rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
 @media (max-width: 768px) {
   .dwc-import-actions {
     grid-template-columns: 1fr 1fr;
@@ -872,5 +960,9 @@
 
   .dwc-ocr-weft-row {
     grid-template-columns: auto 1fr;
+  }
+
+  .dwc-yarn-ac {
+    min-width: 7rem;
   }
 }
