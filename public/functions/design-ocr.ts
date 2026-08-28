@@ -54,26 +54,34 @@ Deno.serve(async (req) => {
 Extract ONLY costing-relevant fields. Return ONLY valid JSON (no markdown):
 
 {
-  "designNumber": { "value": "JFG2248", "confidence": "high"|"low"|"missing", "source": "image"|"subject"|"filename" },
-  "loomPick": { "value": "56", "confidence": "high"|"low"|"missing" },
+  "designNumber": { "value": "JFG1674", "confidence": "high"|"low"|"missing", "source": "image"|"subject"|"filename" },
+  "loomPick": { "value": "112", "confidence": "high"|"low"|"missing" },
   "qualityName": { "value": "", "confidence": "high"|"low"|"missing" },
   "feeders": [
-    { "feederNo": 1, "yarnType": "HSY", "confidence": "high"|"low"|"missing" }
+    { "feederNo": 1, "yarnType": "-", "confidence": "high"|"low"|"missing" },
+    { "feederNo": 2, "yarnType": "ZARI", "confidence": "high"|"low"|"missing" },
+    { "feederNo": 3, "yarnType": "-", "confidence": "high"|"low"|"missing" }
   ],
   "weftRows": [
-    { "pic": "28.00", "strings": "2222", "confidence": "high"|"low"|"missing" }
+    { "pic": "37", "strings": "372", "confidence": "high"|"low"|"missing" },
+    { "pic": "37", "strings": "372", "confidence": "high"|"low"|"missing" },
+    { "pic": "37", "strings": "372", "confidence": "high"|"low"|"missing" }
   ],
-  "totalPick": { "value": "57.89", "confidence": "high"|"low"|"missing" },
-  "totalStrings": { "value": "4594", "confidence": "high"|"low"|"missing" },
+  "totalPick": { "value": "112", "confidence": "high"|"low"|"missing" },
+  "totalStrings": { "value": "1116", "confidence": "high"|"low"|"missing" },
   "raw_text": "full OCR text of the document"
 }
 
 Rules:
-- Design numbers look like JFG2248, JFG2249, JFG1591 (letters + digits). Do NOT use phone numbers, websites, or customer refs.
-- Pick/Strings table rows are WEFT data — preserve EXACT order as shown (row 1 first, then row 2, etc.). Do NOT reorder.
-- "Pick" column maps to pic; "Strings" column maps to strings.
-- Feeders may appear as Feeder-1 HSY, FD.1 HSY, FD1=TEX, etc.
-- Loom Pick is separate from individual weft PIC rows.
+- Design numbers look like JFG2248, JFG-1674-wxb → normalize to JFG1674 (letters + digits only). Do NOT use phone numbers, websites, or customer refs.
+- Common sheet layout: header "112-pick" + Colour 1 / Colour 2 / Colour 3 rows with Pick and Strings columns, then Total.
+- Loom Pick = total picks for the design (header "112-pick" OR Total pick). NOT a single colour's pick.
+- Colour N rows map to feeders FD1..FDN AND weftRows in the same order. Skip Colour rows with Pick 0.
+- If a colour/yarn cell has no readable yarn name, set yarnType to "-" (dash). Do not invent yarn names.
+- Yarn text like zaree / zari / jari → "ZARI".
+- "Pick" column → weftRows[].pic; "Strings" column → weftRows[].strings (strings are optional — empty string OK).
+- Also support Feeder-1 HSY / FD1=TEX style sheets.
+- Preserve EXACT Colour / weft row order. Do NOT reorder.
 - If unsure, set confidence to "low" or "missing" — do not guess.
 - Email subject hint: ${subject || '(none)'}
 - Attachment filename hint: ${filename || '(none)'}`
