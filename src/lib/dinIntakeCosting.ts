@@ -15,7 +15,7 @@ import {
   WARP_CATALOGUE,
   WEFT_CATALOGUE,
   fetchAllRates,
-  lookupRate,
+  lookupRateForCosting,
   type RateMasterRow,
 } from './rateMaster'
 import { todayISO } from './mutate'
@@ -71,7 +71,7 @@ export function applyWarpItemFromMaster(
   if (!name || !asOfDate) return next
   const cat = WARP_CATALOGUE.find((c) => c.item_name === name)
   if (cat?.denier && !next.denier) next.denier = cat.denier
-  const found = lookupRate(rates, 'warp', name, asOfDate, { denier: next.denier })
+  const found = lookupRateForCosting(rates, 'warp', name, asOfDate, { denier: next.denier })
   if (!found) return next
   return {
     ...next,
@@ -98,7 +98,7 @@ export function applyWeftItemFromMaster(
   if (!name || !asOfDate) return next
   const cat = WEFT_CATALOGUE.find((c) => c.item_name === name)
   if (cat?.denier && !next.denier) next.denier = cat.denier === 'Same' ? 'Same' : cat.denier
-  const found = lookupRate(rates, 'weft', name, asOfDate, { denier: next.denier })
+  const found = lookupRateForCosting(rates, 'weft', name, asOfDate, { denier: next.denier })
   if (!found) return next
   return {
     ...next,

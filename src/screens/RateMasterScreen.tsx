@@ -4,6 +4,7 @@ import { todayISO } from '../lib/mutate'
 import {
   WARP_CATALOGUE,
   WEFT_CATALOGUE,
+  allRateMasterItemNames,
   calcEffectiveRate,
   deactivateRate,
   fetchAllRates,
@@ -46,7 +47,21 @@ const EMPTY_FORM = (category: RateCategory): FormState => ({
   effective_from: todayISO(),
 })
 
-export function RateMasterScreen() {
+type Props = {
+  /** Deep-link from DIN Costing missing-rate flow: filter `add:weft:MARBLE` */
+  preset?: { category: RateCategory; itemName: string; openAdd?: boolean }
+}
+
+export function parseRateMasterPreset(filter?: string): Props['preset'] | undefined {
+  if (!filter?.startsWith('add:')) return undefined
+  const parts = filter.split(':')
+  if (parts.length < 3) return undefined
+  const category = parts[1] as RateCategory
+  if (category !== 'warp' && category !== 'weft') return undefined
+  return { category, itemName: parts.slice(2).join(':'), openAdd: true }
+}
+
+export function RateMasterScreen({ preset }: Props = {}) {
   const { session, isCeo, isManager, roleName } = useAuth()
   const role = (roleName || '').trim().toLowerCase()
   const canEdit =
@@ -89,22 +104,46 @@ export function RateMasterScreen() {
     void load().catch((e: Error) => setError(e.message))
   }, [load])
 
+  useEffect(() => {
+    if (!preset?.openAdd || !preset.itemName) return
+    setTab(preset.category)
+    setForm({
+      ...EMPTY_FORM(preset.category),
+      gst_percent: defaultGst,
+      freight_per_kg: defaultFreight,
+      item_name: preset.itemName,
+      category: preset.category,
+    })
+    setFormMode('add')
+    setModalError(null)
+    setModalOpen(true)
+  }, [preset, defaultGst, defaultFreight])
+
   const catalogue = tab === 'warp' ? WARP_CATALOGUE : WEFT_CATALOGUE
 
   const displayRows = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return catalogue
-      .map((item, idx) => {
-        const latest = latestRateForItem(rates, tab, item.item_name, asOfDate)
-        const supplier =
-          latest?.supplier_name ??
-          ('supplier_name' in item ? (item as { supplier_name?: string }).supplier_name : '') ??
-          ''
+    const catNames = new Set<string>(catalogue.map((c) => c.item_name))
+    const customNames = allRateMasterItemNames(rates, tab).filter((name) => !catNames.has(name))
+
+    const rows = [
+      ...catalogue.map((item, idx) => ({ sr: idx + 1, item_name: item.item_name, denier: item.denier, supplier_name: 'supplier_name' in item ? String((item as { supplier_name?: string }).supplier_name || '') : '', fromCatalogue: true })),
+      ...customNames.map((item_name, i) => ({
+        sr: catalogue.length + i + 1,
+        item_name,
+        denier: latestRateForItem(rates, tab, item_name, asOfDate)?.denier ?? '',
+        supplier_name: latestRateForItem(rates, tab, item_name, asOfDate)?.supplier_name ?? '',
+        fromCatalogue: false,
+      })),
+    ]
+
+    return rows
+      .map((row) => {
+        const latest = latestRateForItem(rates, tab, row.item_name, asOfDate)
         return {
-          sr: idx + 1,
-          item_name: item.item_name,
-          denier: latest?.denier ?? item.denier ?? '',
-          supplier_name: supplier,
+          ...row,
+          supplier_name: latest?.supplier_name ?? row.supplier_name ?? '',
+          denier: latest?.denier ?? row.denier ?? '',
           rate: latest,
         }
       })
@@ -403,6 +442,9 @@ export function RateMasterScreen() {
                     <td className="num rm-sticky-col">{row.sr}</td>
                     <td className="rm-sticky-col rm-sticky-col-2">
                       <strong>{row.item_name}</strong>
+                      {!row.fromCatalogue ? (
+                        <span className="rm-custom-tag text-muted2"> Custom</span>
+                      ) : null}
                     </td>
                     <td>{row.denier || '—'}</td>
                     <td>{row.supplier_name || '—'}</td>
@@ -504,17 +546,30 @@ export function RateMasterScreen() {
               <label>
                 <span>Item / Variety *</span>
                 {formMode === 'add' ? (
-                  <select
-                    value={form.item_name}
-                    onChange={(e) => applyCatalogueItem(e.target.value, form.category)}
-                  >
-                    <option value="">— Select item / variety —</option>
-                    {formCatalogue.map((i) => (
-                      <option key={i.item_name} value={i.item_name}>
-                        {i.item_name}
-                      </option>
-                    ))}
-                  </select>
+                  <>
+                    <input
+                      list={`rm-item-catalogue-${form.category}`}
+                      value={form.item_name}
+                      placeholder="e.g. MARBLE, HSY, 300 Tex"
+                      onChange={(e) => {
+                        const v = e.target.value
+                        const catItem = formCatalogue.find((i) => i.item_name === v)
+                        if (catItem) applyCatalogueItem(v, form.category)
+                        else setForm((f) => ({ ...f, item_name: v }))
+                      }}
+                    />
+                    <datalist id={`rm-item-catalogue-${form.category}`}>
+                      {formCatalogue.map((i) => (
+                        <option key={i.item_name} value={i.item_name} />
+                      ))}
+                      {allRateMasterItemNames(rates, form.category)
+                        .filter((n) => !formCatalogue.some((c) => c.item_name === n))
+                        .map((n) => (
+                          <option key={n} value={n} />
+                        ))}
+                    </datalist>
+                    <small className="text-muted2">Select from list or type a new yarn/item name (e.g. MARBLE)</small>
+                  </>
                 ) : (
                   <input value={form.item_name} readOnly />
                 )}
