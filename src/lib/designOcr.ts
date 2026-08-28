@@ -3,7 +3,13 @@
  * Supports multiple visual formats (Pick/Strings table, Feeders, Loom Pick).
  */
 
-import { emptyWeft, type WeftDraft, type WarpDraft } from './designWiseCosting'
+import {
+  DEFAULT_LENGTH_MTR,
+  DEFAULT_WIDTH,
+  emptyWeft,
+  type WeftDraft,
+  type WarpDraft,
+} from './designWiseCosting'
 import {
   applyWeftItemFromMaster,
 } from './dinIntakeCosting'
@@ -26,6 +32,8 @@ export type DesignOcrFeeder = {
   feederNo: number
   yarnType: string
   confidence: FieldConfidence
+  /** Display label: "Colour N" or "Feeder N" */
+  sourceLabel?: string
 }
 
 export type DesignOcrWeftRow = {
@@ -229,7 +237,12 @@ function extractFeeders(text: string): DesignOcrFeeder[] {
     const no = Number(m[1])
     const yarn = normalizeYarnLabel(m[2] || '')
     if (!no || feeders.some((f) => f.feederNo === no)) continue
-    feeders.push({ feederNo: no, yarnType: yarn, confidence: 'high' })
+    feeders.push({
+      feederNo: no,
+      yarnType: yarn,
+      confidence: 'high',
+      sourceLabel: `Feeder ${no}`,
+    })
   }
   feeders.sort((a, b) => a.feederNo - b.feederNo)
   return feeders
@@ -306,6 +319,7 @@ export function extractColourTable(text: string): {
       feederNo: e.no,
       yarnType: e.yarn,
       confidence: e.yarn === '-' ? 'low' : 'high',
+      sourceLabel: `Colour ${e.no}`,
     })),
     weftRows: entries.map((e) => ({
       pic: e.pic,
@@ -442,16 +456,12 @@ export function parseDesignReferenceText(
   }
 
   if (!result.weftRows.length) {
+    // Format A "315 / 315 Strings" is strings-only reference — do NOT invent weft PIC from loom pick.
+    // TOTAL LOOM PICK stays on the header; weft PIC rows must come from colour/pick table or user entry.
     const formatA = extractFormatAStringPair(normalized)
-    if (formatA) result.weftRows = [formatA]
-    else if (result.loomPick.value && result.totalStrings.value) {
-      result.weftRows = [
-        {
-          pic: result.loomPick.value,
-          strings: result.totalStrings.value,
-          confidence: 'low',
-        },
-      ]
+    if (formatA && formatA.strings) {
+      // Keep strings as OCR audit only — no weft PIC invented from loom pick
+      result.weftRows = []
     }
   }
 
@@ -487,6 +497,7 @@ export function mergeDesignOcrPayload(
       feederNo: f.feederNo,
       yarnType: normalizeYarnLabel(f.yarnType || ''),
       confidence: f.confidence || 'high',
+      sourceLabel: f.sourceLabel || `Feeder ${f.feederNo}`,
     }))
   }
 
@@ -599,63 +610,73 @@ export async function readDesignReference(
   return attachReadMeta(parsed, 'tesseract', warning)
 }
 
-/** Map OCR review → weft rows (Pick → PIC, Strings → Width optional) preserving order. */
+/** Map OCR review → weft rows. Pick → PIC only. Strings are NEVER used for width/costing. */
 export function mapOcrToWeftRows(
   ocr: DesignOcrResult,
   designLength: string,
   rates: RateMasterRow[],
   costingDate: string,
 ): WeftDraft[] {
-  const defaultPic = (ocr.loomPick.value || ocr.totalPick.value || '').trim()
+  const length = (designLength || '').trim() || String(DEFAULT_LENGTH_MTR)
   const maxFeederNo = ocr.feeders.reduce((m, f) => Math.max(m, f.feederNo), 0)
 
   let sourceRows: DesignOcrWeftRow[]
   if (ocr.weftRows.length > 0) {
     sourceRows = [...ocr.weftRows]
   } else if (ocr.feeders.length > 0) {
-    // One costing row per feeder when Pick/Strings table was not readable
+    // One costing row per feeder when Pick table was not readable — PIC blank for user
     sourceRows = ocr.feeders.map(() => ({
       pic: '',
       strings: '',
       confidence: 'low' as const,
     }))
   } else {
-    sourceRows = [
-      {
-        pic: defaultPic,
-        strings: '',
-        confidence: 'low' as const,
-      },
-    ]
+    sourceRows = []
   }
 
-  // Pad so every detected feeder gets a weft line (FD3 → index 2)
+  // Pad so every detected feeder/colour gets a weft line in source order
   while (sourceRows.length < maxFeederNo) {
     sourceRows.push({ pic: '', strings: '', confidence: 'low' })
+  }
+
+  // If only loom pick known and no colour/pick rows — do NOT invent weft PIC from loom pick
+  // (TOTAL LOOM PICK ≠ individual weft PIC). Leave one empty weft for manual entry.
+  if (!sourceRows.length) {
+    sourceRows = [{ pic: '', strings: '', confidence: 'low' }]
   }
 
   const rows: WeftDraft[] = []
   for (let i = 0; i < sourceRows.length; i++) {
     const src = sourceRows[i]
     const feeder = ocr.feeders.find((f) => f.feederNo === i + 1)
-    const pic = (src.pic || '').trim() || (i === 0 && sourceRows.length === 1 ? defaultPic : '')
-    // Strings / width is optional — never block costing; leave blank when missing
-    const width = (src.strings || '').trim()
+    const feederNo = feeder?.feederNo ?? i + 1
+    // Prefer Colour N when colour table was used; else Feeder N
+    const feederLabel = feeder
+      ? feeder.sourceLabel || `Colour ${feederNo}`
+      : `Colour ${feederNo}`
+    const pic = (src.pic || '').trim()
+    // Strings are OCR reference only — never map to Width. Default Width = 52.
+    const stringsRef = (src.strings || '').trim()
     const rawYarn = feeder ? normalizeYarnLabel(feeder.yarnType) : ''
+    const yarnName = isBlankYarnName(rawYarn) ? '' : rawYarn
+
     let row: WeftDraft = {
-      ...emptyWeft(i + 1),
+      ...emptyWeft(i + 1, { lengthMtr: length, width: DEFAULT_WIDTH, feederNo }),
+      feeder_label: feederLabel,
+      feeder_no: feederNo,
       pic,
-      width,
-      length_mtr: designLength,
-      weft_name: rawYarn,
+      width: String(DEFAULT_WIDTH),
+      length_mtr: length,
+      weft_name: yarnName,
+      strings_ref: stringsRef,
     }
-    if (rawYarn && !isBlankYarnName(rawYarn)) {
-      row = applyWeftItemFromMaster(row, rawYarn, rates, costingDate)
+    if (yarnName) {
+      row = applyWeftItemFromMaster(row, yarnName, rates, costingDate)
     }
     rows.push(row)
   }
 
-  if (!rows.length) rows.push(emptyWeft(1))
+  if (!rows.length) rows.push(emptyWeft(1, { lengthMtr: length }))
   return rows
 }
 
@@ -670,14 +691,18 @@ export function detectMissingRates(
     const name = row.yarn_name.trim()
     if (isBlankYarnName(name)) return
     if (row.rate_source === 'manual' && n(row.rate_per_kg) > 0) return
-    const found = lookupRateForCosting(rates, 'warp', name, costingDate, { denier: row.denier })
+    const found = lookupRateForCosting(rates, 'warp', name, costingDate, {
+      denier: row.base_denier || row.denier,
+    })
     if (!found && !n(row.rate_per_kg)) missing.push({ category: 'warp', itemName: name, rowIndex: idx })
   })
   wefts.forEach((row, idx) => {
     const name = row.weft_name.trim()
     if (isBlankYarnName(name)) return
     if (row.rate_source === 'manual' && n(row.rate_per_kg) > 0) return
-    const found = lookupRateForCosting(rates, 'weft', name, costingDate, { denier: row.denier })
+    const found = lookupRateForCosting(rates, 'weft', name, costingDate, {
+      denier: row.base_denier || row.denier,
+    })
     if (!found && !n(row.rate_per_kg)) missing.push({ category: 'weft', itemName: name, rowIndex: idx })
   })
   return missing
@@ -706,16 +731,23 @@ export function applyOcrToCostingDraft(
     const idx = feeder.feederNo - 1
     if (idx < 0 || idx >= wefts.length) continue
     const yarn = normalizeYarnLabel(feeder.yarnType)
+    const label = feeder.sourceLabel || `Colour ${feeder.feederNo}`
     if (isBlankYarnName(yarn)) {
       wefts[idx] = {
         ...wefts[idx],
-        weft_name: '-',
+        feeder_label: label,
+        feeder_no: feeder.feederNo,
+        weft_name: '',
         rate_per_kg: '',
         rate_source: undefined,
         rate_master_id: undefined,
       }
     } else {
-      wefts[idx] = applyWeftItemFromMaster(wefts[idx], yarn, opts.rates, opts.costingDate)
+      wefts[idx] = {
+        ...applyWeftItemFromMaster(wefts[idx], yarn, opts.rates, opts.costingDate),
+        feeder_label: label,
+        feeder_no: feeder.feederNo,
+      }
     }
   }
 

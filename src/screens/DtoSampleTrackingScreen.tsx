@@ -154,16 +154,97 @@ export function DtoSampleTrackingScreen({ onNavigate, initialDinId }: Props) {
 
         {din ? (
           <div className="dto-din-preview">
-            <ImageLightbox src={din.din_image_url} alt={din.din_number} thumbClassName="dto-thumb-lg" />
+            <ImageLightbox
+              src={din.main_sample_photo_url || din.din_image_url}
+              alt={din.din_number}
+              thumbClassName="dto-thumb-lg"
+            />
             <div>
               <h2>{din.design_name || din.din_number}</h2>
               <p className="text-muted">
-                Original DIN image · click to enlarge · <DtoStatusPill status={din.status} />
+                {din.main_sample_photo_url
+                  ? 'Main sample photo (sales-facing)'
+                  : 'Internal DIN reference (CEO only until final sample photos uploaded)'}{' '}
+                · <DtoStatusPill status={din.status} />
               </p>
             </div>
           </div>
         ) : null}
       </section>
+
+      {din ? (
+        <section className="surface dto-panel">
+          <h2 className="section-title">Final Sample (Sales / Customer)</h2>
+          <p className="text-muted2">
+            After physical sample: upload exactly two sales photos — Main Sample Photo + ONE Combined Matching
+            Photo (all matchings together). Internal DIN/OCR images stay private.
+          </p>
+          <div className="dto-photo-row">
+            <div>
+              <span className="text-muted">1. Main Sample Photo</span>
+              <ImageLightbox src={din.main_sample_photo_url} alt="Main sample" thumbClassName="dto-thumb-md" />
+              <label className="link-btn">
+                Upload main sample
+                <input
+                  type="file"
+                  accept="image/*"
+                  hidden
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    if (!f) return
+                    void (async () => {
+                      setBusy(true)
+                      try {
+                        const url = await uploadDinImage(f)
+                        await updateDin(din.id, { main_sample_photo_url: url })
+                        setMessage('Main sample photo saved')
+                        await refreshDin()
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : 'Upload failed')
+                      } finally {
+                        setBusy(false)
+                      }
+                    })()
+                  }}
+                />
+              </label>
+            </div>
+            <div>
+              <span className="text-muted">2. Combined Matching Photo (all matchings in one)</span>
+              <ImageLightbox
+                src={din.combined_matching_photo_url}
+                alt="Combined matchings"
+                thumbClassName="dto-thumb-md"
+              />
+              <label className="link-btn">
+                Upload combined matching photo
+                <input
+                  type="file"
+                  accept="image/*"
+                  hidden
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    if (!f) return
+                    void (async () => {
+                      setBusy(true)
+                      try {
+                        const url = await uploadDinImage(f)
+                        await updateDin(din.id, { combined_matching_photo_url: url })
+                        setMessage('Combined matching photo saved')
+                        await refreshDin()
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : 'Upload failed')
+                      } finally {
+                        setBusy(false)
+                      }
+                    })()
+                  }}
+                />
+              </label>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <section className="surface dto-panel">
         <h2 className="section-title">Matchings</h2>

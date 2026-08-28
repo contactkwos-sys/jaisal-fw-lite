@@ -628,25 +628,25 @@ export function DinIntakeScreen({ onNavigate }: Props) {
               </label>
               <label className="field">
                 <span>
-                  Detected Loom Pick {ocrConfidenceLabel(ocrDraft.loomPick.confidence)}
+                  TOTAL LOOM PICK {ocrConfidenceLabel(ocrDraft.loomPick.confidence)}
                 </span>
                 <input
                   className="num"
                   value={ocrDraft.loomPick.value}
                   onChange={(e) => updateOcrLoomPick(e.target.value)}
-                  placeholder="e.g. 56"
+                  placeholder="e.g. 112"
                 />
               </label>
             </div>
             {ocrDraft.feeders.length ? (
               <div className="dwc-ocr-feeders">
-                <span className="text-muted2">Feeders</span>
+                <span className="text-muted2">Feeder/Colour (blank yarn OK)</span>
                 {ocrDraft.feeders.map((f, idx) => (
                   <div key={f.feederNo} className="dwc-ocr-feeder-row">
-                    <span className="num">FD{f.feederNo}</span>
+                    <span className="num">{f.sourceLabel || `Colour ${f.feederNo}`}</span>
                     <input
-                      value={f.yarnType}
-                      onChange={(e) => updateOcrFeeder(idx, { yarnType: e.target.value.toUpperCase() })}
+                      value={f.yarnType === '-' ? '' : f.yarnType}
+                      onChange={(e) => updateOcrFeeder(idx, { yarnType: e.target.value || '-' })}
                     />
                   </div>
                 ))}
@@ -654,7 +654,7 @@ export function DinIntakeScreen({ onNavigate }: Props) {
             ) : null}
             {ocrDraft.weftRows.length ? (
               <div className="dwc-ocr-weft">
-                <span className="text-muted2">Pick / Strings</span>
+                <span className="text-muted2">Weft Pick (Strings not used for costing)</span>
                 {ocrDraft.weftRows.map((row, idx) => (
                   <div key={idx} className="dwc-ocr-weft-row">
                     <span className="num">#{idx + 1}</span>
@@ -666,16 +666,14 @@ export function DinIntakeScreen({ onNavigate }: Props) {
                         onChange={(e) => updateOcrWeftRow(idx, { pic: e.target.value })}
                       />
                     </label>
-                    <label>
-                      Strings
-                      <input
-                        className="num"
-                        value={row.strings}
-                        onChange={(e) => updateOcrWeftRow(idx, { strings: e.target.value })}
-                      />
-                    </label>
                   </div>
                 ))}
+                {(ocrDraft.totalStrings.value || ocrDraft.weftRows.some((r) => r.strings)) && (
+                  <details className="dwc-ocr-source-details">
+                    <summary>Source / OCR Strings (reference only)</summary>
+                    <p className="text-muted2">Total Strings: {ocrDraft.totalStrings.value || '—'}</p>
+                  </details>
+                )}
               </div>
             ) : null}
             {canWriteCosting ? (

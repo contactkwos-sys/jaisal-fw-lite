@@ -11,9 +11,11 @@ import {
   computeWeftRow,
   emptyWarp,
   emptyWeft,
+  formatCostingDenier,
   fmtInr,
   fmtMoney,
   n,
+  withBaseDenier,
 } from '../lib/designWiseCosting'
 import { gstLabel, type RateMasterRow } from '../lib/rateMaster'
 
@@ -101,7 +103,8 @@ export function DinIntakeCostingPanel({ draft, rates, canWrite, onChange, onOpen
           <thead>
             <tr>
               <th>Item Name</th>
-              <th>Denier</th>
+              <th>Base Denier</th>
+              <th>Costing Denier</th>
               <th>TAR / Ends</th>
               <th>Length</th>
               <th>Rate ₹/kg</th>
@@ -141,16 +144,19 @@ export function DinIntakeCostingPanel({ draft, rates, canWrite, onChange, onOpen
                       type="number"
                       min="0"
                       step="any"
-                      value={row.denier}
+                      value={row.base_denier}
                       disabled={readOnly}
                       onChange={(e) =>
                         patch({
                           warps: draft.warps.map((r) =>
-                            r.key === row.key ? { ...r, denier: e.target.value } : r,
+                            r.key === row.key ? withBaseDenier(r, e.target.value) : r,
                           ),
                         })
                       }
                     />
+                  </td>
+                  <td>
+                    <input className="num dwc-auto" value={formatCostingDenier(row)} readOnly />
                   </td>
                   <td>
                     <input
@@ -280,7 +286,8 @@ export function DinIntakeCostingPanel({ draft, rates, canWrite, onChange, onOpen
           <thead>
             <tr>
               <th>Item Name</th>
-              <th>Denier</th>
+              <th>Base Denier</th>
+              <th>Costing Denier</th>
               <th>PIC</th>
               <th>Width</th>
               <th>Length</th>
@@ -318,16 +325,22 @@ export function DinIntakeCostingPanel({ draft, rates, canWrite, onChange, onOpen
                   <td>
                     <input
                       className="num"
-                      value={row.denier}
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={row.base_denier}
                       disabled={readOnly}
                       onChange={(e) =>
                         patch({
                           wefts: draft.wefts.map((r) =>
-                            r.key === row.key ? { ...r, denier: e.target.value } : r,
+                            r.key === row.key ? withBaseDenier(r, e.target.value) : r,
                           ),
                         })
                       }
                     />
+                  </td>
+                  <td>
+                    <input className="num dwc-auto" value={formatCostingDenier(row)} readOnly />
                   </td>
                   <td>
                     <input
