@@ -7,8 +7,10 @@ import {
   DEFAULT_LENGTH_MTR,
   DEFAULT_WIDTH,
   computeBuildup,
+  denierForDb,
   emptyWarp,
   emptyWeft,
+  resolveDenierForCalc,
   withBaseDenier,
   type WarpDraft,
   type WeftDraft,
@@ -66,16 +68,31 @@ export function rateMasterItemNames(rates: RateMasterRow[], category: 'warp' | '
   return [...new Set([...fromCat, ...fromDb])].sort((a, b) => a.localeCompare(b))
 }
 
-function applyRememberedBaseDenier<T extends { base_denier: string; denier: string }>(
-  row: T,
+function applyCatalogueOrMasterBaseDenier(
+  row: WarpDraft | WeftDraft,
+  yarnName: string,
   masterDenier: string | null | undefined,
   catalogueDenier?: string,
-): T {
+): WarpDraft | WeftDraft {
   if (row.base_denier.trim()) return row
+  // Catalogue / master "Same" → numeric from yarn name → store as base (costing = base+10)
+  if (catalogueDenier && /^same$/i.test(catalogueDenier)) {
+    const resolved = resolveDenierForCalc('Same', yarnName)
+    if (resolved > 0) return withBaseDenier(row, String(resolved))
+  }
+  if (masterDenier && /^same$/i.test(masterDenier)) {
+    const resolved = resolveDenierForCalc('Same', yarnName)
+    if (resolved > 0) return withBaseDenier(row, String(resolved))
+  }
   const fromMaster = rememberedBaseDenier(masterDenier)
   if (fromMaster) return withBaseDenier(row, fromMaster)
   const fromCat = rememberedBaseDenier(catalogueDenier)
   if (fromCat) return withBaseDenier(row, fromCat)
+  // Blank denier but yarn name starts with a number (e.g. 300 Tex)
+  if (!row.denier.trim()) {
+    const fromName = resolveDenierForCalc('', yarnName)
+    if (fromName > 0) return withBaseDenier(row, String(fromName))
+  }
   return row
 }
 
@@ -92,7 +109,7 @@ export function applyWarpItemFromMaster(
   const found = lookupRateForCosting(rates, 'warp', name, asOfDate, {
     denier: next.base_denier || next.denier,
   })
-  next = applyRememberedBaseDenier(next, found?.row.denier, cat?.denier)
+  next = applyCatalogueOrMasterBaseDenier(next, name, found?.row.denier, cat?.denier) as WarpDraft
   if (!found) return next
   return {
     ...next,
@@ -122,7 +139,7 @@ export function applyWeftItemFromMaster(
   const found = lookupRateForCosting(rates, 'weft', name, asOfDate, {
     denier: next.base_denier || next.denier,
   })
-  next = applyRememberedBaseDenier(next, found?.row.denier, cat?.denier)
+  next = applyCatalogueOrMasterBaseDenier(next, name, found?.row.denier, cat?.denier) as WeftDraft
   if (!found) return next
   return {
     ...next,
@@ -317,13 +334,16 @@ function numericOrNull(v: string | number | null | undefined): number | null {
   return Number.isFinite(x) ? x : null
 }
 
-/** Persist denier for generated columns: prefer costing (base+10) when base set. */
-function persistDenier(row: { base_denier?: string; denier: string }): number | null {
+/** Persist denier for generated columns: prefer costing (base+10) when base set; else resolve Same. */
+function persistDenier(
+  row: { base_denier?: string; denier: string },
+  yarnName: string,
+): number | null {
   if (row.base_denier != null && String(row.base_denier).trim() !== '') {
     const base = Number(row.base_denier)
     if (Number.isFinite(base) && base > 0) return base + 10
   }
-  return numericOrNull(row.denier)
+  return denierForDb(row.denier, yarnName)
 }
 
 export async function saveIntakeCostingDraft(input: {
@@ -431,7 +451,7 @@ export async function saveIntakeCostingDraft(input: {
     sr_no: i + 1,
     yarn_name: row.yarn_name.trim() || null,
     base_denier: numericOrNull(row.base_denier),
-    denier: persistDenier(row),
+    denier: persistDenier(row, row.yarn_name),
     tar_ends: numericOrNull(row.tar_ends),
     length_mtr: numericOrNull(row.length_mtr),
     rate_per_kg: numericOrNull(row.rate_per_kg),
@@ -443,7 +463,7 @@ export async function saveIntakeCostingDraft(input: {
     sr_no: i + 1,
     weft_name: row.weft_name.trim() || null,
     base_denier: numericOrNull(row.base_denier),
-    denier: persistDenier(row),
+    denier: persistDenier(row, row.weft_name),
     pic: numericOrNull(row.pic),
     width: numericOrNull(row.width) ?? DEFAULT_WIDTH,
     length_mtr: numericOrNull(row.length_mtr) ?? DEFAULT_LENGTH_MTR,

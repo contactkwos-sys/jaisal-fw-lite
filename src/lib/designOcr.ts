@@ -13,6 +13,7 @@ import {
 import {
   applyWeftItemFromMaster,
 } from './dinIntakeCosting'
+import { findSharedDesign } from './designIdentity'
 import { lookupRateForCosting, type RateMasterRow } from './rateMaster'
 import { uploadDinStorageObject } from './dinStorage'
 import { supabase } from './supabase'
@@ -762,9 +763,11 @@ export async function checkDuplicateDin(dinNumber: string): Promise<{
   costingId?: string
   status?: string
   isLocked?: boolean
+  source?: 'design_costing' | 'dins' | 'designs'
 }> {
   const trimmed = dinNumber.trim()
   if (!trimmed) return { exists: false }
+
   const { data } = await supabase
     .from('design_costing')
     .select('id, status, is_locked')
@@ -772,13 +775,28 @@ export async function checkDuplicateDin(dinNumber: string): Promise<{
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()
-  if (!data) return { exists: false }
-  return {
-    exists: true,
-    costingId: data.id as string,
-    status: data.status as string | undefined,
-    isLocked: Boolean(data.is_locked),
+  if (data) {
+    return {
+      exists: true,
+      costingId: data.id as string,
+      status: data.status as string | undefined,
+      isLocked: Boolean(data.is_locked),
+      source: 'design_costing',
+    }
   }
+
+  // Shared identity: Design Intake / designs register may already hold this number
+  const shared = await findSharedDesign(trimmed)
+  if (shared) {
+    return {
+      exists: true,
+      costingId: shared.costingId || undefined,
+      status: shared.costingStatus || undefined,
+      isLocked: shared.isLocked,
+      source: shared.din ? 'dins' : shared.designsId ? 'designs' : 'design_costing',
+    }
+  }
+  return { exists: false }
 }
 
 export async function uploadDesignReferenceImage(

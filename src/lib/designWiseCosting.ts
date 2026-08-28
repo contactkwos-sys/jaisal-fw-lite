@@ -35,23 +35,27 @@ export function costingDenierFromBase(baseDenier: string | number | null | undef
 /**
  * Resolve denier used in weight formulas.
  * Prefer base_denier → base + 10. Legacy rows without base_denier use denier as-is
- * (avoids re-applying +10 on historical data).
+ * (or catalogue "Same" → number from yarn name) — avoids re-applying +10 on historical data.
  */
 export function resolveCostingDenier(row: {
   base_denier?: string | null
   denier?: string | number | null
+  yarn_name?: string | null
+  weft_name?: string | null
 }): number {
   const baseRaw = row.base_denier
   if (baseRaw != null && String(baseRaw).trim() !== '') {
     return costingDenierFromBase(baseRaw)
   }
-  return n(row.denier)
+  return resolveDenierForCalc(row.denier, row.yarn_name || row.weft_name)
 }
 
 /** Display string for costing denier column. */
 export function formatCostingDenier(row: {
   base_denier?: string | null
   denier?: string | number | null
+  yarn_name?: string | null
+  weft_name?: string | null
 }): string {
   const c = resolveCostingDenier(row)
   return c > 0 ? String(c) : ''
@@ -70,6 +74,36 @@ export function loomPickWeftPicWarning(
   if (loom <= 0 || weft <= 0) return null
   if (Math.abs(loom - weft) < 0.01) return null
   return 'Loom Pick and calculated Weft PIC differ — please verify.'
+}
+
+/**
+ * Resolve denier for weight formulas.
+ * Catalogue "Same" (HSY) means use the numeric denier embedded in the yarn name
+ * (e.g. "440 HSY" → 440). Does not invent rates — only denier for ÷ 9_000_000 math.
+ */
+export function resolveDenierForCalc(
+  denier: string | number | null | undefined,
+  yarnName?: string | null,
+): number {
+  const raw = denier == null ? '' : String(denier).trim()
+  if (raw && /^same$/i.test(raw)) {
+    const m = String(yarnName || '').match(/(\d+(?:\.\d+)?)/)
+    return m ? Number(m[1]) : 0
+  }
+  const direct = n(raw)
+  if (direct > 0) return direct
+  // Blank denier but yarn name starts with denier (e.g. "300 Tex")
+  const fromName = String(yarnName || '').match(/^(\d+(?:\.\d+)?)/)
+  return fromName ? Number(fromName[1]) : 0
+}
+
+/** Persistable numeric denier (null when unresolved) — never store the word "Same". */
+export function denierForDb(
+  denier: string | number | null | undefined,
+  yarnName?: string | null,
+): number | null {
+  const v = resolveDenierForCalc(denier, yarnName)
+  return v > 0 ? v : null
 }
 
 /**
@@ -316,7 +350,7 @@ export function withBaseDenier<T extends { base_denier: string; denier: string }
 }
 
 export function computeWarpRow(row: WarpDraft) {
-  const denier = resolveCostingDenier(row)
+  const denier = resolveCostingDenier({ ...row, yarn_name: row.yarn_name })
   const tar = n(row.tar_ends)
   const length = n(row.length_mtr)
   const rate = n(row.rate_per_kg)
@@ -333,7 +367,7 @@ export function computeWarpRow(row: WarpDraft) {
 }
 
 export function computeWeftRow(row: WeftDraft) {
-  const denier = resolveCostingDenier(row)
+  const denier = resolveCostingDenier({ ...row, weft_name: row.weft_name })
   const pic = n(row.pic)
   const width = n(row.width)
   const length = n(row.length_mtr)

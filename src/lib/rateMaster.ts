@@ -178,18 +178,27 @@ export function lookupRateForCosting(
   }
 
   const yarnNorm = normalizeItemName(trimmed)
-  const partial = rates
-    .filter(
-      (r) =>
-        r.category === category &&
-        r.is_active &&
-        r.effective_from <= asOfDate &&
-        !isOthersRateItem(r.item_name) &&
-        isUsableCostingRate(r) &&
-        (normalizeItemName(r.item_name).includes(yarnNorm) ||
-          yarnNorm.includes(normalizeItemName(r.item_name))),
-    )
-    .sort((a, b) => b.effective_from.localeCompare(a.effective_from))[0]
+  const denierNorm = normalizeDenier(opts?.denier)
+  let partialCandidates = rates.filter(
+    (r) =>
+      r.category === category &&
+      r.is_active &&
+      r.effective_from <= asOfDate &&
+      !isOthersRateItem(r.item_name) &&
+      isUsableCostingRate(r) &&
+      (normalizeItemName(r.item_name).includes(yarnNorm) ||
+        yarnNorm.includes(normalizeItemName(r.item_name))),
+  )
+
+  if (denierNorm) {
+    const byDenier = partialCandidates.filter((r) => {
+      const rd = normalizeDenier(r.denier)
+      return !rd || rd === 'same' || rd === denierNorm || denierNorm === 'same'
+    })
+    if (byDenier.length) partialCandidates = byDenier
+  }
+
+  const partial = partialCandidates.sort((a, b) => b.effective_from.localeCompare(a.effective_from))[0]
 
   if (partial) {
     return {

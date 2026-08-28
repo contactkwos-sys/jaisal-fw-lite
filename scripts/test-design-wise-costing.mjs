@@ -1,6 +1,7 @@
 /**
  * Smoke-test DIN Costing final business logic:
  * - Base denier + 10 (no stacking on recalculate)
+ * - Catalogue "Same" denier resolves from yarn name
  * - Strings excluded from costing / width
  * - Default width 52, length 110
  * - 110m production → 100m customer basis
@@ -29,11 +30,23 @@ function costingDenierFromBase(baseDenier) {
   return base > 0 ? base + DENIER_COSTING_OFFSET : 0
 }
 
+function resolveDenierForCalc(denier, yarnName) {
+  const raw = denier == null ? '' : String(denier).trim()
+  if (raw && /^same$/i.test(raw)) {
+    const m = String(yarnName || '').match(/(\d+(?:\.\d+)?)/)
+    return m ? Number(m[1]) : 0
+  }
+  const direct = n(raw)
+  if (direct > 0) return direct
+  const fromName = String(yarnName || '').match(/^(\d+(?:\.\d+)?)/)
+  return fromName ? Number(fromName[1]) : 0
+}
+
 function resolveCostingDenier(row) {
   if (row.base_denier != null && String(row.base_denier).trim() !== '') {
     return costingDenierFromBase(row.base_denier)
   }
-  return n(row.denier)
+  return resolveDenierForCalc(row.denier, row.yarn_name || row.weft_name)
 }
 
 function loomPickWeftPicWarning(loomPick, totalWeftPic) {
@@ -52,15 +65,35 @@ function weftWeightKg(denier, pic, width, lengthMtr) {
   return (denier * pic * width * lengthMtr) / CALC_FACTOR
 }
 
+function weftWeightWithResolved(row) {
+  const denier = resolveCostingDenier(row)
+  return round2(weftWeightKg(denier, n(row.pic), n(row.width), n(row.length_mtr)))
+}
+
 function computeWastageParams(enteredLengthMtr, wastageMtr = 10, wastagePercent = 10) {
   const entered = n(enteredLengthMtr)
   const wastage = n(wastageMtr)
   const usable = Math.max(entered - wastage, 0)
   const multiplier = usable > 0 ? round2(entered / usable) : 0
-  return { enteredLengthMtr: entered, wastageMtr: wastage, wastagePercent, usableLengthMtr: usable, conversionMultiplier: multiplier }
+  return {
+    enteredLengthMtr: entered,
+    wastageMtr: wastage,
+    wastagePercent,
+    usableLengthMtr: usable,
+    conversionMultiplier: multiplier,
+  }
 }
 
-function computeBuildup(warps, wefts, enteredLengthMtr, picConversionRate, muPercent, gstPercent, wastageMtr = 10, wastagePercent = 10) {
+function computeBuildup(
+  warps,
+  wefts,
+  enteredLengthMtr,
+  picConversionRate,
+  muPercent,
+  gstPercent,
+  wastageMtr = 10,
+  wastagePercent = 10,
+) {
   let totalWarpWeightKg = 0
   let totalWeftWeightKg = 0
   let totalWarpAmount = 0
@@ -137,23 +170,19 @@ const r = computeBuildup(warps, wefts, DEFAULT_LENGTH_MTR, 0.45, 0, 0)
 
 const checks = []
 
-// Denier +10 once
 checks.push(['Anmol Jari costing denier 190', resolveCostingDenier(wefts[0]) === 190])
 checks.push(['150 Lichi costing denier 170', resolveCostingDenier(wefts[1]) === 170])
 checks.push(['300 Tex costing denier 310', resolveCostingDenier(wefts[2]) === 310])
 checks.push(['Warp base 160 → costing 170', resolveCostingDenier(warps[0]) === 170])
 
-// Recalculate must NOT stack +10
 const afterRecalc = resolveCostingDenier({ base_denier: '180', denier: '190' })
 checks.push(['Recalc still 190 (not 200)', afterRecalc === 190])
 const stackedWrong = resolveCostingDenier({ base_denier: '', denier: '190' })
 checks.push(['Legacy denier-only uses 190 as-is', stackedWrong === 190])
 
-// Defaults
 checks.push(['Default width 52', DEFAULT_WIDTH === 52])
 checks.push(['Default length 110', DEFAULT_LENGTH_MTR === 110])
 
-// Loom vs Weft PIC
 checks.push(['TOTAL WEFT PIC = 111', r.totalPic === 111])
 checks.push(['TOTAL LOOM PICK stays 112', TOTAL_LOOM_PICK === 112])
 checks.push([
@@ -163,13 +192,11 @@ checks.push([
 ])
 checks.push(['No warn when equal', loomPickWeftPicWarning(111, 111) === null])
 
-// 110/100 basis
 checks.push(['Usable length = 100', r.usableLengthMtr === 100])
 checks.push(['Conversion multiplier = 1.10', r.conversionMultiplier === 1.1])
 checks.push(['Yarn cost/mtr = total ÷ 100 (not ÷ 110)', r.yarnCostPerMtr === round2(r.totalYarnAmount / 100)])
 checks.push(['Weaving = 111 × 0.45', r.conversionCharge === 49.95])
 
-// Strings must not affect width/weight — simulate bad OCR mapping rejected
 const badStringsAsWidth = { base_denier: '180', pic: '37', width: '2222', length_mtr: '110', rate_per_kg: '350' }
 const goodWidth = { base_denier: '180', pic: '37', width: '52', length_mtr: '110', rate_per_kg: '350' }
 const badW = weftWeightKg(resolveCostingDenier(badStringsAsWidth), 37, 2222, 110)
@@ -177,8 +204,19 @@ const goodW = weftWeightKg(resolveCostingDenier(goodWidth), 37, 52, 110)
 checks.push(['Strings-as-width would inflate weight (detect bug)', badW > goodW * 10])
 checks.push(['Correct width 52 used in final case', wefts.every((w) => w.width === '52')])
 
-// Example: yarn ₹6500 / 100 = ₹65
 checks.push(['Customer meter = 110m cost ÷ 100', round2(6500 / 100) === 65])
+
+checks.push(['resolveDenier Same + 440 HSY → 440', resolveDenierForCalc('Same', '440 HSY') === 440])
+checks.push(['resolveDenier Same + 300 Tex → 300', resolveDenierForCalc('Same', '300 Tex') === 300])
+const hsyWeight = weftWeightWithResolved({
+  weft_name: '440 HSY',
+  denier: 'Same',
+  pic: '28',
+  width: '52',
+  length_mtr: '110',
+})
+const hsyExpected = round2(weftWeightKg(440, 28, 52, 110))
+checks.push(['HSY Same denier weight matches numeric 440', hsyWeight === hsyExpected && hsyWeight > 0])
 
 let failed = 0
 for (const [label, ok] of checks) {
