@@ -16,6 +16,7 @@ import {
   WEFT_CATALOGUE,
   fetchAllRates,
   lookupRateForCosting,
+  resolveNumericDenier,
   type RateMasterRow,
 } from './rateMaster'
 import { todayISO } from './mutate'
@@ -97,12 +98,22 @@ export function applyWeftItemFromMaster(
   const next: WeftDraft = { ...row, weft_name: name }
   if (!name || !asOfDate) return next
   const cat = WEFT_CATALOGUE.find((c) => c.item_name === name)
-  if (cat?.denier && !next.denier) next.denier = cat.denier === 'Same' ? 'Same' : cat.denier
+  if (cat?.denier && !next.denier) {
+    next.denier = cat.denier === 'Same' ? resolveNumericDenier('Same', name) || 'Same' : cat.denier
+  }
   const found = lookupRateForCosting(rates, 'weft', name, asOfDate, { denier: next.denier })
-  if (!found) return next
+  if (!found) {
+    // Still resolve Same → numeric for weight calc even when rate missing
+    if (next.denier.toLowerCase() === 'same') {
+      next.denier = resolveNumericDenier('Same', name)
+    }
+    return next
+  }
+  const denier =
+    resolveNumericDenier(next.denier || found.row.denier || '', name) || next.denier || found.row.denier || ''
   return {
     ...next,
-    denier: next.denier || found.row.denier || '',
+    denier,
     rate_per_kg: String(found.calc.effectiveRate),
     rate_source: 'rate_master',
     rate_master_id: found.row.id,
@@ -294,7 +305,7 @@ export async function saveIntakeCostingDraft(input: {
     costing_id: costingId,
     sr_no: i + 1,
     yarn_name: row.yarn_name.trim() || null,
-    denier: Number(row.denier) || null,
+    denier: Number(resolveNumericDenier(row.denier, row.yarn_name)) || null,
     tar_ends: Number(row.tar_ends) || null,
     length_mtr: Number(row.length_mtr) || null,
     rate_per_kg: Number(row.rate_per_kg) || null,
@@ -305,7 +316,7 @@ export async function saveIntakeCostingDraft(input: {
     costing_id: costingId,
     sr_no: i + 1,
     weft_name: row.weft_name.trim() || null,
-    denier: Number(row.denier) || null,
+    denier: Number(resolveNumericDenier(row.denier, row.weft_name)) || null,
     pic: Number(row.pic) || null,
     width: Number(row.width) || null,
     length_mtr: Number(row.length_mtr) || null,

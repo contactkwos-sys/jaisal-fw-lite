@@ -442,8 +442,19 @@ export function parseDesignReferenceText(
 
   if (!result.weftRows.length) {
     const formatA = extractFormatAStringPair(normalized)
-    if (formatA) result.weftRows = [formatA]
-    else if (result.loomPick.value && result.totalStrings.value) {
+    if (formatA) {
+      // Format A: shared loom pick across feeders + shared strings width
+      const pic = result.loomPick.value || formatA.pic
+      if (result.feeders.length > 1) {
+        result.weftRows = result.feeders.map(() => ({
+          pic,
+          strings: formatA.strings,
+          confidence: 'low' as const,
+        }))
+      } else {
+        result.weftRows = [{ ...formatA, pic: pic || formatA.pic }]
+      }
+    } else if (result.loomPick.value && result.totalStrings.value) {
       result.weftRows = [
         {
           pic: result.loomPick.value,
@@ -728,24 +739,32 @@ export function applyOcrToCostingDraft(
 export async function checkDuplicateDin(dinNumber: string): Promise<{
   exists: boolean
   costingId?: string
+  dinId?: string
   status?: string
   isLocked?: boolean
+  source?: 'costing' | 'intake' | 'both'
 }> {
   const trimmed = dinNumber.trim()
   if (!trimmed) return { exists: false }
-  const { data } = await supabase
-    .from('design_costing')
-    .select('id, status, is_locked')
-    .eq('din_number', trimmed)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  if (!data) return { exists: false }
+  const [{ data: costing }, { data: din }] = await Promise.all([
+    supabase
+      .from('design_costing')
+      .select('id, status, is_locked')
+      .eq('din_number', trimmed)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase.from('dins').select('id').eq('din_number', trimmed).maybeSingle(),
+  ])
+  if (!costing && !din) return { exists: false }
+  const source = costing && din ? 'both' : costing ? 'costing' : 'intake'
   return {
     exists: true,
-    costingId: data.id as string,
-    status: data.status as string | undefined,
-    isLocked: Boolean(data.is_locked),
+    costingId: costing?.id as string | undefined,
+    dinId: din?.id as string | undefined,
+    status: (costing?.status as string | undefined) || undefined,
+    isLocked: costing ? Boolean(costing.is_locked) : false,
+    source,
   }
 }
 

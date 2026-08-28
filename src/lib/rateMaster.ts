@@ -82,6 +82,14 @@ export function normalizeDenier(denier: string | number | null | undefined): str
   return Number.isFinite(n) ? String(n) : s
 }
 
+/** Resolve denier for DB/calc: "Same" → leading digits from item name (e.g. 440 HSY → 440). */
+export function resolveNumericDenier(denier: string | null | undefined, itemName: string): string {
+  const d = (denier || '').trim()
+  if (d && d.toLowerCase() !== 'same') return d
+  const m = itemName.trim().match(/^(\d+(?:\.\d+)?)/)
+  return m ? m[1] : ''
+}
+
 /** GST Amount = Basic × GST%; Effective = Basic + GST + Freight */
 export function calcEffectiveRate(
   basicRate: number,
