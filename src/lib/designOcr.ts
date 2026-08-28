@@ -69,8 +69,9 @@ const DESIGN_NO_HYPHEN_RE = /\b([A-Z]{2,5})[\s\-]+(\d{3,6})\b/gi
 const PHONE_RE = /\b\d{10,}\b/
 const LOOM_PICK_RE = /(?:loom[\s-]*pick|loom\s*pick)[\s:=-]*(\d+(?:\.\d+)?)/i
 const PICK_ONLY_RE = /\b(\d+(?:\.\d+)?)\s*pick\b/i
+/** Yarn codes may be letters (HSY) or numeric denier/codes (37, 80/2). */
 const FEEDER_RE =
-  /(?:feeder|fd)[\s.-]*(\d+)\s*[=:\-]?\s*([A-Z][A-Z0-9]{1,15})/gi
+  /(?:feeder|fd)[\s.-]*(\d+)\s*[=:\-]?\s*([A-Z0-9][A-Z0-9./-]{0,15})/gi
 const PICK_STRINGS_HEADER = /pick\s*strings/i
 const TOTAL_LINE_RE = /^total\s*[:.]?\s*(\d+(?:\.\d+)?)\s*[/\s]\s*(\d+(?:\.\d+)?)/im
 const TOTAL_NEXT_LINE_RE = /^total\s*[:.]?\s*$/im
@@ -455,19 +456,45 @@ export function mapOcrToWeftRows(
   rates: RateMasterRow[],
   costingDate: string,
 ): WeftDraft[] {
-  const sourceRows =
-    ocr.weftRows.length > 0
-      ? ocr.weftRows
-      : [{ pic: ocr.totalPick.value, strings: ocr.totalStrings.value, confidence: 'low' as const }]
+  const defaultPic = (ocr.loomPick.value || ocr.totalPick.value || '').trim()
+  const defaultStrings = (ocr.totalStrings.value || '').trim()
+  const maxFeederNo = ocr.feeders.reduce((m, f) => Math.max(m, f.feederNo), 0)
+
+  let sourceRows: DesignOcrWeftRow[]
+  if (ocr.weftRows.length > 0) {
+    sourceRows = [...ocr.weftRows]
+  } else if (ocr.feeders.length > 0) {
+    // One costing row per feeder when Pick/Strings table was not readable
+    sourceRows = ocr.feeders.map(() => ({
+      pic: '',
+      strings: '',
+      confidence: 'low' as const,
+    }))
+  } else {
+    sourceRows = [
+      {
+        pic: defaultPic,
+        strings: defaultStrings,
+        confidence: 'low' as const,
+      },
+    ]
+  }
+
+  // Pad so every detected feeder gets a weft line (FD3 → index 2)
+  while (sourceRows.length < maxFeederNo) {
+    sourceRows.push({ pic: '', strings: '', confidence: 'low' })
+  }
 
   const rows: WeftDraft[] = []
   for (let i = 0; i < sourceRows.length; i++) {
     const src = sourceRows[i]
     const feeder = ocr.feeders.find((f) => f.feederNo === i + 1)
+    const pic = (src.pic || '').trim() || (i === 0 ? defaultPic : '')
+    const width = (src.strings || '').trim() || (i === 0 ? defaultStrings : '')
     let row: WeftDraft = {
       ...emptyWeft(i + 1),
-      pic: src.pic || '',
-      width: src.strings || '',
+      pic,
+      width,
       length_mtr: designLength,
       weft_name: feeder?.yarnType || '',
     }
