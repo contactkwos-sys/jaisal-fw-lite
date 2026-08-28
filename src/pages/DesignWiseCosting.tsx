@@ -643,8 +643,26 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     }
   }
 
-  function validateBeforeSave(): boolean {
-    if (!dinNumber.trim()) {
+  type PersistOverrides = {
+    dinNumber?: string
+    qualityName?: string
+    designLength?: string
+    warps?: WarpDraft[]
+    wefts?: WeftDraft[]
+    designImageUrl?: string | null
+    diaryUrl?: string | null
+    importSource?: DesignImportSource | null
+    ocrExtractedJson?: DesignOcrResult | null
+    ocrConfirmedJson?: DesignOcrResult | null
+    /** When true, always insert a new design_costing row (ignore current savedId). */
+    forceNew?: boolean
+  }
+
+  function validateBeforeSave(overrides?: PersistOverrides): boolean {
+    const din = (overrides?.dinNumber ?? dinNumber).trim()
+    const quality = (overrides?.qualityName ?? qualityName).trim()
+    const length = overrides?.designLength ?? designLength
+    if (!din) {
       setError('DIN / Design No. required')
       return false
     }
@@ -652,11 +670,11 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
       setError('Date is required')
       return false
     }
-    if (!qualityName.trim()) {
+    if (!quality) {
       setError('Quality Name is required')
       return false
     }
-    if (n(designLength) <= 0) {
+    if (n(length) <= 0) {
       setLengthError('Design Length must be greater than zero')
       setError('Design Length must be greater than zero (cannot divide by zero)')
       return false
@@ -676,11 +694,12 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     previousValue?: string,
     newValue?: string,
     reason?: string,
+    dinOverride?: string,
   ) {
     try {
       await supabase.from('design_costing_audit').insert({
         costing_id: costingId,
-        din_number: dinNumber.trim(),
+        din_number: (dinOverride ?? dinNumber).trim(),
         action,
         field_name: fieldName || null,
         previous_value: previousValue ?? null,
@@ -694,16 +713,31 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     }
   }
 
-  async function persist(asDraft: boolean, finalize = false) {
-    if (!validateBeforeSave()) return
+  async function persist(asDraft: boolean, finalize = false, overrides?: PersistOverrides) {
+    if (!validateBeforeSave(overrides)) return
     setBusy(true)
     setError(null)
     setMessage(null)
     try {
+      const din = (overrides?.dinNumber ?? dinNumber).trim()
+      const quality = (overrides?.qualityName ?? qualityName).trim()
+      const lengthStr = overrides?.designLength ?? designLength
+      const warpsToSave = overrides?.warps ?? warps
+      const weftsToSave = overrides?.wefts ?? wefts
+      const diaryToSave = overrides?.diaryUrl !== undefined ? overrides.diaryUrl : diaryUrl
+      const designImgToSave =
+        overrides?.designImageUrl !== undefined ? overrides.designImageUrl : designImageUrl
+      const importToSave =
+        overrides?.importSource !== undefined ? overrides.importSource : importSource
+      const ocrExtractedToSave =
+        overrides?.ocrExtractedJson !== undefined ? overrides.ocrExtractedJson : ocrExtractedJson
+      const ocrConfirmedToSave =
+        overrides?.ocrConfirmedJson !== undefined ? overrides.ocrConfirmedJson : ocrConfirmedJson
+
       const totals = computeBuildup(
-        warps,
-        wefts,
-        n(designLength),
+        warpsToSave,
+        weftsToSave,
+        n(lengthStr),
         n(picConversionRate),
         n(muPercent),
         n(gstPercent),
@@ -720,14 +754,14 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
       const userId = session?.user?.id || null
       const prevSellingRate = ceoFinalSellingRate
       const baseHeader = {
-        din_number: dinNumber.trim(),
-        quality_name: qualityName.trim() || null,
+        din_number: din,
+        quality_name: quality || null,
         costing_date: costingDate,
-        diary_image_url: diaryUrl,
-        design_image_url: designImageUrl,
-        import_source: importSource,
-        ocr_extracted_json: ocrExtractedJson,
-        ocr_confirmed_json: ocrConfirmedJson,
+        diary_image_url: diaryToSave,
+        design_image_url: designImgToSave,
+        import_source: importToSave,
+        ocr_extracted_json: ocrExtractedToSave,
+        ocr_confirmed_json: ocrConfirmedToSave,
         design_length_mtr: totals.enteredLengthMtr,
         wastage_mtr: totals.wastageMtr,
         wastage_percent: totals.wastagePercent,
@@ -771,7 +805,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
           }
         : baseHeader
 
-      let costingId = savedId
+      let costingId = overrides?.forceNew ? null : savedId
       let previousWarpIds: string[] = []
       let previousWeftIds: string[] = []
 
@@ -813,7 +847,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
       setStatus(finalize ? 'final' : asDraft ? 'draft' : status)
       if (finalize) setIsLocked(true)
 
-      const warpPayload = warps.map((row, i) => ({
+      const warpPayload = warpsToSave.map((row, i) => ({
         costing_id: costingId,
         sr_no: i + 1,
         yarn_name: row.yarn_name.trim() || null,
@@ -824,7 +858,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         rate_source: row.rate_source || null,
         rate_master_id: row.rate_master_id || null,
       }))
-      const weftPayload = wefts.map((row, i) => ({
+      const weftPayload = weftsToSave.map((row, i) => ({
         costing_id: costingId,
         sr_no: i + 1,
         weft_name: row.weft_name.trim() || null,
@@ -890,16 +924,16 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
             cost_per_meter: totals.finalCostPerMtr,
             total_cost: totals.finalCostPerMtr,
           })
-          .eq('dno', dinNumber.trim())
+          .eq('dno', din)
         if (designErr) {
           // Costing itself is saved — surface design-register sync as a soft warning
           try {
-            await syncDinCostingFromLatest(dinNumber.trim())
+            await syncDinCostingFromLatest(din)
           } catch {
             /* optional */
           }
           setMessage(
-            `Costing saved to DIN ${dinNumber.trim()} · Final ${fmtInr(totals.finalCostPerMtr)}/mtr (design register sync: ${designErr.message})`,
+            `Costing saved to DIN ${din} · Final ${fmtInr(totals.finalCostPerMtr)}/mtr (design register sync: ${designErr.message})`,
           )
           await refreshHistory()
           return
@@ -908,7 +942,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
 
       // Sync snapshot onto Design to Order DIN master when present (same DIN number)
       try {
-        await syncDinCostingFromLatest(dinNumber.trim())
+        await syncDinCostingFromLatest(din)
       } catch {
         /* DIN table may not be migrated yet — costing still saved */
       }
@@ -919,7 +953,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
           ? `Costing finalized & locked · CEO rate ${fmtInr(n(ceoFinalSellingRate) || totals.finalCostPerMtr)}/mtr`
           : asDraft
             ? `Draft saved · Calculated ${fmtInr(totals.finalCostPerMtr)}/mtr`
-            : `Costing saved to DIN ${dinNumber.trim()} · Calculated ${fmtInr(totals.finalCostPerMtr)}/mtr`,
+            : `Costing saved to DIN ${din} · Calculated ${fmtInr(totals.finalCostPerMtr)}/mtr`,
       )
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed')
@@ -956,7 +990,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     if (match?.colour && !qualityName) setQualityName(match.colour)
   }
 
-  function handleOcrApply(payload: {
+  async function handleOcrApply(payload: {
     dinNumber: string
     qualityName: string
     warps: WarpDraft[]
@@ -971,21 +1005,50 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     setSavedId(null)
     setStatus('draft')
     setIsLocked(false)
+
+    const nextWarps = payload.warps.length ? payload.warps : [emptyWarp(1)]
+    const nextWefts = payload.wefts.length ? payload.wefts : [emptyWeft(1)]
+    const nextLength = designLength || String(formulaDefaults.default_base_length_mtr)
+    const catalogQuality = designOpts.find((d) => d.dno === payload.dinNumber)?.colour || ''
+    const nextQuality =
+      payload.qualityName.trim() || catalogQuality.trim() || qualityName.trim() || payload.dinNumber
+
     setDinNumber(payload.dinNumber)
-    if (payload.qualityName) setQualityName(payload.qualityName)
-    setWarps(payload.warps.length ? payload.warps : [emptyWarp(1)])
-    setWefts(payload.wefts.length ? payload.wefts : [emptyWeft(1)])
+    setQualityName(nextQuality)
+    if (!designLength) setDesignLength(nextLength)
+    setWarps(nextWarps)
+    setWefts(nextWefts)
     setDesignImageUrl(payload.designImageUrl)
     if (payload.designImageUrl && !diaryUrl) setDiaryUrl(payload.designImageUrl)
     setImportSource(payload.importSource)
     setOcrExtractedJson(payload.ocrExtracted)
     setOcrConfirmedJson(payload.ocrConfirmed)
     setMissingRates(payload.missingRates)
-    setMessage(
-      payload.missingRates.length
-        ? `Design OCR applied — ${payload.missingRates.length} yarn rate(s) missing in Rate Master`
-        : 'Design OCR applied — review and save costing below',
-    )
+
+    requestAnimationFrame(() => {
+      document.getElementById('dwc-design-details')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+
+    // Confirm & Create: fill below + save draft so costing totals persist immediately
+    await persist(true, false, {
+      dinNumber: payload.dinNumber,
+      qualityName: nextQuality,
+      designLength: nextLength,
+      warps: nextWarps,
+      wefts: nextWefts,
+      designImageUrl: payload.designImageUrl,
+      diaryUrl: payload.designImageUrl && !diaryUrl ? payload.designImageUrl : diaryUrl,
+      importSource: payload.importSource,
+      ocrExtractedJson: payload.ocrExtracted,
+      ocrConfirmedJson: payload.ocrConfirmed,
+      forceNew: true,
+    })
+
+    if (payload.missingRates.length) {
+      setMessage(
+        `DIN costing created · ${payload.missingRates.length} yarn rate(s) missing — add in Rate Master then Update Rate & Recalculate`,
+      )
+    }
   }
 
   async function refreshRatesFromMaster() {
@@ -1159,7 +1222,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         </section>
       ) : null}
 
-      <section className="dwc-panel">
+      <section className="dwc-panel" id="dwc-design-details">
         <h2 className="section-title">Design Details</h2>
         <div className="dwc-details-row">
           <label className="field">

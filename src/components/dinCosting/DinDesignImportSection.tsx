@@ -33,7 +33,7 @@ type Props = {
     ocrExtracted: DesignOcrResult
     ocrConfirmed: DesignOcrResult
     missingRates: MissingRateItem[]
-  }) => void
+  }) => void | Promise<void>
   onOpenExisting?: (dinNumber: string) => void
   onOpenRateMaster?: () => void
 }
@@ -197,7 +197,7 @@ export function DinDesignImportSection({
       existingWarps,
     })
 
-    onApply({
+    await onApply({
       dinNumber: din,
       qualityName: ocrDraft.qualityName.value,
       warps: applied.warps,
@@ -448,6 +448,9 @@ export function DinDesignImportSection({
               >
                 Confirm &amp; Create DIN Costing
               </button>
+              <p className="text-muted2 dwc-confirm-hint">
+                Fills Design Details, Weft/Warp rows and Wastage below, then saves costing automatically.
+              </p>
             </div>
           </div>
         </div>

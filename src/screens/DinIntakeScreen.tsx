@@ -395,16 +395,36 @@ export function DinIntakeScreen({ onNavigate }: Props) {
       }
 
       let costingNote = ''
-      if (canWriteCosting && intakeDraftHasYarn(costingDraft) && !costingDraft.isLocked) {
-        await saveIntakeCostingDraft({
-          dinNumber: din.din_number,
-          qualityName: designName || din.din_number,
-          diaryImageUrl: imageUrl,
-          draft: costingDraft,
-          userId: session?.user?.id || null,
-        })
-        await syncDinCostingFromLatest(din.din_number)
-        costingNote = ' · costing draft saved'
+      if (canWriteCosting && costingReady && !costingDraft.isLocked) {
+        // Re-apply latest OCR review so feeders / loom pick land on costing rows before save
+        const applied = ocrHasDetectedFields(ocrDraft)
+          ? applyOcrToCostingDraft(ocrDraft, {
+              designLength: costingDraft.designLength,
+              rates: masterRates,
+              costingDate: costingDraft.costingDate,
+              existingWarps: costingDraft.warps,
+            })
+          : null
+        const draftToSave = applied
+          ? {
+              ...costingDraft,
+              wefts: applied.wefts.length ? applied.wefts : costingDraft.wefts,
+              warps: applied.warps.length ? applied.warps : costingDraft.warps,
+            }
+          : costingDraft
+
+        if (intakeDraftHasYarn(draftToSave)) {
+          await saveIntakeCostingDraft({
+            dinNumber: din.din_number,
+            qualityName: designName || din.din_number,
+            diaryImageUrl: imageUrl,
+            draft: draftToSave,
+            userId: session?.user?.id || null,
+          })
+          await syncDinCostingFromLatest(din.din_number)
+          setCostingDraft(draftToSave)
+          costingNote = ' · costing draft saved & calculated'
+        }
       }
 
       setMessage(`Saved ${din.din_number}${costingNote}`)
