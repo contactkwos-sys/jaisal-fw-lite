@@ -37,6 +37,7 @@ import {
 import { rateMasterItemNames } from '../lib/dinIntakeCosting'
 import {
   DinDesignImportSection,
+  type DinOcrApplyPayload,
   type MissingRateItem,
 } from '../components/dinCosting/DinDesignImportSection'
 import {
@@ -196,6 +197,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
   const [historyError, setHistoryError] = useState<string | null>(null)
   /** After "Save As New", skip one DIN blur auto-load so the form is not overwritten. */
   const skipDinAutoloadRef = useRef(false)
+  const liveSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [masterRates, setMasterRates] = useState<RateMasterRow[]>([])
   const [designImageUrl, setDesignImageUrl] = useState<string | null>(null)
   const [importSource, setImportSource] = useState<DesignImportSource | null>(null)
@@ -990,17 +992,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     if (match?.colour && !qualityName) setQualityName(match.colour)
   }
 
-  async function handleOcrApply(payload: {
-    dinNumber: string
-    qualityName: string
-    warps: WarpDraft[]
-    wefts: WeftDraft[]
-    designImageUrl: string | null
-    importSource: DesignImportSource
-    ocrExtracted: DesignOcrResult
-    ocrConfirmed: DesignOcrResult
-    missingRates: MissingRateItem[]
-  }) {
+  async function handleOcrApply(payload: DinOcrApplyPayload) {
     skipDinAutoloadRef.current = true
     setSavedId(null)
     setStatus('draft')
@@ -1051,6 +1043,40 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     }
   }
 
+  /** OCR review edits after Confirm → instant costing + Rate Master rates, debounced save. */
+  function handleOcrLiveSync(payload: DinOcrApplyPayload) {
+    if (isLocked || isReadOnly) return
+    skipDinAutoloadRef.current = true
+    const nextWarps = payload.warps.length ? payload.warps : warps
+    const nextWefts = payload.wefts.length ? payload.wefts : wefts
+    const nextQuality =
+      payload.qualityName.trim() || qualityName.trim() || payload.dinNumber
+
+    setDinNumber(payload.dinNumber)
+    if (payload.qualityName.trim()) setQualityName(payload.qualityName.trim())
+    setWarps(nextWarps)
+    setWefts(nextWefts)
+    setOcrConfirmedJson(payload.ocrConfirmed)
+    setMissingRates(payload.missingRates)
+    setMessage('Costing updated from OCR — Rate Master rates applied')
+
+    if (liveSaveTimerRef.current) clearTimeout(liveSaveTimerRef.current)
+    liveSaveTimerRef.current = setTimeout(() => {
+      void persist(true, false, {
+        dinNumber: payload.dinNumber,
+        qualityName: nextQuality,
+        designLength: designLength || String(formulaDefaults.default_base_length_mtr),
+        warps: nextWarps,
+        wefts: nextWefts,
+        designImageUrl: payload.designImageUrl ?? designImageUrl,
+        importSource: payload.importSource,
+        ocrExtractedJson: payload.ocrExtracted,
+        ocrConfirmedJson: payload.ocrConfirmed,
+        forceNew: false,
+      })
+    }, 700)
+  }
+
   async function refreshRatesFromMaster() {
     setBusy(true)
     setError(null)
@@ -1079,8 +1105,9 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
       setWefts((prev) =>
         prev.map((row) => {
           if (row.rate_source === 'manual') return row
-          if (!row.weft_name.trim()) return row
-          const found = lookupRateForCosting(rates, 'weft', row.weft_name, costingDate, { denier: row.denier })
+          const name = row.weft_name.trim()
+          if (!name || name === '-' || name === '—' || name === '–') return row
+          const found = lookupRateForCosting(rates, 'weft', name, costingDate, { denier: row.denier })
           if (!found) return { ...row, rate_per_kg: '', rate_source: undefined, rate_master_id: undefined }
           return {
             ...row,
@@ -1175,6 +1202,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
           masterRates={masterRates}
           existingWarps={warps}
           onApply={handleOcrApply}
+          onLiveSync={handleOcrLiveSync}
           onOpenExisting={(din) => {
             skipDinAutoloadRef.current = false
             setDinNumber(din)
