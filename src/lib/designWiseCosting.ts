@@ -33,6 +33,30 @@ export function costingDenierFromBase(baseDenier: string | number | null | undef
 }
 
 /**
+ * Production length for wastage / yarn ₹/mtr.
+ * Prefer Design Length field; if blank/0, use first positive warp/weft row length;
+ * finally DEFAULT_LENGTH_MTR (110). Never allow 0 when costing yarn — that zeroes Yarn Cost/Mtr.
+ */
+export function resolveProductionLengthMtr(
+  designLength: string | number | null | undefined,
+  warps?: Array<{ length_mtr?: string | number | null }>,
+  wefts?: Array<{ length_mtr?: string | number | null }>,
+  fallback: number = DEFAULT_LENGTH_MTR,
+): number {
+  const entered = n(designLength)
+  if (entered > 0) return entered
+  for (const row of wefts ?? []) {
+    const L = n(row.length_mtr)
+    if (L > 0) return L
+  }
+  for (const row of warps ?? []) {
+    const L = n(row.length_mtr)
+    if (L > 0) return L
+  }
+  return fallback > 0 ? fallback : DEFAULT_LENGTH_MTR
+}
+
+/**
  * Resolve denier used in weight formulas.
  * Prefer base_denier → base + 10. Legacy rows without base_denier use denier as-is
  * (or catalogue "Same" → number from yarn name) — avoids re-applying +10 on historical data.
@@ -387,6 +411,9 @@ export function computeWeftRow(row: WeftDraft) {
  * Full per-meter costing chain (Jacquard Repair Design).
  * Yarn rows consume on entered length (incl. wastage); per-meter yarn cost divides total yarn
  * by usable length (100 mtr basis). Weaving charge = Total Weft PIC × PIC Conversion Rate.
+ *
+ * Safety: if enteredLengthMtr is 0/blank, uses DEFAULT_LENGTH_MTR so Yarn Cost/Mtr is never
+ * silently zeroed while yarn amounts exist.
  */
 export function computeBuildup(
   warps: WarpDraft[],
@@ -423,7 +450,8 @@ export function computeBuildup(
 
   const totalWeightKg = round2(totalWarpWeightKg + totalWeftWeightKg)
   const totalYarnAmount = round2(totalWarpAmount + totalWeftAmount)
-  const wastage = computeWastageParams(enteredLengthMtr, wastageMtr, wastagePercent)
+  const lengthForCosting = resolveProductionLengthMtr(enteredLengthMtr, warps, wefts)
+  const wastage = computeWastageParams(lengthForCosting, wastageMtr, wastagePercent)
   const length = wastage.enteredLengthMtr
   const usable = wastage.usableLengthMtr
   const yarnCostPerMtr = usable > 0 ? round2(totalYarnAmount / usable) : 0

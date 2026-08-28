@@ -6,6 +6,7 @@ import {
   type IntakeCostingDraft,
 } from '../lib/dinIntakeCosting'
 import {
+  DEFAULT_LENGTH_MTR,
   computeBuildup,
   computeWarpRow,
   computeWeftRow,
@@ -15,6 +16,7 @@ import {
   fmtInr,
   fmtMoney,
   n,
+  resolveProductionLengthMtr,
   withBaseDenier,
 } from '../lib/designWiseCosting'
 import { gstLabel, type RateMasterRow } from '../lib/rateMaster'
