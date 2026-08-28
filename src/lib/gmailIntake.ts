@@ -2,6 +2,7 @@
 
 import { DIN_INTAKE_EMAIL } from './designToOrder'
 import { supabase } from './supabase'
+import { handleUserError } from './userError'
 
 export type GmailStatus = {
   configured: boolean
@@ -53,7 +54,9 @@ export type ApprovedSender = {
 
 async function invoke<T>(body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke('gmail-intake', { body })
-  if (error) throw new Error(error.message || 'Gmail request failed')
+  if (error) {
+    throw new Error(handleUserError('gmail-intake', error, 'Gmail request failed'))
+  }
   if (data?.error) throw new Error(String(data.error))
   return data as T
 }
@@ -93,7 +96,9 @@ export async function fetchApprovedSenders(): Promise<ApprovedSender[]> {
     .from('gmail_approved_senders')
     .select('*')
     .order('name')
-  if (error) throw error
+  if (error) {
+    throw new Error(handleUserError('gmail-senders', error, 'Could not load approved senders'))
+  }
   return (data as ApprovedSender[]) ?? []
 }
 
@@ -119,7 +124,9 @@ export async function upsertApprovedSender(input: {
       .eq('id', input.id)
       .select('*')
       .single()
-    if (error) throw error
+    if (error) {
+      throw new Error(handleUserError('gmail-sender-update', error, 'Could not update sender'))
+    }
     return data as ApprovedSender
   }
   const { data, error } = await supabase
@@ -127,7 +134,9 @@ export async function upsertApprovedSender(input: {
     .insert({ ...payload, created_by: input.created_by || null })
     .select('*')
     .single()
-  if (error) throw error
+  if (error) {
+    throw new Error(handleUserError('gmail-sender-insert', error, 'Could not add sender'))
+  }
   return data as ApprovedSender
 }
 

@@ -36,6 +36,20 @@ const TECHNICAL_PATTERNS: Array<{ re: RegExp; message: string }> = [
     re: /Failed to fetch|NetworkError|network/i,
     message: 'Unable to reach the server. Check your internet connection and try again.',
   },
+  {
+    re: /Failed to send a request to the Edge Function|Edge Function.*not found|NOT_FOUND/i,
+    message:
+      'Gmail service is temporarily unavailable. You can still manage approved senders below; try connecting Gmail again in a few minutes.',
+  },
+  {
+    re: /could not find the table ['"]?public\.gmail_approved_senders['"]?/i,
+    message:
+      'Gmail sender setup is not complete. Please run the Gmail design intake migration or contact your administrator.',
+  },
+  {
+    re: /duplicate key|idx_gmail_senders_email_lower/i,
+    message: 'This sender email is already in the approved list.',
+  },
 ]
 
 export function logTechnicalError(context: string, error: unknown): void {
