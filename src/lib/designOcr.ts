@@ -76,8 +76,9 @@ const DESIGN_NO_RE = /\b([A-Z]{2,5}\d{3,6})\b/g
 /** e.g. JFG-2249, jfg 2249, JFG-1674-wxb — normalized to JFG2249 / JFG1674 */
 const DESIGN_NO_HYPHEN_RE = /\b([A-Z]{2,5})[\s\-]+(\d{3,6})(?:-[A-Za-z0-9]+)?\b/gi
 const PHONE_RE = /\b\d{10,}\b/
-const LOOM_PICK_RE = /(?:loom[\s-]*pick|loom\s*pick)[\s:=-]*(\d+(?:\.\d+)?)/i
-const PICK_ONLY_RE = /\b(\d+(?:\.\d+)?)\s*pick\b/i
+const LOOM_PICK_RE =
+  /(?:total\s+)?(?:loom[\s-]*pick|loom\s*pick)[\s:=-]*(\d+(?:\.\d+)?)/i
+const TOTAL_LOOM_PICK_RE = /total\s+loom[\s-]*pick[\s:=-]*(\d+(?:\.\d+)?)/i
 /** Yarn codes may be letters (HSY, ZAREE) or numeric denier/codes (37, 80/2). */
 const FEEDER_RE =
   /(?:feeder|fd)[\s.-]*(\d+)\s*[=:\-]?\s*([A-Z0-9][A-Z0-9./-]{0,15})/gi
@@ -167,7 +168,7 @@ function scanDesignNumberCandidates(
     if (lineIdx != null) {
       if (lineIdx <= 2) score += 3
       if (lineCount != null && lineIdx >= lineCount - 3) score += 2
-      if (/design|desi|din|jfg/i.test(text)) score += 2
+      if (/design\s*(?:no|number|#)|desi|din\b|jfg/i.test(text)) score += 4
     }
     candidates.push({ value: m[1], source: sourceLabel, score })
   }
@@ -178,7 +179,7 @@ function scanDesignNumberCandidates(
     if (lineIdx != null) {
       if (lineIdx <= 2) score += 3
       if (lineCount != null && lineIdx >= lineCount - 3) score += 2
-      if (/design|desi|din|jfg/i.test(text)) score += 2
+      if (/design\s*(?:no|number|#)|desi|din\b|jfg/i.test(text)) score += 4
     }
     candidates.push({ value: `${m[1].toUpperCase()}${m[2]}`, source: sourceLabel, score })
   }
@@ -201,7 +202,13 @@ function extractDesignNumbers(text: string, subject?: string, filename?: string)
   return pickBestDesignNumber(candidates, subject, filename)
 }
 
-function extractLoomPick(text: string, fallbackFromRows?: string): OcrField {
+function extractLoomPick(text: string): OcrField {
+  // Prefer explicit TOTAL LOOM PICK — never invent from Σ weft PIC
+  const totalLoom = text.match(TOTAL_LOOM_PICK_RE)
+  if (totalLoom?.[1]) {
+    return { value: totalLoom[1], confidence: 'high', source: 'total_loom_pick' }
+  }
+
   const loom = text.match(LOOM_PICK_RE)
   if (loom?.[1]) return { value: loom[1], confidence: 'high', source: 'loom_pick' }
 
@@ -220,12 +227,7 @@ function extractLoomPick(text: string, fallbackFromRows?: string): OcrField {
     return { value: totals.totalPick.value, confidence: totals.totalPick.confidence, source: 'total_pick' }
   }
 
-  const pickOnly = text.match(PICK_ONLY_RE)
-  if (pickOnly?.[1]) return { value: pickOnly[1], confidence: 'low', source: 'pick_label' }
-
-  if (fallbackFromRows) {
-    return { value: fallbackFromRows, confidence: 'low', source: 'sum_colour_picks' }
-  }
+  // Do NOT fall back to Σ Colour/Feeder PIC — that is TOTAL WEFT PIC, a separate field
   return emptyField()
 }
 
@@ -444,16 +446,8 @@ export function parseDesignReferenceText(
     ? { value: colour.totalStrings, confidence: 'high', source: 'colour_total' }
     : totals.totalStrings
 
-  const sumPics = result.weftRows.reduce((s, r) => s + (Number(r.pic) || 0), 0)
-  const sumFallback = sumPics > 0 ? String(Math.round(sumPics * 100) / 100) : ''
-  result.loomPick = extractLoomPick(
-    normalized,
-    result.totalPick.value || sumFallback || undefined,
-  )
-  // Prefer explicit total pick as loom pick when header missing
-  if (!result.loomPick.value && result.totalPick.value) {
-    result.loomPick = { ...result.totalPick, source: result.totalPick.source || 'total_pick' }
-  }
+  // TOTAL LOOM PICK from header only — never replace with Σ weft PIC
+  result.loomPick = extractLoomPick(normalized)
 
   if (!result.weftRows.length) {
     // Format A "315 / 315 Strings" is strings-only reference — do NOT invent weft PIC from loom pick.
@@ -692,7 +686,7 @@ export function detectMissingRates(
     if (isBlankYarnName(name)) return
     if (row.rate_source === 'manual' && n(row.rate_per_kg) > 0) return
     const found = lookupRateForCosting(rates, 'warp', name, costingDate, {
-      denier: row.base_denier || row.denier,
+      denier: row.base_denier || undefined,
     })
     if (!found && !n(row.rate_per_kg)) missing.push({ category: 'warp', itemName: name, rowIndex: idx })
   })
@@ -701,7 +695,7 @@ export function detectMissingRates(
     if (isBlankYarnName(name)) return
     if (row.rate_source === 'manual' && n(row.rate_per_kg) > 0) return
     const found = lookupRateForCosting(rates, 'weft', name, costingDate, {
-      denier: row.base_denier || row.denier,
+      denier: row.base_denier || undefined,
     })
     if (!found && !n(row.rate_per_kg)) missing.push({ category: 'weft', itemName: name, rowIndex: idx })
   })

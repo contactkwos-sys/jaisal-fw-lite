@@ -99,7 +99,7 @@ function lookupRateWithOthersFallback(rates, category, yarnName, asOfDate) {
 const rates = [
   { category: 'warp', item_name: '150 Roto Black & White', denier: '150', basic_rate: 180, gst_percent: 5, freight_per_kg: 2.25, effective_from: '2026-08-01', is_active: true },
   { category: 'weft', item_name: '440 HSY', denier: 'Same', basic_rate: 210, gst_percent: 5, freight_per_kg: 2.25, effective_from: '2026-08-01', is_active: true },
-  { category: 'weft', item_name: '300 Tex', denier: '310', basic_rate: 195, gst_percent: 5, freight_per_kg: 2.25, effective_from: '2026-08-01', is_active: true },
+  { category: 'weft', item_name: '300 Tex', denier: '300', basic_rate: 195, gst_percent: 5, freight_per_kg: 2.25, effective_from: '2026-08-01', is_active: true },
   { category: 'weft', item_name: 'MARBLE', denier: null, basic_rate: 0, gst_percent: 5, freight_per_kg: 2.25, effective_from: '2026-08-01', is_active: true },
   { category: 'weft', item_name: 'Others (Weft)', denier: null, basic_rate: 0, gst_percent: 5, freight_per_kg: 2.25, effective_from: '2026-08-01', is_active: true },
 ]

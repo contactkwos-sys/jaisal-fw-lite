@@ -42,11 +42,42 @@ function resolveDenierForCalc(denier, yarnName) {
   return fromName ? Number(fromName[1]) : 0
 }
 
+function coerceBaseDenier(candidate, yarnName) {
+  const raw = candidate == null ? '' : String(candidate).trim()
+  if (!raw || /^same$/i.test(raw)) {
+    const fromName = resolveDenierForCalc('Same', yarnName)
+    return fromName > 0 ? String(fromName) : ''
+  }
+  const cand = n(raw)
+  if (!(cand > 0)) return ''
+  const fromName = resolveDenierForCalc('', yarnName)
+  if (fromName > 0 && cand === fromName + DENIER_COSTING_OFFSET) return String(fromName)
+  return String(cand)
+}
+
 function resolveCostingDenier(row) {
   if (row.base_denier != null && String(row.base_denier).trim() !== '') {
     return costingDenierFromBase(row.base_denier)
   }
   return resolveDenierForCalc(row.denier, row.yarn_name || row.weft_name)
+}
+
+function withBaseDenier(row, baseDenier) {
+  const trimmed = String(baseDenier).trim()
+  const costing = costingDenierFromBase(trimmed)
+  return { ...row, base_denier: trimmed, denier: costing > 0 ? String(costing) : '' }
+}
+
+function syncCostingDenierFromBase(row) {
+  if (!row.base_denier || !String(row.base_denier).trim()) return row
+  return withBaseDenier(row, row.base_denier)
+}
+
+function ensureBaseDenier(row, candidateBase, yarnName) {
+  if (row.base_denier && String(row.base_denier).trim()) return syncCostingDenierFromBase(row)
+  const base = coerceBaseDenier(candidateBase, yarnName)
+  if (!base) return row
+  return withBaseDenier(row, base)
 }
 
 function loomPickWeftPicWarning(loomPick, totalWeftPic) {
@@ -217,6 +248,42 @@ const hsyWeight = weftWeightWithResolved({
 })
 const hsyExpected = round2(weftWeightKg(440, 28, 52, 110))
 checks.push(['HSY Same denier weight matches numeric 440', hsyWeight === hsyExpected && hsyWeight > 0])
+
+// --- Acceptance: JFG2249 denier +10 once, never stack ---
+let jfg = withBaseDenier(
+  { weft_name: '300 Tex', base_denier: '', denier: '', pic: '25', width: '52', length_mtr: '110', rate_per_kg: '150' },
+  '300',
+)
+checks.push(['JFG2249 Base 300 → Costing 310', resolveCostingDenier(jfg) === 310 && jfg.base_denier === '300' && jfg.denier === '310'])
+for (let i = 0; i < 10; i++) jfg = syncCostingDenierFromBase(jfg)
+checks.push(['Recalculate ×10 still Base 300 / Costing 310', jfg.base_denier === '300' && resolveCostingDenier(jfg) === 310 && jfg.denier === '310'])
+
+// Rate Master seed bug: denier 310 for "300 Tex" must coerce to base 300
+const fromBadRm = ensureBaseDenier(
+  { weft_name: '300 Tex', base_denier: '', denier: '' },
+  '310',
+  '300 Tex',
+)
+checks.push(['RM seed 310 coerced to base 300 → costing 310 (not 320)', fromBadRm.base_denier === '300' && resolveCostingDenier(fromBadRm) === 310])
+
+// ensureBaseDenier never overwrites existing base on recalc
+const kept = ensureBaseDenier({ ...jfg }, '310', '300 Tex')
+checks.push(['ensureBaseDenier keeps existing base 300', kept.base_denier === '300' && resolveCostingDenier(kept) === 310])
+
+// User intentionally enters 310 as base → costing 320 once only
+const intentional = withBaseDenier({ weft_name: 'Custom', base_denier: '', denier: '' }, '310')
+checks.push(['User base 310 → costing 320 once', intentional.base_denier === '310' && resolveCostingDenier(intentional) === 320])
+
+// JFG2249 weft PIC sum vs loom pick
+const jfgWefts = [
+  { weft_name: '300 Tex', base_denier: '300', denier: '310', pic: '25', width: '52', length_mtr: '110', rate_per_kg: '150' },
+  { weft_name: '300 Tex', base_denier: '300', denier: '310', pic: '25', width: '52', length_mtr: '110', rate_per_kg: '150' },
+]
+const jfgBuild = computeBuildup([], jfgWefts, 110, 0.45, 0, 0)
+checks.push(['JFG2249 Total Weft PIC = 50', jfgBuild.totalPic === 50])
+checks.push(['JFG2249 Loom Pick 112 ≠ Weft PIC 50 warning', loomPickWeftPicWarning(112, 50) != null])
+checks.push(['JFG2249 yarn cost on 100m basis', jfgBuild.yarnCostPerMtr === round2(jfgBuild.totalYarnAmount / 100)])
+checks.push(['Weight uses costing denier 310', resolveCostingDenier(jfgWefts[0]) === 310])
 
 let failed = 0
 for (const [label, ok] of checks) {

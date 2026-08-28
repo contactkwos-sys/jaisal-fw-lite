@@ -918,8 +918,9 @@ export type DesignCostingWarp = {
   costing_id: string
   sr_no: number
   yarn_name: string | null
-  /** Entered base denier; costing denier = base + 10 stored in denier */
+  /** Entered / remembered BASE denier. Costing = base + 10 (stored in denier). */
   base_denier: number | null
+  /** Costing denier snapshot (= base_denier + 10) used by weight formula */
   denier: number | null
   tar_ends: number | null
   length_mtr: number | null
@@ -935,7 +936,9 @@ export type DesignCostingWeft = {
   costing_id: string
   sr_no: number
   weft_name: string | null
+  /** Entered / remembered BASE denier. Costing = base + 10 (stored in denier). */
   base_denier: number | null
+  /** Costing denier snapshot (= base_denier + 10) used by weight formula */
   denier: number | null
   pic: number | null
   width: number | null

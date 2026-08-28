@@ -17,3 +17,11 @@ alter table public.dins
   add column if not exists main_sample_photo_url text,
   add column if not exists combined_matching_photo_url text,
   add column if not exists approved_sale_rate numeric;
+
+-- Rate Master: base denier only (300 Tex was wrongly seeded as 310 / costing)
+update public.rate_master
+set denier = '300',
+    updated_at = now()
+where category = 'weft'
+  and lower(trim(item_name)) = '300 tex'
+  and trim(coalesce(denier, '')) = '310';
