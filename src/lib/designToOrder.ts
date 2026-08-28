@@ -1,5 +1,6 @@
 /** Design to Order — DIN hub linking costing, samples, and orders */
 
+import { uploadDinStorageObject } from './dinStorage'
 import { supabase } from './supabase'
 import { todayISO } from './mutate'
 import { assertDesignMasterWrite } from './permissions'
@@ -177,22 +178,7 @@ export async function previewNextDinNumber(year = new Date().getFullYear()): Pro
 export async function uploadDinImage(file: File): Promise<string> {
   const ext = file.name.split('.').pop() || 'jpg'
   const path = `${Date.now()}-${crypto.randomUUID()}.${ext}`
-  const { error } = await supabase.storage.from('din-images').upload(path, file, {
-    upsert: false,
-    contentType: file.type || undefined,
-  })
-  if (error) {
-    // Fallback to sample-designs if din-images bucket not yet migrated
-    const { error: e2 } = await supabase.storage.from('sample-designs').upload(path, file, {
-      upsert: false,
-      contentType: file.type || undefined,
-    })
-    if (e2) throw e2
-    const { data } = supabase.storage.from('sample-designs').getPublicUrl(path)
-    return data.publicUrl
-  }
-  const { data } = supabase.storage.from('din-images').getPublicUrl(path)
-  return data.publicUrl
+  return uploadDinStorageObject(path, file)
 }
 
 export async function fetchDins(limit = 100): Promise<DinWithMatchings[]> {
