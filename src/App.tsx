@@ -362,6 +362,7 @@ function AuthenticatedApp() {
       {tab === 'design-wise-costing' ? (
         <DesignWiseCosting
           viewOnly={filter === 'view-only'}
+          onNavigate={go}
           initialDin={
             filter &&
             filter !== 'view-only' &&

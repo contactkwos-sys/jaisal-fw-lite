@@ -21,3 +21,6 @@ verify_jwt = false
 
 [functions.gmail-intake]
 verify_jwt = false
+
+[functions.design-ocr]
+verify_jwt = false

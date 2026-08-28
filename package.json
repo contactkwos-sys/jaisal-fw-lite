@@ -21,6 +21,7 @@
     "audit:phase2-final": "node scripts/phase2-final-verification.mjs",
     "smoke:daily-costing": "node scripts/daily-costing-smoke.mjs",
     "test:design-wise-costing": "node scripts/test-design-wise-costing.mjs",
+    "test:design-ocr-parser": "node scripts/test-design-ocr-parser.mjs",
     "test:rate-master": "node scripts/test-rate-master.mjs",
     "start": "node scripts/serve-app.mjs",
     "functions:local": "node scripts/local-functions-server.mjs"
