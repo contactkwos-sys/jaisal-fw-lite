@@ -351,7 +351,7 @@ assert(colour.feeders[2].yarnType === '-', 'Colour 3 yarn is dash')
 assert(colour.weftRows.map((r) => r.pic).join(',') === '37,37,37,0,0,0', 'Colour picks incl unused 0')
 assert(colour.weftRows.every((r) => r.strings === ''), 'No Strings stored')
 assert(colour.totalStrings === '', 'No totalStrings')
-assert(colour.totalPick === '111', 'TOTAL LOOM PICK = Σ Colour Picks 111 (not printed 112)')
+assert(colour.totalPick === '111', 'TOTAL WEFT PIC = Σ Colour Picks 111 (sheet loom may differ)')
 assert(colour.weftRows[3].confidence === 'high', 'Unused Colour 4 not low-confidence')
 
 /** Design Number label + feeder pick sum */
@@ -365,11 +365,11 @@ assert(extractDesignNumbers(formatDesignNumberLabel).design === 'JFG2248', 'Desi
 const colourLabel = extractColourTable(formatDesignNumberLabel)
 assert(colourLabel.feeders.length === 3, 'Design Number sheet 3 feeders')
 assert(colourLabel.weftRows.map((r) => r.pic).join(',') === '28,40,44', 'Feeder picks')
-assert(colourLabel.totalPick === '112', 'Σ feeder picks = 112 for TOTAL LOOM PICK')
+assert(colourLabel.totalPick === '112', 'Σ feeder picks = 112 TOTAL WEFT PIC')
 assert(colourLabel.weftRows.every((r) => !r.strings), 'No Strings on label sheet')
 assert(isBlankYarnName('-') && !isBlankYarnName('ZARI'), 'Blank yarn helper')
 
-/** JFG2249 — printed TOTAL LOOM PICK ignored; use Σ Colour Picks */
+/** JFG2249 — Colour picks → Weft PIC; sheet TOTAL LOOM PICK kept separate */
 const formatJfg2249 = `
 Design Number: JFG2249
 TOTAL LOOM PICK = 112
@@ -381,7 +381,8 @@ assert(extractLoomPickPrinted(formatJfg2249) === '112', 'Printed header still re
 const jfgColour = extractColourTable(formatJfg2249)
 assert(jfgColour.feeders.length === 2, 'JFG2249 2 colour rows')
 assert(jfgColour.weftRows[0].pic === '25' && jfgColour.weftRows[1].pic === '25', 'JFG2249 colour PICs')
-assert(jfgColour.totalPick === '50', 'JFG2249 TOTAL LOOM PICK = Σ 50 (not printed 112)')
+assert(jfgColour.totalPick === '50', 'JFG2249 TOTAL WEFT PIC = Σ 50')
+assert(extractLoomPickPrinted(formatJfg2249) === '112', 'JFG2249 sheet TOTAL LOOM PICK = 112')
 assert(jfgColour.weftRows.every((r) => r.strings === ''), 'JFG2249 no Strings')
 
 /** JFG1654 acceptance — Colour 1/2/3 Pick 37, Colour 4 unused "-", TOTAL LOOM PICK 111 */

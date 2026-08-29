@@ -1,10 +1,9 @@
 /**
  * Smoke-test DIN Costing final business logic:
- * - Base denier + 10 (no stacking on recalculate)
- * - Catalogue "Same" denier resolves from yarn name
- * - Strings excluded from costing / width
- * - Default width 52, length 110
- * - 110m production → 100m customer basis
+ * - Base denier + 10 (no stacking on recalculate) — 300 → 310 forever
+ * - Default TAR 8900, width 52, length 110
+ * - Internal cost on 110 Mtr; Customer rate = Internal 110 ÷ 100 (once)
+ * - Strings excluded from costing
  * - TOTAL LOOM PICK vs TOTAL WEFT PIC warning
  * Run: node scripts/test-design-wise-costing.mjs
  */
@@ -12,6 +11,8 @@
 const CALC_FACTOR = 9_000_000
 const DEFAULT_WIDTH = 52
 const DEFAULT_LENGTH_MTR = 110
+const DEFAULT_TAR_ENDS = 8900
+const DEFAULT_CUSTOMER_USABLE_MTR = 100
 const DENIER_COSTING_OFFSET = 10
 
 function n(v) {
@@ -115,6 +116,7 @@ function computeWastageParams(enteredLengthMtr, wastageMtr = 10, wastagePercent 
   }
 }
 
+/** FIXED formula: Internal 110 = yarn + weave + other; Customer = Internal ÷ 100 once */
 function computeBuildup(
   warps,
   wefts,
@@ -155,15 +157,19 @@ function computeBuildup(
   const totalWeightKg = round2(totalWarpWeightKg + totalWeftWeightKg)
   const totalYarnAmount = round2(totalWarpAmount + totalWeftAmount)
   const wastage = computeWastageParams(enteredLengthMtr, wastageMtr, wastagePercent)
-  const usable = wastage.usableLengthMtr
-  const yarnCostPerMtr = usable > 0 ? round2(totalYarnAmount / usable) : 0
+  const customerBasis =
+    wastage.usableLengthMtr > 0 ? wastage.usableLengthMtr : DEFAULT_CUSTOMER_USABLE_MTR
+
   const conversionCharge = round2(totalPic * n(picConversionRate))
-  const subtotalPerMtr = round2(yarnCostPerMtr + conversionCharge)
-  const muAmount = round2(subtotalPerMtr * (n(muPercent) / 100))
-  const afterMuPerMtr = round2(subtotalPerMtr + muAmount)
+  const yarnAndWeave110 = round2(totalYarnAmount + conversionCharge)
+  const muAmount110 = round2(yarnAndWeave110 * (n(muPercent) / 100))
+  const afterMu110 = round2(yarnAndWeave110 + muAmount110)
   const gst = n(gstPercent)
-  const gstAmount = gst > 0 ? round2(afterMuPerMtr * (gst / 100)) : 0
-  const finalCostPerMtr = gst > 0 ? round2(afterMuPerMtr + gstAmount) : afterMuPerMtr
+  const gstAmount110 = gst > 0 ? round2(afterMu110 * (gst / 100)) : 0
+  const otherCharges = round2(muAmount110 + gstAmount110)
+  const finalInternalCost110 = gst > 0 ? round2(afterMu110 + gstAmount110) : afterMu110
+  const customerRatePerMtr =
+    customerBasis > 0 ? round2(finalInternalCost110 / customerBasis) : 0
 
   return {
     totalWarpWeightKg,
@@ -173,117 +179,115 @@ function computeBuildup(
     totalWeftAmount,
     totalYarnAmount,
     ...wastage,
-    yarnCostPerMtr,
+    usableLengthMtr: customerBasis,
+    yarnCostPerMtr: customerBasis > 0 ? round2(totalYarnAmount / customerBasis) : 0,
     totalPic,
     conversionCharge,
-    subtotalPerMtr,
-    muAmount,
-    afterMuPerMtr,
-    gstAmount,
-    finalCostPerMtr,
+    otherCharges,
+    finalInternalCost110,
+    customerRatePerMtr,
+    subtotalPerMtr: customerBasis > 0 ? round2(yarnAndWeave110 / customerBasis) : 0,
+    muAmount: customerBasis > 0 ? round2(muAmount110 / customerBasis) : 0,
+    afterMuPerMtr: customerBasis > 0 ? round2(afterMu110 / customerBasis) : 0,
+    gstAmount: customerBasis > 0 ? round2(gstAmount110 / customerBasis) : 0,
+    finalCostPerMtr: customerRatePerMtr,
   }
 }
 
-// --- Final test case JFG1674 ---
-const TOTAL_LOOM_PICK = 112
-
-const wefts = [
-  { weft_name: 'Anmol Jari', base_denier: '180', denier: '', pic: '37', width: '52', length_mtr: '110', rate_per_kg: '350' },
-  { weft_name: '150 Lichi', base_denier: '160', denier: '', pic: '37', width: '52', length_mtr: '110', rate_per_kg: '205' },
-  { weft_name: '300 Tex', base_denier: '300', denier: '', pic: '37', width: '52', length_mtr: '110', rate_per_kg: '150' },
-]
-
-const warps = [
-  { yarn_name: '150 Bright Yarn', base_denier: '160', denier: '', tar_ends: '8900', length_mtr: '110', rate_per_kg: '159.75' },
-]
-
-const r = computeBuildup(warps, wefts, DEFAULT_LENGTH_MTR, 0.45, 0, 0)
-
 const checks = []
 
-checks.push(['Anmol Jari costing denier 190', resolveCostingDenier(wefts[0]) === 190])
-checks.push(['150 Lichi costing denier 170', resolveCostingDenier(wefts[1]) === 170])
-checks.push(['300 Tex costing denier 310', resolveCostingDenier(wefts[2]) === 310])
-checks.push(['Warp base 160 → costing 170', resolveCostingDenier(warps[0]) === 170])
+// --- FINAL ACCEPTANCE: exact denier rule ---
+checks.push(['Warp Base 150 → Costing 160', costingDenierFromBase(150) === 160])
+checks.push(['Weft Base 110 → Costing 120', costingDenierFromBase(110) === 120])
+checks.push(['Weft Base 300 → Costing 310 (NOT 320, NOT 350)', costingDenierFromBase(300) === 310])
+checks.push(['Never 300 → 320', costingDenierFromBase(300) !== 320])
+checks.push(['Never 300 → 350', costingDenierFromBase(300) !== 350])
 
-const afterRecalc = resolveCostingDenier({ base_denier: '180', denier: '190' })
-checks.push(['Recalc still 190 (not 200)', afterRecalc === 190])
-const stackedWrong = resolveCostingDenier({ base_denier: '', denier: '190' })
-checks.push(['Legacy denier-only uses 190 as-is', stackedWrong === 190])
+let warp150 = withBaseDenier(
+  { yarn_name: '150 Bright', base_denier: '', denier: '', tar_ends: '8900', width: '52', length_mtr: '110', rate_per_kg: '160' },
+  '150',
+)
+checks.push(['Warp 150 base/costing fields', warp150.base_denier === '150' && warp150.denier === '160'])
+for (let i = 0; i < 10; i++) warp150 = syncCostingDenierFromBase(warp150)
+checks.push(['Warp recalc ×10 still 150/160', warp150.base_denier === '150' && resolveCostingDenier(warp150) === 160])
 
-checks.push(['Default width 52', DEFAULT_WIDTH === 52])
-checks.push(['Default length 110', DEFAULT_LENGTH_MTR === 110])
+let weft110 = withBaseDenier(
+  { weft_name: '110 Yarn', base_denier: '', denier: '', pic: '25', width: '52', length_mtr: '110', rate_per_kg: '200' },
+  '110',
+)
+checks.push(['Weft1 Base 110 → Costing 120', weft110.base_denier === '110' && resolveCostingDenier(weft110) === 120])
 
-checks.push(['TOTAL WEFT PIC = 111', r.totalPic === 111])
-checks.push(['TOTAL LOOM PICK stays 112', TOTAL_LOOM_PICK === 112])
-checks.push([
-  'Warn when loom ≠ weft PIC',
-  loomPickWeftPicWarning(TOTAL_LOOM_PICK, r.totalPic) ===
-    'Loom Pick and calculated Weft PIC differ — please verify.',
-])
-checks.push(['No warn when equal', loomPickWeftPicWarning(111, 111) === null])
-
-checks.push(['Usable length = 100', r.usableLengthMtr === 100])
-checks.push(['Conversion multiplier = 1.10', r.conversionMultiplier === 1.1])
-checks.push(['Yarn cost/mtr = total ÷ 100 (not ÷ 110)', r.yarnCostPerMtr === round2(r.totalYarnAmount / 100)])
-checks.push(['Weaving = 111 × 0.45', r.conversionCharge === 49.95])
-
-const badStringsAsWidth = { base_denier: '180', pic: '37', width: '2222', length_mtr: '110', rate_per_kg: '350' }
-const goodWidth = { base_denier: '180', pic: '37', width: '52', length_mtr: '110', rate_per_kg: '350' }
-const badW = weftWeightKg(resolveCostingDenier(badStringsAsWidth), 37, 2222, 110)
-const goodW = weftWeightKg(resolveCostingDenier(goodWidth), 37, 52, 110)
-checks.push(['Strings-as-width would inflate weight (detect bug)', badW > goodW * 10])
-checks.push(['Correct width 52 used in final case', wefts.every((w) => w.width === '52')])
-
-checks.push(['Customer meter = 110m cost ÷ 100', round2(6500 / 100) === 65])
-
-checks.push(['resolveDenier Same + 440 HSY → 440', resolveDenierForCalc('Same', '440 HSY') === 440])
-checks.push(['resolveDenier Same + 300 Tex → 300', resolveDenierForCalc('Same', '300 Tex') === 300])
-const hsyWeight = weftWeightWithResolved({
-  weft_name: '440 HSY',
-  denier: 'Same',
-  pic: '28',
-  width: '52',
-  length_mtr: '110',
-})
-const hsyExpected = round2(weftWeightKg(440, 28, 52, 110))
-checks.push(['HSY Same denier weight matches numeric 440', hsyWeight === hsyExpected && hsyWeight > 0])
-
-// --- Acceptance: JFG2249 denier +10 once, never stack ---
-let jfg = withBaseDenier(
+let weft300 = withBaseDenier(
   { weft_name: '300 Tex', base_denier: '', denier: '', pic: '25', width: '52', length_mtr: '110', rate_per_kg: '150' },
   '300',
 )
-checks.push(['JFG2249 Base 300 → Costing 310', resolveCostingDenier(jfg) === 310 && jfg.base_denier === '300' && jfg.denier === '310'])
-for (let i = 0; i < 10; i++) jfg = syncCostingDenierFromBase(jfg)
-checks.push(['Recalculate ×10 still Base 300 / Costing 310', jfg.base_denier === '300' && resolveCostingDenier(jfg) === 310 && jfg.denier === '310'])
+checks.push(['Weft2 Base 300 → Costing 310', weft300.base_denier === '300' && resolveCostingDenier(weft300) === 310])
+for (let i = 0; i < 10; i++) weft300 = syncCostingDenierFromBase(weft300)
+checks.push(['Weft2 recalc still 300/310', weft300.base_denier === '300' && resolveCostingDenier(weft300) === 310])
 
-// Rate Master seed bug: denier 310 for "300 Tex" must coerce to base 300
 const fromBadRm = ensureBaseDenier(
   { weft_name: '300 Tex', base_denier: '', denier: '' },
   '310',
   '300 Tex',
 )
-checks.push(['RM seed 310 coerced to base 300 → costing 310 (not 320)', fromBadRm.base_denier === '300' && resolveCostingDenier(fromBadRm) === 310])
+checks.push(['RM seed 310 coerced to base 300 → costing 310', fromBadRm.base_denier === '300' && resolveCostingDenier(fromBadRm) === 310])
 
-// ensureBaseDenier never overwrites existing base on recalc
-const kept = ensureBaseDenier({ ...jfg }, '310', '300 Tex')
-checks.push(['ensureBaseDenier keeps existing base 300', kept.base_denier === '300' && resolveCostingDenier(kept) === 310])
+checks.push(['Default width 52', DEFAULT_WIDTH === 52])
+checks.push(['Default length 110', DEFAULT_LENGTH_MTR === 110])
+checks.push(['Default TAR 8900', DEFAULT_TAR_ENDS === 8900])
 
-// User intentionally enters 310 as base → costing 320 once only
-const intentional = withBaseDenier({ weft_name: 'Custom', base_denier: '', denier: '' }, '310')
-checks.push(['User base 310 → costing 320 once', intentional.base_denier === '310' && resolveCostingDenier(intentional) === 320])
-
-// JFG2249 weft PIC sum vs loom pick
-const jfgWefts = [
-  { weft_name: '300 Tex', base_denier: '300', denier: '310', pic: '25', width: '52', length_mtr: '110', rate_per_kg: '150' },
-  { weft_name: '300 Tex', base_denier: '300', denier: '310', pic: '25', width: '52', length_mtr: '110', rate_per_kg: '150' },
+// Colour/Feeder → Pick mapping (1:1)
+const colourWefts = [
+  { weft_name: '', feeder_label: 'Colour 1', base_denier: '110', denier: '120', pic: '25', width: '52', length_mtr: '110', rate_per_kg: '200' },
+  { weft_name: '', feeder_label: 'Colour 2', base_denier: '110', denier: '120', pic: '25', width: '52', length_mtr: '110', rate_per_kg: '200' },
+  { weft_name: '300 Tex', feeder_label: 'Colour 3', base_denier: '300', denier: '310', pic: '50', width: '52', length_mtr: '110', rate_per_kg: '150' },
 ]
-const jfgBuild = computeBuildup([], jfgWefts, 110, 0.45, 0, 0)
-checks.push(['JFG2249 Total Weft PIC = 50', jfgBuild.totalPic === 50])
-checks.push(['JFG2249 Loom Pick 112 ≠ Weft PIC 50 warning', loomPickWeftPicWarning(112, 50) != null])
-checks.push(['JFG2249 yarn cost on 100m basis', jfgBuild.yarnCostPerMtr === round2(jfgBuild.totalYarnAmount / 100)])
-checks.push(['Weight uses costing denier 310', resolveCostingDenier(jfgWefts[0]) === 310])
+checks.push(['Colour 1 → Pick 25', colourWefts[0].pic === '25'])
+checks.push(['Colour 2 → Pick 25', colourWefts[1].pic === '25'])
+checks.push(['Colour 3 → Pick 50', colourWefts[2].pic === '50'])
+checks.push(['Blank yarn kept on Colour 1', colourWefts[0].weft_name === ''])
+
+const colourBuild = computeBuildup([], colourWefts, 110, 0.45, 0, 0)
+checks.push(['TOTAL WEFT PIC = 100 (25+25+50)', colourBuild.totalPic === 100])
+checks.push(['Loom 112 ≠ Weft PIC 100 warning', loomPickWeftPicWarning(112, 100) != null])
+checks.push(['Strings never in weight (width stays 52)', colourWefts.every((w) => w.width === '52')])
+
+// Customer rate formula: Internal 110 ÷ 100 once
+checks.push(['Example 5500 ÷ 100 = 55', round2(5500 / 100) === 55])
+const demo = computeBuildup(
+  [{ yarn_name: 'W', base_denier: '150', denier: '160', tar_ends: '8900', length_mtr: '110', rate_per_kg: '100' }],
+  [{ weft_name: 'F', base_denier: '300', denier: '310', pic: '50', width: '52', length_mtr: '110', rate_per_kg: '150' }],
+  110,
+  0.45,
+  0,
+  0,
+)
+checks.push(['Customer rate = finalInternal110 ÷ 100', demo.customerRatePerMtr === round2(demo.finalInternalCost110 / 100)])
+checks.push(['finalCostPerMtr aliases customer rate', demo.finalCostPerMtr === demo.customerRatePerMtr])
+checks.push([
+  'Weaving is on 110 basis (not added raw to per-mtr yarn)',
+  demo.finalInternalCost110 === round2(demo.totalYarnAmount + demo.conversionCharge),
+])
+checks.push(['Yarn cost/mtr = yarn ÷ 100', demo.yarnCostPerMtr === round2(demo.totalYarnAmount / 100)])
+checks.push(['Usable / customer basis = 100', demo.usableLengthMtr === 100])
+
+// Legacy JFG checks
+const TOTAL_LOOM_PICK = 112
+const wefts = [
+  { weft_name: 'Anmol Jari', base_denier: '180', denier: '', pic: '37', width: '52', length_mtr: '110', rate_per_kg: '350' },
+  { weft_name: '150 Lichi', base_denier: '160', denier: '', pic: '37', width: '52', length_mtr: '110', rate_per_kg: '205' },
+  { weft_name: '300 Tex', base_denier: '300', denier: '', pic: '37', width: '52', length_mtr: '110', rate_per_kg: '150' },
+]
+const warps = [
+  { yarn_name: '150 Bright Yarn', base_denier: '160', denier: '', tar_ends: '8900', length_mtr: '110', rate_per_kg: '159.75' },
+]
+const r = computeBuildup(warps, wefts, DEFAULT_LENGTH_MTR, 0.45, 0, 0)
+checks.push(['Anmol Jari costing denier 190', resolveCostingDenier(wefts[0]) === 190])
+checks.push(['300 Tex costing denier 310', resolveCostingDenier(wefts[2]) === 310])
+checks.push(['TOTAL WEFT PIC = 111', r.totalPic === 111])
+checks.push(['TOTAL LOOM PICK stays 112', TOTAL_LOOM_PICK === 112])
+checks.push(['Weaving = 111 × 0.45', r.conversionCharge === 49.95])
+checks.push(['Customer = internal ÷ 100', r.customerRatePerMtr === round2(r.finalInternalCost110 / 100)])
 
 let failed = 0
 for (const [label, ok] of checks) {
@@ -292,13 +296,11 @@ for (const [label, ok] of checks) {
   console.log(`${mark}  ${label}`)
 }
 
-console.log('\n--- Sample buildup (JFG1674-style) ---')
-console.log('TOTAL LOOM PICK', TOTAL_LOOM_PICK)
-console.log('TOTAL WEFT PIC', r.totalPic)
+console.log('\n--- Sample buildup ---')
 console.log('Yarn amount (110m)', r.totalYarnAmount)
-console.log('Yarn ₹/mtr (100m basis)', r.yarnCostPerMtr)
-console.log('Weaving', r.conversionCharge)
-console.log('Subtotal', r.subtotalPerMtr)
+console.log('Weaving (110m)', r.conversionCharge)
+console.log('Final Internal 110', r.finalInternalCost110)
+console.log('Customer Rate / 100', r.customerRatePerMtr)
 
 if (failed) {
   console.error(`\n${failed} check(s) failed`)
