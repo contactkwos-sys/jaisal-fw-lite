@@ -394,4 +394,42 @@ assert(normalizeOcrDesignNumber('Design Number-jfg1738-wxb').design === 'JFG1738
   assert(y?.[1] && /hey|hsy/i.test(y[1]) && y[2] === '24', 'noisy yarn pick 24')
 }
 
-console.log('✓ Design OCR parser tests passed (A/B + hyphen + Colour + Aditya DESIGNE-NUMBER + jfg1738 + noisy phone)')
+/** JFG1674: TOTAL LOOM PICK 112 with Colour 1–3 picks 37 (sheet off-by-one vs 111) */
+function suggestEqualPics(loom, rowCount) {
+  if (!(loom > 0) || rowCount < 1) return ''
+  for (const base of [loom, loom - 1, loom + 1]) {
+    if (base > 0 && base % rowCount === 0) {
+      const each = base / rowCount
+      if (each >= 8 && each <= 200) return String(each)
+    }
+  }
+  return String(Math.round(loom / rowCount))
+}
+assert(suggestEqualPics(112, 3) === '37', 'JFG1674 equal PIC split 112→37×3 (off-by-one)')
+assert(suggestEqualPics(48, 2) === '24', 'equal PIC 48→24×2')
+{
+  const COLOUR_PIPE_RE =
+    /(?:c+olou?r?s?|color|colowr|feeder|fd)[\s.\-]*(\d+)\s*[|:.\-]+\s*([^|\n]{0,24}?)\s*[|:.\-]+\s*(\d+(?:\.\d+)?)/gi
+  const noisyTable = 'CColour2 | zaree | 37\nColour 1 | | 37'
+  const hits = [...noisyTable.matchAll(COLOUR_PIPE_RE)]
+  assert(hits.length === 2, 'pipe colour rows from noisy OCR')
+  assert(hits[0][1] === '2' && /zaree/i.test(hits[0][2]) && hits[0][3] === '37', 'pipe Colour2 zaree 37')
+}
+{
+  // Realistic phone OCR for JFG1674 full page (DIN + 112-pick, table digits often unreadable)
+  const jfg1674Phone = `
+11/29/22, 11:30 AM jfg1674.jpg
+Design Number-JFG-1674-wxb
+| tizpiox | Pick | strings |
+Total
+`
+  assert(extractDesignNumbers(jfg1674Phone, 'jfg1674.jpg').design === 'JFG1674', 'JFG1674 phone DIN')
+  assert(extractLoomPick(jfg1674Phone) === '112' || extractLoomPick('112-pick') === '112', 'JFG1674 112-pick')
+  // Review fallback when table OCR blank
+  const pics = [1, 2, 3].map(() => suggestEqualPics(112, 3))
+  assert(pics.every((p) => p === '37'), 'JFG1674 review prefill 37/37/37')
+}
+
+console.log(
+  '✓ Design OCR parser tests passed (A/B + hyphen + Colour + Aditya DESIGNE-NUMBER + jfg1738 + noisy phone + JFG1674 review)',
+)

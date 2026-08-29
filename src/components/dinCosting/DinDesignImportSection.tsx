@@ -459,6 +459,14 @@ export function DinDesignImportSection({
 
             <div className="dwc-ocr-fields-col">
               <h3 className="dwc-ocr-subtitle">OCR Review — edit before applying</h3>
+              {!busy &&
+              (ocrDraft.feeders.some((f) => f.confidence === 'low') ||
+                ocrDraft.weftRows.some((r) => r.confidence === 'low')) ? (
+                <p className="dwc-ocr-review-banner">
+                  Review table — low-confidence Feeder/Colour or Pick rows are pre-filled; confirm or edit,
+                  then Confirm.
+                </p>
+              ) : null}
 
               <label className="field">
                 <span>
@@ -553,6 +561,9 @@ export function DinDesignImportSection({
                           disabled={busy}
                         />
                       </label>
+                      {row.confidence === 'low' ? (
+                        <em className="dwc-low-conf">Please confirm</em>
+                      ) : null}
                     </div>
                   ))
                 ) : (

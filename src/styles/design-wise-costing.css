@@ -747,6 +747,17 @@
   font-weight: 650;
 }
 
+.dwc-ocr-review-banner {
+  margin: 0 0 0.75rem;
+  padding: 0.45rem 0.65rem;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: #7a4a00;
+  background: #fff6e5;
+  border: 1px solid #f0d9a8;
+  border-radius: 6px;
+}
+
 .dwc-design-preview {
   width: 100%;
   min-height: 180px;
@@ -791,13 +802,13 @@
 .dwc-ocr-feeder-row,
 .dwc-ocr-weft-row {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto 1fr auto;
   gap: 0.5rem;
   align-items: center;
 }
 
 .dwc-ocr-weft-row {
-  grid-template-columns: auto 1fr 1fr;
+  grid-template-columns: auto 1fr auto;
 }
 
 .dwc-ocr-weft-row label {
