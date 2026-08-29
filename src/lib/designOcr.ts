@@ -42,6 +42,7 @@ export type DesignOcrWeftRow = {
   confidence: FieldConfidence
 }
 
+/** How the image was read (browser Tesseract; legacy edge/external kept for type compat). */
 export type DesignOcrReadSource = 'external' | 'edge' | 'tesseract'
 
 /** Structured OCR result — editable in review before applying to costing. */
@@ -111,27 +112,43 @@ const YARN_PICK_LINE_RE =
  * Normalize OCR design tokens to business DIN (letters+digits only).
  * Strips quality suffixes: -wxb, BRT, -BRT → quality returned separately.
  * Examples: "JFG-1674-wxb" → JFG1674 / WXB; "JFG2247 BRT" → JFG2247 / BRT
+ * Also corrects common OCR confusion I/1/9 ↔ J on JFG-style prefixes (IFG2247 → JFG2247).
  */
 export function normalizeOcrDesignNumber(raw: string): { design: string; quality: string } {
-  const t = (raw || '')
+  let t = (raw || '')
     .trim()
     .toUpperCase()
     .replace(/[\[\]]/g, '')
     .replace(/\.JPG|\.JPEG|\.PNG|\.EP|\.PDF$/i, '')
   if (!t) return { design: '', quality: '' }
 
+  // Leading digit OCR error: "9FG2247" → treat as JFG2247
+  t = t.replace(/^9(FG[\s\-]?\d{3,6})/, 'J$1')
+
   const withQuality = t.match(/^([A-Z]{2,5})[\s\-]*(\d{3,6})(?:[\s\-]+([A-Z0-9]{1,8}))$/)
   if (withQuality) {
-    return { design: `${withQuality[1]}${withQuality[2]}`, quality: withQuality[3] }
+    return {
+      design: correctOcrDesignPrefix(`${withQuality[1]}${withQuality[2]}`),
+      quality: withQuality[3],
+    }
   }
   const compact = t.replace(/[\s\-]+/g, '').match(/^([A-Z]{2,5}\d{3,6})$/)
-  if (compact) return { design: compact[1], quality: '' }
+  if (compact) return { design: correctOcrDesignPrefix(compact[1]), quality: '' }
 
   const loose = t.match(/([A-Z]{2,5})[\s\-]*(\d{3,6})(?:[\s\-]+([A-Z0-9]{1,8}))?/)
   if (loose) {
-    return { design: `${loose[1]}${loose[2]}`, quality: loose[3] || '' }
+    return {
+      design: correctOcrDesignPrefix(`${loose[1]}${loose[2]}`),
+      quality: loose[3] || '',
+    }
   }
   return { design: '', quality: '' }
+}
+
+/** Tesseract often reads leading J as I or 9 on JFG sheets. */
+function correctOcrDesignPrefix(design: string): string {
+  if (/^[I19]FG\d{3,6}$/.test(design)) return `J${design.slice(1)}`
+  return design
 }
 
 /** Sum of feeder/colour PIC values — used to auto-fill TOTAL LOOM PICK when header missing. */
@@ -711,20 +728,7 @@ export function mergeDesignOcrPayload(
   return ensureLoomPickFromFeederSum(merged)
 }
 
-/** Downscale / recompress large camera photos so Edge Function + Anthropic stay under size/timeout limits. */
-async function prepareImageForOcr(file: File): Promise<{ base64: string; mediaType: string }> {
-  const blob = await renderImageBlob(file, 0)
-  if (!blob) return fileToBase64Raw(file)
-  return blobToBase64(blob)
-}
-
-async function blobToBase64(blob: Blob): Promise<{ base64: string; mediaType: string }> {
-  const buf = await blob.arrayBuffer()
-  const bytes = new Uint8Array(buf)
-  let binary = ''
-  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
-  return { base64: btoa(binary), mediaType: blob.type || 'image/jpeg' }
-}
+/** Downscale / recompress camera photos for faster browser OCR. */
 
 /** Render file to JPEG, optionally rotated 0/90/180/270° clockwise, with contrast boost for OCR. */
 async function renderImageBlob(file: File, rotateDeg: 0 | 90 | 180 | 270): Promise<Blob | null> {
@@ -774,16 +778,6 @@ async function renderImageBlob(file: File, rotateDeg: 0 | 90 | 180 | 270): Promi
   }
 }
 
-async function fileToBase64Raw(file: File): Promise<{ base64: string; mediaType: string }> {
-  const buf = await file.arrayBuffer()
-  const bytes = new Uint8Array(buf)
-  let binary = ''
-  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
-  const base64 = btoa(binary)
-  const mediaType = file.type || 'image/jpeg'
-  return { base64, mediaType }
-}
-
 function scoreOcrParse(ocr: DesignOcrResult): number {
   let s = 0
   if (ocr.designNumber.value) s += 10
@@ -796,22 +790,26 @@ function scoreOcrParse(ocr: DesignOcrResult): number {
 }
 
 /**
- * Browser Tesseract fallback — try upright + 90° rotations (phone DIN sheet photos
- * are often sideways). Pick the orientation that yields the best structured parse.
+ * Client-side Tesseract.js OCR — no Anthropic / Edge Function / API key.
+ * Tries 270° then 0° then 90° (phone DIN sheets are often sideways).
+ * Soft time budget so the UI does not hang on "Reading…".
  */
 async function ocrViaTesseract(
   file: File,
   hints?: { subject?: string; filename?: string },
 ): Promise<{ text: string; parsed: DesignOcrResult }> {
   const empty = { text: '', parsed: emptyDesignOcrResult() }
+  const deadline = Date.now() + 28_000
   try {
     const mod = await import('tesseract.js')
-    const rotations: Array<0 | 90 | 180 | 270> = [0, 90, 270, 180]
+    // 270° first — matches most sideways phone photos of landscape diner sheets
+    const rotations: Array<0 | 90 | 180 | 270> = [270, 0, 90]
     let bestText = ''
     let bestParsed = emptyDesignOcrResult()
     let bestScore = -1
 
     for (const deg of rotations) {
+      if (Date.now() > deadline) break
       const blob = (await renderImageBlob(file, deg)) || (deg === 0 ? file : null)
       if (!blob) continue
       const input =
@@ -819,7 +817,11 @@ async function ocrViaTesseract(
           ? blob
           : new File([blob], file.name || 'din-sheet.jpg', { type: blob.type || 'image/jpeg' })
       try {
-        const result = await mod.recognize(input, 'eng')
+        const result = await Promise.race([
+          mod.recognize(input, 'eng'),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 12_000)),
+        ])
+        if (!result) continue
         const text = (result.data.text || '').trim()
         if (!text) continue
         const parsed = ensureLoomPickFromFeederSum(parseDesignReferenceText(text, hints))
@@ -829,7 +831,6 @@ async function ocrViaTesseract(
           bestText = text
           bestParsed = parsed
         }
-        // Early exit when DIN + at least one feeder/pick is solid
         if (parsed.designNumber.value && (parsed.feeders.length >= 1 || parsed.loomPick.value)) {
           break
         }
@@ -865,103 +866,21 @@ function attachReadMeta(
   return { ...result, readSource, readWarning }
 }
 
-function describeEdgeInvokeError(error: { message?: string; context?: Response } | null, data: unknown): string | undefined {
-  if (data && typeof data === 'object' && 'error' in data && (data as { error?: unknown }).error) {
-    const err = String((data as { error: unknown }).error)
-    const detail =
-      'detail' in (data as object) ? String((data as { detail?: unknown }).detail || '') : ''
-    if (/ANTHROPIC_API_KEY/i.test(err)) {
-      return 'Vision OCR key missing (ANTHROPIC_API_KEY). Supabase → Edge Functions → Secrets में key डालें। तब तक browser OCR से DIN sheet पढ़ने की कोशिश हो रही है।'
-    }
-    return detail ? `${err}: ${detail}` : err
-  }
-  if (!error?.message) return undefined
-  const msg = error.message
-  if (/Failed to send a request to the Edge Function/i.test(msg)) {
-    return 'Could not reach design-ocr Edge Function (network/CORS/deploy). Confirm the function is deployed, then retry.'
-  }
-  if (/not found|404/i.test(msg)) {
-    return 'design-ocr Edge Function is not deployed on this Supabase project.'
-  }
-  if (/non-2xx|Edge Function returned/i.test(msg)) {
-    return 'Design OCR service error — trying browser OCR fallback on this photo…'
-  }
-  return msg
-}
-
-/** Read JSON body from FunctionsHttpError.context when invoke returns non-2xx. */
-async function readEdgeErrorPayload(
-  error: { message?: string; context?: Response } | null,
-): Promise<unknown> {
-  const res = error?.context
-  if (!res || typeof res.json !== 'function') return null
-  try {
-    // Clone so we don't lock the body if called twice
-    return await res.clone().json()
-  } catch {
-    try {
-      const text = await res.clone().text()
-      return text ? { error: text.slice(0, 300) } : null
-    } catch {
-      return null
-    }
-  }
-}
-
-/** Invoke design-ocr edge function; browser Tesseract only as last-resort emergency fallback. */
+/**
+ * Read a DIN / design sheet photo in the browser with Tesseract.js.
+ * No Anthropic API key, no Supabase Edge Function, no external OCR cost.
+ * Fields remain editable in the UI when automatic read is weak or incomplete.
+ */
 export async function readDesignReference(
   file: File,
   hints?: { subject?: string; filename?: string },
 ): Promise<DesignOcrResult> {
-  const endpoint = import.meta.env.VITE_OCR_API_URL as string | undefined
-  if (endpoint) {
-    const body = new FormData()
-    body.append('file', file)
-    if (hints?.subject) body.append('subject', hints.subject)
-    if (hints?.filename) body.append('filename', hints.filename)
-    const res = await fetch(endpoint, { method: 'POST', body })
-    if (res.ok) {
-      const json = (await res.json()) as { text?: string; result?: Partial<DesignOcrResult> }
-      const merged = mergeDesignOcrPayload(json.result || null, json.text || '', hints)
-      return attachReadMeta(merged, 'external')
-    }
-  }
-
-  let edgeError: string | undefined
-  try {
-    const { base64, mediaType } = await prepareImageForOcr(file)
-    const { data, error } = await supabase.functions.invoke('design-ocr', {
-      body: {
-        image_base64: base64,
-        media_type: mediaType,
-        subject: hints?.subject,
-        filename: hints?.filename || file.name,
-      },
-    })
-    const errorBody = data || (await readEdgeErrorPayload(error as { context?: Response }))
-    edgeError = describeEdgeInvokeError(error as { message?: string; context?: Response }, errorBody)
-    if (!edgeError && data) {
-      const text = String((data as { raw_text?: string }).raw_text || '')
-      const merged = mergeDesignOcrPayload(data as Partial<DesignOcrResult>, text, hints)
-      if (ocrHasDetectedFields(merged)) {
-        return attachReadMeta(ensureLoomPickFromFeederSum(merged), 'edge')
-      }
-      // Vision returned empty — still try browser OCR on rotations before giving up
-      edgeError =
-        edgeError ||
-        'Vision OCR returned no DIN fields — trying browser OCR on rotated views…'
-    }
-  } catch (e) {
-    edgeError = e instanceof Error ? e.message : 'Design OCR service unavailable'
-    if (/Failed to send a request to the Edge Function/i.test(edgeError)) {
-      edgeError =
-        'Could not reach design-ocr Edge Function (network/CORS/deploy). Confirm the function is deployed, then retry.'
-    }
-  }
-
-  // Last resort — multi-orientation Tesseract (works when ANTHROPIC_API_KEY is missing)
-  const { text, parsed } = await ocrViaTesseract(file, hints)
+  const { text, parsed } = await ocrViaTesseract(file, {
+    subject: hints?.subject,
+    filename: hints?.filename || file.name,
+  })
   const withSum = ensureLoomPickFromFeederSum(parsed)
+
   // Filename / subject often carry the DIN even when image OCR is weak
   if (!withSum.designNumber.value.trim()) {
     const fromHints = parseDesignReferenceText(
@@ -976,14 +895,12 @@ export async function readDesignReference(
     }
   }
 
-  const warning =
-    edgeError && !ocrHasDetectedFields(withSum)
-      ? `${edgeError} Browser OCR भी DIN नंबर / pick नहीं पढ़ सका — Design No. और feeder picks मैन्युअली भरें।`
-      : edgeError && ocrHasDetectedFields(withSum)
-        ? `${edgeError} Browser OCR से भर दिया — कृपया Design No. और loom pick चेक करें।`
-        : !ocrHasDetectedFields(withSum)
-          ? 'Could not read design sheet from this image. Try a clearer, upright photo.'
-          : undefined
+  const warning = !ocrHasDetectedFields(withSum)
+    ? 'Could not auto-read this photo. Enter Design No. / feeder picks manually — fields stay editable.'
+    : withSum.designNumber.confidence !== 'high' || !withSum.loomPick.value
+      ? 'Browser OCR filled what it could — please confirm Design No. and loom pick before Confirm.'
+      : undefined
+
   return attachReadMeta({ ...withSum, rawText: text || withSum.rawText }, 'tesseract', warning)
 }
 
