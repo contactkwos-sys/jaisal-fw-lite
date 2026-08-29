@@ -82,35 +82,44 @@ Deno.serve(async (req) => {
     }
 
     const prompt = `You are reading a textile jacquard DESIGN / DIN reference sheet for costing.
+The photo may be rotated 90°/180° or taken at an angle — mentally rotate so text is upright, then extract.
 Extract ONLY costing-relevant fields. Return ONLY valid JSON (no markdown):
 
 {
   "designNumber": { "value": "JFG1674", "confidence": "high"|"low"|"missing", "source": "image"|"subject"|"filename" },
   "loomPick": { "value": "112", "confidence": "high"|"low"|"missing" },
-  "qualityName": { "value": "", "confidence": "high"|"low"|"missing" },
+  "qualityName": { "value": "WXB", "confidence": "high"|"low"|"missing" },
   "feeders": [
-    { "feederNo": 1, "yarnType": "-", "confidence": "high"|"low"|"missing", "sourceLabel": "Feeder 1" },
-    { "feederNo": 2, "yarnType": "ZARI", "confidence": "high"|"low"|"missing", "sourceLabel": "Feeder 2" }
+    { "feederNo": 1, "yarnType": "HSY", "confidence": "high"|"low"|"missing", "sourceLabel": "Feeder 1" },
+    { "feederNo": 2, "yarnType": "TEX", "confidence": "high"|"low"|"missing", "sourceLabel": "Feeder 2" }
   ],
   "weftRows": [
-    { "pic": "37", "strings": "", "confidence": "high"|"low"|"missing" },
-    { "pic": "37", "strings": "", "confidence": "high"|"low"|"missing" }
+    { "pic": "25", "strings": "432", "confidence": "high"|"low"|"missing" },
+    { "pic": "25", "strings": "432", "confidence": "high"|"low"|"missing" }
   ],
-  "totalPick": { "value": "112", "confidence": "high"|"low"|"missing" },
-  "totalStrings": { "value": "", "confidence": "high"|"low"|"missing" },
+  "totalPick": { "value": "50", "confidence": "high"|"low"|"missing" },
+  "totalStrings": { "value": "864", "confidence": "high"|"low"|"missing" },
   "raw_text": "full OCR text of the document"
 }
 
-Rules — THIS SHEET LAYOUT (very common):
-1) TOP LINE: text like "Design Number - JFG2248" or "Design Number - [XXXX]" or "DESI / Design No." → designNumber.value (letters+digits only, e.g. JFG2248). Do NOT use phone numbers, websites, or customer refs.
-2) Below that: colour SWATCHES arranged COLUMN-WISE. Each column is Feeder 1, Feeder 2, Feeder 3, Feeder 4… (dynamic count — as many columns as visible).
-3) Under / against EACH feeder column there is a Pick number. Map column N → feeders[N] + weftRows[N].pic in the SAME left-to-right order.
-4) TOTAL LOOM PICK = sum of all feeder Pick numbers (also fill loomPick.value AND totalPick.value with that sum). Prefer an explicit "Total" / "112-pick" / "TOTAL LOOM PICK" header when present; otherwise SUM the feeder picks.
-5) Yarn/colour name in a swatch cell is optional — if blank/unreadable set yarnType to "-". Do not invent yarn names. zaree/zari/jari → "ZARI".
-6) Strings column is optional — empty string OK; never invent strings.
-7) Also support alternate layouts: Colour 1/2/3 table rows with Pick/Strings; Feeder-1 HSY / FD1=TEX.
-8) Preserve EXACT feeder/colour column order. Do NOT reorder. Skip columns with Pick 0.
-9) If unsure, set confidence to "low" or "missing" — do not guess.
+Rules — REAL ADITYA / JAQUARD SHEET LAYOUTS (all common):
+1) DESIGN NUMBER (required):
+   - Labels: "Design Number - …", "DESIGNE-NUMBER" (often misspelled with extra E), "DESI / Design No."
+   - Values often include a QUALITY SUFFIX: "JFG2247 BRT", "jfg1738-wxb", "JFG-1674-wxb", "Design Number-jfg1738-wxb".
+   - designNumber.value = letters+digits ONLY (e.g. JFG2247, JFG1738, JFG1674). Put the suffix (BRT, WXB) into qualityName.value.
+   - NEVER use phone numbers (e.g. 9998309548), websites (adityagraphics.com), QR text, or Gmail/Yahoo chrome as the design number.
+   - Filenames like jfg2247-50-brt.EP / jfg1738-wxb.jpg are strong hints for designNumber + qualityName.
+2) Feeder / Colour rows (dynamic count):
+   - Layout A (Aditya): "feeder-1" / "feeder-2" with yarn in coloured cell (hsy, tex) + Pick + Strings columns.
+   - Layout B: "Colour 1" … "Colour 6" table with Pick / Strings; skip rows where Pick and Strings are both 0.
+   - Layout C: column-wise colour swatches left-to-right = Feeder 1, 2, 3…
+   - Map row/column N → feeders[N] + weftRows[N].pic in the SAME order. Yarn blank → yarnType "-". zaree/zari/jari → "ZARI". hsy→HSY, tex→TEX.
+3) TOTAL LOOM PICK:
+   - Prefer explicit "Total" pick, "112-pick", "on-loom-48", "TOTAL LOOM PICK".
+   - Else SUM of active feeder/colour Pick values → loomPick AND totalPick.
+4) Strings column is optional reference only — empty string OK; never invent strings.
+5) Preserve EXACT feeder/colour order. Do NOT reorder. Skip Pick 0 rows.
+6) If unsure, set confidence to "low" or "missing" — do not guess.
 - Email subject hint: ${subject || '(none)'}
 - Attachment filename hint: ${filename || '(none)'}`
 

@@ -451,7 +451,9 @@ export function DinDesignImportSection({
               <label className="field">
                 <span>
                   Detected Design No. {confidenceLabel(ocrDraft.designNumber.confidence)}
-                  {ocrDraft.designNumber.confidence === 'missing' ? (
+                  {busy ? (
+                    <em className="dwc-auto-tag"> Reading…</em>
+                  ) : ocrDraft.designNumber.confidence === 'missing' ? (
                     <em className="dwc-low-conf"> Could not confidently read this field.</em>
                   ) : null}
                 </span>
@@ -459,6 +461,7 @@ export function DinDesignImportSection({
                   value={ocrDraft.designNumber.value}
                   onChange={(e) => updateDesignNumber(e.target.value)}
                   placeholder="e.g. JFG2249"
+                  disabled={busy}
                 />
               </label>
 
@@ -468,10 +471,12 @@ export function DinDesignImportSection({
                   {ocrDraft.loomPick.source === 'sum_feeder_picks' ? (
                     <em className="dwc-auto-tag"> Σ feeder picks</em>
                   ) : null}
-                  {ocrDraft.loomPick.confidence === 'low' ? (
+                  {busy ? (
+                    <em className="dwc-auto-tag"> Reading…</em>
+                  ) : ocrDraft.loomPick.confidence === 'low' ? (
                     <em className="dwc-low-conf"> Please confirm</em>
                   ) : null}
-                  {ocrDraft.loomPick.confidence === 'missing' && !ocrDraft.loomPick.value ? (
+                  {!busy && ocrDraft.loomPick.confidence === 'missing' && !ocrDraft.loomPick.value ? (
                     <em className="dwc-low-conf"> Enter manually or add feeder PIC rows</em>
                   ) : null}
                 </span>
@@ -480,17 +485,20 @@ export function DinDesignImportSection({
                   value={ocrDraft.loomPick.value}
                   onChange={(e) => updateLoomPick(e.target.value)}
                   placeholder="Auto from Σ feeder picks"
+                  disabled={busy}
                 />
               </label>
 
               <div className="dwc-ocr-feeders">
                 <div className="dwc-ocr-block-head">
                   <span>Feeder/Colour (blank yarn allowed)</span>
-                  <button type="button" className="btn-ghost btn-sm" onClick={addFeeder}>
+                  <button type="button" className="btn-ghost btn-sm" onClick={addFeeder} disabled={busy}>
                     + Feeder
                   </button>
                 </div>
-                {ocrDraft.feeders.length ? (
+                {busy && !ocrDraft.feeders.length ? (
+                  <p className="text-muted2">Reading feeders from design sheet…</p>
+                ) : ocrDraft.feeders.length ? (
                   ocrDraft.feeders.map((f, idx) => (
                     <div key={f.feederNo} className="dwc-ocr-feeder-row">
                       <span className="num">{f.sourceLabel || `Colour ${f.feederNo}`}</span>
@@ -498,6 +506,7 @@ export function DinDesignImportSection({
                         value={f.yarnType === '-' ? '' : f.yarnType}
                         onChange={(e) => updateFeeder(idx, { yarnType: e.target.value || '-' })}
                         placeholder="Yarn name (leave blank if empty)"
+                        disabled={busy}
                       />
                       {f.confidence === 'low' ? (
                         <em className="dwc-low-conf">Please confirm</em>
@@ -512,11 +521,13 @@ export function DinDesignImportSection({
               <div className="dwc-ocr-weft">
                 <div className="dwc-ocr-block-head">
                   <span>Weft Pick (maps 1:1 to Feeder/Colour — Strings not used for costing)</span>
-                  <button type="button" className="btn-ghost btn-sm" onClick={addWeftRow}>
+                  <button type="button" className="btn-ghost btn-sm" onClick={addWeftRow} disabled={busy}>
                     + Row
                   </button>
                 </div>
-                {ocrDraft.weftRows.length ? (
+                {busy && !ocrDraft.weftRows.length ? (
+                  <p className="text-muted2">Reading pick rows…</p>
+                ) : ocrDraft.weftRows.length ? (
                   ocrDraft.weftRows.map((row, idx) => (
                     <div key={idx} className="dwc-ocr-weft-row">
                       <span className="num">#{idx + 1}</span>
@@ -527,6 +538,7 @@ export function DinDesignImportSection({
                           value={row.pic}
                           onChange={(e) => updateWeftRow(idx, { pic: e.target.value })}
                           placeholder="Pick"
+                          disabled={busy}
                         />
                       </label>
                     </div>
