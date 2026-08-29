@@ -320,6 +320,8 @@ export function DinDesignImportSection({
       <p className="text-muted2 dwc-import-hint">
         Upload → OCR fills Design No., Feeder/Colour + PIC rows, and TOTAL LOOM PICK (sum of feeder picks).
         Review below, then Warp/Weft + Internal Cost update on the same page.
+        Fast Vision OCR needs secret <code>ANTHROPIC_API_KEY</code> in Supabase Edge Function Secrets
+        (Anthropic <code>sk-ant-…</code> key — do not paste it in chat).
       </p>
 
       <div className="dwc-import-actions">

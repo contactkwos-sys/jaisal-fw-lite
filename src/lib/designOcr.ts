@@ -796,22 +796,26 @@ function scoreOcrParse(ocr: DesignOcrResult): number {
 }
 
 /**
- * Browser Tesseract fallback — try upright + 90° rotations (phone DIN sheet photos
- * are often sideways). Pick the orientation that yields the best structured parse.
+ * Browser Tesseract fallback — phone DIN sheets are often sideways.
+ * Prefer 270° then 0° (fast path); only try more angles if still empty.
+ * Hard time budget so UI does not stay on "Reading…" forever.
  */
 async function ocrViaTesseract(
   file: File,
   hints?: { subject?: string; filename?: string },
 ): Promise<{ text: string; parsed: DesignOcrResult }> {
   const empty = { text: '', parsed: emptyDesignOcrResult() }
+  const deadline = Date.now() + 28_000
   try {
     const mod = await import('tesseract.js')
-    const rotations: Array<0 | 90 | 180 | 270> = [0, 90, 270, 180]
+    // 270° first — matches most sideways phone photos of landscape diner sheets
+    const rotations: Array<0 | 90 | 180 | 270> = [270, 0, 90]
     let bestText = ''
     let bestParsed = emptyDesignOcrResult()
     let bestScore = -1
 
     for (const deg of rotations) {
+      if (Date.now() > deadline) break
       const blob = (await renderImageBlob(file, deg)) || (deg === 0 ? file : null)
       if (!blob) continue
       const input =
@@ -819,7 +823,11 @@ async function ocrViaTesseract(
           ? blob
           : new File([blob], file.name || 'din-sheet.jpg', { type: blob.type || 'image/jpeg' })
       try {
-        const result = await mod.recognize(input, 'eng')
+        const result = await Promise.race([
+          mod.recognize(input, 'eng'),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 12_000)),
+        ])
+        if (!result) continue
         const text = (result.data.text || '').trim()
         if (!text) continue
         const parsed = ensureLoomPickFromFeederSum(parseDesignReferenceText(text, hints))
@@ -829,7 +837,6 @@ async function ocrViaTesseract(
           bestText = text
           bestParsed = parsed
         }
-        // Early exit when DIN + at least one feeder/pick is solid
         if (parsed.designNumber.value && (parsed.feeders.length >= 1 || parsed.loomPick.value)) {
           break
         }
@@ -871,7 +878,7 @@ function describeEdgeInvokeError(error: { message?: string; context?: Response }
     const detail =
       'detail' in (data as object) ? String((data as { detail?: unknown }).detail || '') : ''
     if (/ANTHROPIC_API_KEY/i.test(err)) {
-      return 'Vision OCR key missing (ANTHROPIC_API_KEY). Supabase → Edge Functions → Secrets में key डालें। तब तक browser OCR से DIN sheet पढ़ने की कोशिश हो रही है।'
+      return 'Vision OCR key missing: Supabase → Project Settings → Edge Functions → Secrets में नाम ANTHROPIC_API_KEY डालें (Anthropic Console की sk-ant-… key)। मुझे key मत भेजें — सिर्फ Supabase Secrets में save करें।'
     }
     return detail ? `${err}: ${detail}` : err
   }
