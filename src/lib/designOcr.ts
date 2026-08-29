@@ -74,24 +74,60 @@ export type DesignOcrApplyResult = {
 
 const DESIGN_NO_RE = /\b([A-Z]{2,5}\d{3,6})\b/g
 /** e.g. JFG-2249, jfg 2249, JFG-1674-wxb — normalized to JFG2249 / JFG1674 */
-const DESIGN_NO_HYPHEN_RE = /\b([A-Z]{2,5})[\s\-]+(\d{3,6})(?:-[A-Za-z0-9]+)?\b/gi
-/** Explicit header: "Design Number - JFG2248" / "Design Number - [XXXX]" / "DESI No." */
+const DESIGN_NO_HYPHEN_RE = /\b([A-Z]{2,5})[\s\-]+(\d{3,6})(?:[\s\-]+[A-Za-z0-9]+)?\b/gi
+/** Compact + quality suffix: JFG2247 BRT / jfg1738-wxb */
+const DESIGN_NO_QUALITY_RE =
+  /\b([A-Z]{2,5})[\s\-]*(\d{3,6})(?:[\s\-]+([A-Za-z]{2,8}))\b/gi
+/**
+ * Explicit header — diner DIN sheets (e.g. Aditya Graphics letterhead) often use
+ * "DESIGNE-NUMBER" (extra E) and values like "JFG2247 BRT" / "JFG-1674-wxb".
+ * "Aditya" is the diner name, not part of the DIN.
+ */
 const DESIGN_NUMBER_LABEL_RE =
-  /(?:design\s*(?:number|no\.?|num)|desi(?:gn)?\s*(?:no\.?|number)?)\s*[-:=]?\s*\[?\s*([A-Za-z]{2,5}[\s\-]?\d{3,6}|\d{3,6})\s*\]?/i
+  /(?:design[e]?[\s\-]*(?:number|no\.?|num)?|desi[\s\-]*(?:no\.?|number)?)\s*[-:=]?\s*\[?\s*([A-Za-z]{2,5}[\s\-]?\d{3,6}|\d{3,6})(?:[\s\-]+([A-Za-z]{2,8}))?\s*\]?/i
 const PHONE_RE = /\b\d{10,}\b/
 const LOOM_PICK_RE =
   /(?:total\s+)?(?:loom[\s-]*pick|loom\s*pick)[\s:=-]*(\d+(?:\.\d+)?)/i
 const TOTAL_LOOM_PICK_RE = /total\s+loom[\s-]*pick[\s:=-]*(\d+(?:\.\d+)?)/i
+/** Diner DIN sheet header: "on-loom-48" / "on loom 50" */
+const ON_LOOM_PICK_RE = /on[\s\-]*loom[\s\-:=]*(\d+(?:\.\d+)?)/i
 /** Yarn codes may be letters (HSY, ZAREE) or numeric denier/codes (37, 80/2). */
 const FEEDER_RE =
   /(?:feeder|fd)[\s.-]*(\d+)\s*[=:\-]?\s*([A-Z0-9][A-Z0-9./-]{0,15})/gi
-/** Colour / Color N rows: yarn (optional) + Pick + Strings */
+/** Colour / Feeder N rows — allow "feeder-1" / "Colour 1" + yarn + Pick + Strings */
 const COLOUR_ROW_RE =
-  /^(?:colour|color|col\.?|feeder|fd)\s*(\d+)\s*(?:[|:.\-]\s*|\s+)(.*)$/i
+  /^(?:colour|color|col\.?|feeder|fd)[\s.\-]*(\d+)\s*(?:[|:.\-]\s*|\s+)(.*)$/i
 const PICK_STRINGS_HEADER = /pick\s*strings|(?:\d+\s*[-–]?\s*pick).*(?:pick|strings)/i
 const TOTAL_LINE_RE = /^total\s*[:.]?\s*(\d+(?:\.\d+)?)\s*[/\s]\s*(\d+(?:\.\d+)?)/im
 const TOTAL_NEXT_LINE_RE = /^total\s*[:.]?\s*$/im
 const TOTAL_COLOUR_RE = /^total\s*[:.]?\s*(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)/im
+
+/**
+ * Normalize OCR design tokens to business DIN (letters+digits only).
+ * Strips quality suffixes: -wxb, BRT, -BRT → quality returned separately.
+ * Examples: "JFG-1674-wxb" → JFG1674 / WXB; "JFG2247 BRT" → JFG2247 / BRT
+ */
+export function normalizeOcrDesignNumber(raw: string): { design: string; quality: string } {
+  const t = (raw || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[\[\]]/g, '')
+    .replace(/\.JPG|\.JPEG|\.PNG|\.EP|\.PDF$/i, '')
+  if (!t) return { design: '', quality: '' }
+
+  const withQuality = t.match(/^([A-Z]{2,5})[\s\-]*(\d{3,6})(?:[\s\-]+([A-Z0-9]{1,8}))$/)
+  if (withQuality) {
+    return { design: `${withQuality[1]}${withQuality[2]}`, quality: withQuality[3] }
+  }
+  const compact = t.replace(/[\s\-]+/g, '').match(/^([A-Z]{2,5}\d{3,6})$/)
+  if (compact) return { design: compact[1], quality: '' }
+
+  const loose = t.match(/([A-Z]{2,5})[\s\-]*(\d{3,6})(?:[\s\-]+([A-Z0-9]{1,8}))?/)
+  if (loose) {
+    return { design: `${loose[1]}${loose[2]}`, quality: loose[3] || '' }
+  }
+  return { design: '', quality: '' }
+}
 
 /** Sum of feeder/colour PIC values — used to auto-fill TOTAL LOOM PICK when header missing. */
 export function sumWeftPics(rows: Array<{ pic?: string | null }> | null | undefined): string {
@@ -148,9 +184,9 @@ export function emptyDesignOcrResult(): DesignOcrResult {
   }
 }
 
-/** Reject phone numbers, filenames-only noise, etc. */
+/** Reject phone numbers, filenames-only noise, etc. Accepts raw or already-normalized DIN. */
 export function isLikelyDesignNumber(value: string, subject?: string, filename?: string): boolean {
-  const v = value.trim().toUpperCase()
+  const { design: v } = normalizeOcrDesignNumber(value)
   if (!v || v.length < 5) return false
   if (PHONE_RE.test(v)) return false
   if (!/^[A-Z]{2,5}\d{3,6}$/.test(v)) return false
@@ -160,19 +196,32 @@ export function isLikelyDesignNumber(value: string, subject?: string, filename?:
   return true
 }
 
+type DesignCandidate = { value: string; quality?: string; source: string; score: number }
+
 function pickBestDesignNumber(
-  candidates: Array<{ value: string; source: string; score: number }>,
+  candidates: DesignCandidate[],
   subject?: string,
   filename?: string,
-): OcrField {
-  const filtered = candidates.filter((c) => isLikelyDesignNumber(c.value, subject, filename))
-  if (!filtered.length) return emptyField()
-  filtered.sort((a, b) => b.score - a.score)
-  const best = filtered[0]
+): OcrField & { quality?: string } {
+  const normalized: DesignCandidate[] = []
+  for (const c of candidates) {
+    const { design, quality } = normalizeOcrDesignNumber(c.value)
+    if (!design || !isLikelyDesignNumber(design, subject, filename)) continue
+    normalized.push({
+      value: design,
+      quality: quality || c.quality || '',
+      source: c.source,
+      score: c.score,
+    })
+  }
+  if (!normalized.length) return emptyField()
+  normalized.sort((a, b) => b.score - a.score)
+  const best = normalized[0]
   return {
-    value: best.value.toUpperCase(),
+    value: best.value,
     confidence: best.score >= 8 ? 'high' : 'low',
     source: best.source,
+    quality: best.quality || '',
   }
 }
 
@@ -182,35 +231,48 @@ function scanDesignNumberCandidates(
   baseScore: number,
   lineIdx?: number,
   lineCount?: number,
-): Array<{ value: string; source: string; score: number }> {
-  const candidates: Array<{ value: string; source: string; score: number }> = []
+): DesignCandidate[] {
+  const candidates: DesignCandidate[] = []
   const upper = text.toUpperCase()
 
   const labeled = text.match(DESIGN_NUMBER_LABEL_RE)
   if (labeled?.[1]) {
-    const raw = labeled[1].trim().toUpperCase().replace(/[\[\]]/g, '').replace(/[\s\-]+/g, '')
-    const compact = raw.match(/^([A-Z]{2,5}\d{3,6})$/)
-    const hyphenParts = labeled[1].trim().match(/^([A-Za-z]{2,5})[\s\-]?(\d{3,6})$/)
-    const norm = compact
-      ? compact[1]
-      : hyphenParts
-        ? `${hyphenParts[1].toUpperCase()}${hyphenParts[2]}`
-        : ''
-    if (norm) {
+    const { design, quality } = normalizeOcrDesignNumber(
+      `${labeled[1]}${labeled[2] ? ` ${labeled[2]}` : ''}`,
+    )
+    if (design) {
       let score = baseScore + 20
       if (lineIdx != null && lineIdx <= 2) score += 5
-      candidates.push({ value: norm, source: 'design_number_label', score })
+      // Prefer Design Number / DESIGNE-NUMBER headers over diner phone/sidebar noise
+      if (/designe|design\s*number/i.test(text)) score += 5
+      candidates.push({ value: design, quality, source: 'design_number_label', score })
     }
   }
 
   let m: RegExpExecArray | null
+  const qualityRe = new RegExp(DESIGN_NO_QUALITY_RE.source, 'gi')
+  while ((m = qualityRe.exec(text)) !== null) {
+    let score = baseScore + 2
+    if (lineIdx != null) {
+      if (lineIdx <= 2) score += 3
+      if (lineCount != null && lineIdx >= lineCount - 3) score += 2
+      if (/design|designe|desi|din\b|jfg/i.test(text)) score += 4
+    }
+    candidates.push({
+      value: `${m[1].toUpperCase()}${m[2]}`,
+      quality: (m[3] || '').toUpperCase(),
+      source: sourceLabel,
+      score,
+    })
+  }
+
   const compactRe = new RegExp(DESIGN_NO_RE.source, 'g')
   while ((m = compactRe.exec(upper)) !== null) {
     let score = baseScore
     if (lineIdx != null) {
       if (lineIdx <= 2) score += 3
       if (lineCount != null && lineIdx >= lineCount - 3) score += 2
-      if (/design\s*(?:no|number|#)|desi|din\b|jfg/i.test(text)) score += 4
+      if (/design\s*(?:no|number|#)|designe|desi|din\b|jfg/i.test(text)) score += 4
     }
     candidates.push({ value: m[1], source: sourceLabel, score })
   }
@@ -221,7 +283,7 @@ function scanDesignNumberCandidates(
     if (lineIdx != null) {
       if (lineIdx <= 2) score += 3
       if (lineCount != null && lineIdx >= lineCount - 3) score += 2
-      if (/design\s*(?:no|number|#)|desi|din\b|jfg/i.test(text)) score += 4
+      if (/design\s*(?:no|number|#)|designe|desi|din\b|jfg/i.test(text)) score += 4
     }
     candidates.push({ value: `${m[1].toUpperCase()}${m[2]}`, source: sourceLabel, score })
   }
@@ -229,8 +291,12 @@ function scanDesignNumberCandidates(
   return candidates
 }
 
-function extractDesignNumbers(text: string, subject?: string, filename?: string): OcrField {
-  const candidates: Array<{ value: string; source: string; score: number }> = []
+function extractDesignNumbers(
+  text: string,
+  subject?: string,
+  filename?: string,
+): OcrField & { quality?: string } {
+  const candidates: DesignCandidate[] = []
 
   // Filename / subject are more reliable than noisy browser OCR (e.g. HG1674 vs JFG1674)
   if (subject) candidates.push(...scanDesignNumberCandidates(subject, 'email_subject', 10))
@@ -239,6 +305,24 @@ function extractDesignNumbers(text: string, subject?: string, filename?: string)
   const lines = text.split(/\r?\n/)
   lines.forEach((line, idx) => {
     candidates.push(...scanDesignNumberCandidates(line, 'ocr_text', 5, idx, lines.length))
+
+    // Diner DIN sheets often put label on one line and "JFG2247 BRT" on the next
+    const bareLabel =
+      /^(?:design[e]?[\s\-]*(?:number|no\.?|num)?|desi[\s\-]*(?:no\.?|number)?)\s*[-:=]?\s*$/i.test(
+        line.trim(),
+      )
+    if (bareLabel && lines[idx + 1]) {
+      const next = lines[idx + 1].trim()
+      const { design, quality } = normalizeOcrDesignNumber(next)
+      if (design) {
+        candidates.push({
+          value: design,
+          quality,
+          source: 'design_number_label_next_line',
+          score: 28,
+        })
+      }
+    }
   })
 
   return pickBestDesignNumber(candidates, subject, filename)
@@ -253,6 +337,11 @@ function extractLoomPick(text: string): OcrField {
 
   const loom = text.match(LOOM_PICK_RE)
   if (loom?.[1]) return { value: loom[1], confidence: 'high', source: 'loom_pick' }
+
+  const onLoom = text.match(ON_LOOM_PICK_RE)
+  if (onLoom?.[1]) {
+    return { value: onLoom[1], confidence: 'high', source: 'on_loom' }
+  }
 
   const totals = extractTotals(text)
   const nPickMatches = [...text.matchAll(/\b(\d{2,4})\s*[-–]?\s*pick\b/gi)].map((m) => m[1])
@@ -466,7 +555,15 @@ export function parseDesignReferenceText(
   const result = emptyDesignOcrResult()
   if (!normalized) return result
 
-  result.designNumber = extractDesignNumbers(normalized, hints?.subject, hints?.filename)
+  const dinHit = extractDesignNumbers(normalized, hints?.subject, hints?.filename)
+  result.designNumber = {
+    value: dinHit.value,
+    confidence: dinHit.confidence,
+    source: dinHit.source,
+  }
+  if (dinHit.quality) {
+    result.qualityName = { value: dinHit.quality, confidence: 'high', source: dinHit.source }
+  }
 
   const colour = extractColourTable(normalized)
   const classicFeeders = extractFeeders(normalized)
@@ -475,6 +572,16 @@ export function parseDesignReferenceText(
   if (colour.feeders.length >= 1) {
     result.feeders = colour.feeders
     result.weftRows = colour.weftRows
+    // Merge yarn from classic feeder lines when colour cell was blank but FD line had yarn
+    if (classicFeeders.length) {
+      result.feeders = result.feeders.map((f) => {
+        if (!isBlankYarnName(f.yarnType)) return f
+        const alt = classicFeeders.find((c) => c.feederNo === f.feederNo)
+        return alt && !isBlankYarnName(alt.yarnType)
+          ? { ...f, yarnType: alt.yarnType, confidence: alt.confidence }
+          : f
+      })
+    }
   } else {
     result.feeders = classicFeeders
     result.weftRows = classicWefts
@@ -517,10 +624,14 @@ export function mergeDesignOcrPayload(
   const merged = { ...parsed }
 
   if (api.designNumber?.value) {
+    const { design, quality } = normalizeOcrDesignNumber(api.designNumber.value)
     merged.designNumber = {
-      value: api.designNumber.value.toUpperCase(),
+      value: design || api.designNumber.value.toUpperCase().replace(/[\s\-]+/g, ''),
       confidence: api.designNumber.confidence || 'high',
       source: api.designNumber.source || 'vision',
+    }
+    if (quality && !merged.qualityName.value) {
+      merged.qualityName = { value: quality, confidence: 'high', source: 'vision_suffix' }
     }
   }
   if (api.loomPick?.value) merged.loomPick = { ...api.loomPick, source: api.loomPick.source || 'vision' }
@@ -555,7 +666,13 @@ async function prepareImageForOcr(file: File): Promise<{ base64: string; mediaTy
     return fileToBase64Raw(file)
   }
   try {
-    const bitmap = await createImageBitmap(file)
+    // Honor EXIF orientation so phone photos of landscape DIN sheets are upright.
+    let bitmap: ImageBitmap
+    try {
+      bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' } as ImageBitmapOptions)
+    } catch {
+      bitmap = await createImageBitmap(file)
+    }
     const maxEdge = 1600
     const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height))
     const w = Math.max(1, Math.round(bitmap.width * scale))
