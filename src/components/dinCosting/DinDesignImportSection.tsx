@@ -1,93 +1,63 @@
 import { useRef, useState } from 'react'
 import {
-  checkDuplicateDin,
-  readDesignReference,
   uploadDesignReferenceImage,
   type DesignImportSource,
   type MissingRateItem,
 } from '../../lib/designOcr'
 
 /**
- * OCR apply payload — Design No. (+ optional image) ONLY.
- * Intentionally has NO warps, wefts, loomPick, or feeder fields.
+ * Upload apply payload — reference image ONLY.
+ * No Design No. / warps / wefts / loomPick from OCR (OCR removed as unreliable).
  */
 export type DinOcrApplyPayload = {
   dinNumber: string
   designImageUrl: string | null
   importSource: DesignImportSource
-  designNumberConfidence?: 'high' | 'low' | 'missing'
 }
 
 type Props = {
   disabled?: boolean
   onApply: (payload: DinOcrApplyPayload) => void | Promise<void>
-  onOpenExisting?: (dinNumber: string) => void
   onOpenRateMaster?: () => void
 }
 
 /**
- * Section 1 — Upload DIN sheet photo.
- * OCR scope is STRICTLY Design No. / DESI / DIN.
- * Never fills Feeder/Colour, Weft Name, PIC, or TOTAL LOOM PICK from OCR.
+ * Section 1 — Attach DIN sheet reference photo.
+ * No OCR / text extraction. DESI / Design No. is typed manually in Section 2.
  */
-export function DinDesignImportSection({
-  disabled,
-  onApply,
-  onOpenExisting,
-  onOpenRateMaster,
-}: Props) {
+export function DinDesignImportSection({ disabled, onApply, onOpenRateMaster }: Props) {
+  const photosRef = useRef<HTMLInputElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const cameraRef = useRef<HTMLInputElement>(null)
+
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [designPreviewUrl, setDesignPreviewUrl] = useState<string | null>(null)
-  const [detectedDin, setDetectedDin] = useState('')
-  const [confidence, setConfidence] = useState<'high' | 'low' | 'missing'>('missing')
-  const [duplicateDin, setDuplicateDin] = useState<string | null>(null)
+  const [previewIsPdf, setPreviewIsPdf] = useState(false)
   const [dragOver, setDragOver] = useState(false)
 
   async function processFile(file: File, source: DesignImportSource) {
     if (disabled) return
+    const isImage = file.type.startsWith('image/') || /\.(jpe?g|png|webp|gif|heic)$/i.test(file.name)
+    const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name)
+    if (!isImage && !isPdf) {
+      setError('Please upload a JPG, PNG, or PDF file.')
+      return
+    }
+
     setBusy(true)
     setError(null)
-    setDuplicateDin(null)
-    setDetectedDin('')
-    setConfidence('missing')
+    setPreviewIsPdf(isPdf)
     try {
       const imageUrl = await uploadDesignReferenceImage(file, source)
       setDesignPreviewUrl(imageUrl)
-
-      // Full OCR may parse feeders/picks internally — we IGNORE everything except designNumber.
-      const ocr = await readDesignReference(file, { filename: file.name })
-      const din = ocr.designNumber.value.trim()
-      const conf = (ocr.designNumber.confidence || 'missing') as 'high' | 'low' | 'missing'
-      setDetectedDin(din)
-      setConfidence(din ? conf : 'missing')
-
-      if (!din) {
-        setError(
-          'Could not read Design No. from this photo — type DESI / Design No. manually below.',
-        )
-        await onApply({
-          dinNumber: '',
-          designImageUrl: imageUrl,
-          importSource: source,
-          designNumberConfidence: 'missing',
-        })
-        return
-      }
-
-      const dup = await checkDuplicateDin(din).catch(() => ({ exists: false as const }))
-      if (dup.exists) setDuplicateDin(din)
-
-      // Design No. only — no warps/wefts/loomPick/missingRates from OCR
       await onApply({
-        dinNumber: din,
+        dinNumber: '',
         designImageUrl: imageUrl,
         importSource: source,
-        designNumberConfidence: conf,
       })
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Design read failed')
+      setError(e instanceof Error ? e.message : 'Upload failed')
     } finally {
       setBusy(false)
     }
@@ -95,10 +65,10 @@ export function DinDesignImportSection({
 
   return (
     <section className="dwc-panel dwc-import-panel dwc-compact-block">
-      <h2 className="section-title">1 · Upload DIN Sheet Photo</h2>
+      <h2 className="section-title">1 · Attach DIN Sheet Photo</h2>
       <p className="text-muted2 dwc-import-hint">
-        Upload a DIN sheet photo to detect <strong>Design No. / DESI / DIN</strong> only. Warp, Weft,
-        Feeder/Colour, PIC, and TOTAL LOOM PICK are never auto-filled — enter them manually.
+        Attach a DIN sheet photo as a reference. Type <strong>DESI / Design No.</strong> manually
+        below — no OCR. Warp, Weft, Feeder/Colour, PIC, and TOTAL LOOM PICK stay manual.
       </p>
 
       <div className="dwc-import-actions">
@@ -106,21 +76,64 @@ export function DinDesignImportSection({
           type="button"
           className="dwc-import-btn"
           disabled={disabled || busy}
+          onClick={() => photosRef.current?.click()}
+        >
+          Upload from Photos
+        </button>
+        <button
+          type="button"
+          className="dwc-import-btn"
+          disabled={disabled || busy}
           onClick={() => fileRef.current?.click()}
         >
-          Upload DIN Sheet Photo
+          Upload from File
+        </button>
+        <button
+          type="button"
+          className="dwc-import-btn"
+          disabled={disabled || busy}
+          onClick={() => cameraRef.current?.click()}
+        >
+          Take Photo
         </button>
       </div>
 
+      {/* Gallery / photos library — no capture attribute */}
+      <input
+        ref={photosRef}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={(e) => {
+          const f = e.target.files?.[0]
+          if (f) void processFile(f, 'photo')
+          e.target.value = ''
+        }}
+      />
+
+      {/* Files app / file browser — images + PDF */}
       <input
         ref={fileRef}
+        type="file"
+        accept="image/*,.pdf,application/pdf"
+        hidden
+        onChange={(e) => {
+          const f = e.target.files?.[0]
+          if (f) void processFile(f, 'file')
+          e.target.value = ''
+        }}
+      />
+
+      {/* Camera capture */}
+      <input
+        ref={cameraRef}
         type="file"
         accept="image/*"
         capture="environment"
         hidden
         onChange={(e) => {
           const f = e.target.files?.[0]
-          if (f) void processFile(f, 'photo')
+          if (f) void processFile(f, 'direct')
           e.target.value = ''
         }}
       />
@@ -140,7 +153,7 @@ export function DinDesignImportSection({
         }}
       >
         <span className="text-muted">
-          {busy ? 'Reading Design No.…' : 'Drag & drop DIN sheet photo here'}
+          {busy ? 'Uploading photo…' : 'Drag & drop DIN sheet photo here'}
         </span>
       </label>
 
@@ -150,39 +163,22 @@ export function DinDesignImportSection({
         </p>
       ) : null}
 
-      {detectedDin && !busy ? (
-        <p className="text-muted2">
-          Detected Design No.: <strong>{detectedDin}</strong>
-          <em className="dwc-low-conf"> Please confirm</em>
-          {confidence === 'low' || confidence === 'missing'
-            ? ' — OCR was uncertain; edit if wrong.'
-            : ' — edit below if wrong.'}
-        </p>
-      ) : null}
-
-      {duplicateDin ? (
-        <div className="dwc-duplicate-banner" role="alert">
-          <p>
-            Design <strong>{duplicateDin}</strong> already exists.
-          </p>
-          <div className="dwc-duplicate-actions">
-            <button type="button" className="btn-warp" onClick={() => onOpenExisting?.(duplicateDin)}>
-              Open Existing
-            </button>
-            <button type="button" className="btn-ghost" onClick={() => setDuplicateDin(null)}>
-              Keep New Entry
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      {designPreviewUrl ? (
+      {designPreviewUrl && !previewIsPdf ? (
         <div
           className="dwc-design-preview dwc-import-preview"
           style={{ backgroundImage: `url(${designPreviewUrl})` }}
           role="img"
           aria-label="DIN sheet preview"
         />
+      ) : null}
+
+      {designPreviewUrl && previewIsPdf ? (
+        <p className="text-muted2">
+          PDF attached.{' '}
+          <a href={designPreviewUrl} target="_blank" rel="noreferrer">
+            Open reference
+          </a>
+        </p>
       ) : null}
 
       {onOpenRateMaster ? (
