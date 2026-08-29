@@ -887,7 +887,12 @@ export type DesignCosting = {
   quality_name: string | null
   costing_date: string
   diary_image_url: string | null
+  /** DIN sheet image used for OCR Design Import */
+  design_image_url?: string | null
+  /** Physical fabric sample photo — separate from design_image_url */
+  sample_image_url?: string | null
   design_length_mtr: number | null
+  loom_pick?: number | null
   pic_conversion_rate: number
   /** Calculated: total_pic × pic_conversion_rate */
   conversion_charge: number

@@ -279,10 +279,24 @@ export function DinIntakeScreen({ onNavigate }: Props) {
   }
 
   function updateOcrWeftRow(idx: number, patch: Partial<DesignOcrWeftRow>) {
-    setOcrDraft((prev) => ({
-      ...prev,
-      weftRows: prev.weftRows.map((r, i) => (i === idx ? { ...r, ...patch } : r)),
-    }))
+    setOcrDraft((prev) => {
+      const weftRows = prev.weftRows.map((r, i) =>
+        i === idx ? { ...r, ...patch, strings: '' } : { ...r, strings: '' },
+      )
+      const sum = weftRows.reduce((s, r) => s + (Number(r.pic) || 0), 0)
+      const sumStr = weftRows.length ? String(Math.round(sum * 100) / 100) : ''
+      return {
+        ...prev,
+        weftRows,
+        totalStrings: { value: '', confidence: 'missing' as const },
+        loomPick: sumStr
+          ? { value: sumStr, confidence: 'high' as const, source: 'sum_feeder_picks' }
+          : prev.loomPick,
+        totalPick: sumStr
+          ? { value: sumStr, confidence: 'high' as const, source: 'sum_feeder_picks' }
+          : prev.totalPick,
+      }
+    })
   }
 
   function reapplyOcrToCosting() {
@@ -654,12 +668,14 @@ export function DinIntakeScreen({ onNavigate }: Props) {
             ) : null}
             {ocrDraft.weftRows.length ? (
               <div className="dwc-ocr-weft">
-                <span className="text-muted2">Weft Pick (Strings not used for costing)</span>
+                <span className="text-muted2">Colour Pick (unused = 0)</span>
                 {ocrDraft.weftRows.map((row, idx) => (
                   <div key={idx} className="dwc-ocr-weft-row">
-                    <span className="num">#{idx + 1}</span>
+                    <span className="num">
+                      {ocrDraft.feeders[idx]?.sourceLabel || `Colour ${idx + 1}`}
+                    </span>
                     <label>
-                      PIC
+                      Pick
                       <input
                         className="num"
                         value={row.pic}
@@ -668,12 +684,6 @@ export function DinIntakeScreen({ onNavigate }: Props) {
                     </label>
                   </div>
                 ))}
-                {(ocrDraft.totalStrings.value || ocrDraft.weftRows.some((r) => r.strings)) && (
-                  <details className="dwc-ocr-source-details">
-                    <summary>Source / OCR Strings (reference only)</summary>
-                    <p className="text-muted2">Total Strings: {ocrDraft.totalStrings.value || '—'}</p>
-                  </details>
-                )}
               </div>
             ) : null}
             {canWriteCosting ? (

@@ -1,6 +1,7 @@
 /**
  * DIN / Design reference OCR — parse, map to costing rows, Rate Master lookup.
- * Supports multiple visual formats (Pick/Strings table, Feeders, Loom Pick).
+ * Colour/Feeder rows: capture Pick only. Strings column is ignored entirely.
+ * TOTAL LOOM PICK is always Σ Colour Pick values (never a printed total from the photo).
  */
 
 import {
@@ -38,6 +39,7 @@ export type DesignOcrFeeder = {
 
 export type DesignOcrWeftRow = {
   pic: string
+  /** Always empty — Strings column is ignored (kept for stored OCR JSON compat). */
   strings: string
   confidence: FieldConfidence
 }
@@ -87,29 +89,21 @@ const DESIGN_NO_QUALITY_RE =
 const DESIGN_NUMBER_LABEL_RE =
   /(?:design[e]?[\s\-]*(?:number|no\.?|num)?|desi[\s\-]*(?:no\.?|number)?)\s*[-:=]?\s*\[?\s*([A-Za-z]{2,5}[\s\-]?\d{3,6}|\d{3,6})(?:[\s\-]+([A-Za-z]{2,8}))?\s*\]?/i
 const PHONE_RE = /\b\d{10,}\b/
-const LOOM_PICK_RE =
-  /(?:total\s+)?(?:loom[\s-]*pick|loom\s*pick)[\s:=-]*(\d+(?:\.\d+)?)/i
-const TOTAL_LOOM_PICK_RE = /total\s+loom[\s-]*pick[\s:=-]*(\d+(?:\.\d+)?)/i
-/** Diner DIN sheet header: "on-loom-48" / "on loom 50" (OCR may garble "loom") */
-const ON_LOOM_PICK_RE = /on[\s\-]*l?o+m[\w]*[\s\-:=]*(\d+(?:\.\d+)?)/i
 /** Yarn codes may be letters (HSY, ZAREE) or numeric denier/codes (37, 80/2). */
 const FEEDER_RE =
   /(?:feeder|fd)[\s.-]*(\d+)\s*[=:\-]?\s*([A-Z0-9][A-Z0-9./-]{0,15})/gi
 /** Colour / Feeder N rows — allow OCR typos (CColour2, Colowr, Colours, Cotour) */
 const COLOUR_ROW_RE =
   /^(?:c+olou?r?s?|color|col\.?|cotou?r|coloum|colowr|coum|feeder|fd)[\s.\-]*(\d+)\s*(?:[|:.\-]\s*|\s+)(.*)$/i
-/** Inline pipe table: "Colour2 | zaree | 37 |" / "CColour2 | zaree | 37" */
+/** Inline pipe table: "Colour2 | zaree | 37 |" / "Colour4 | | -" — Pick only (ignore Strings). */
 const COLOUR_PIPE_RE =
-  /(?:c+olou?r?s?|color|colowr|feeder|fd)[\s.\-]*(\d+)\s*[|:.\-]+\s*([^|\n]{0,24}?)\s*[|:.\-]+\s*(\d+(?:\.\d+)?)/gi
+  /(?:c+olou?r?s?|color|colowr|feeder|fd)[\s.\-]*(\d+)\s*[|:.\-]+\s*([^|\n]{0,24}?)\s*[|:.\-]+\s*(\d+(?:\.\d+)?|[-–—])/gi
 const PICK_STRINGS_HEADER = /pick\s*strings|(?:\d+\s*[-–]?\s*pick).*(?:pick|strings)/i
 const TOTAL_LINE_RE = /^total\s*[:.]?\s*(\d+(?:\.\d+)?)\s*[/\s]\s*(\d+(?:\.\d+)?)/im
 const TOTAL_NEXT_LINE_RE = /^total\s*[:.]?\s*$/im
-const TOTAL_COLOUR_RE = /^total\s*[:.]?\s*(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)/im
-/** Fuzzy Total: "Tota … 48 | 4460" / "Total Ga | 112" */
-const TOTAL_FUZZY_RE = /\btota[l1]?\b\D{0,24}(\d+(?:\.\d+)?)(?:\D{1,8}(\d{2,5}(?:\.\d+)?))?/i
-/** Standalone pick/strings pair after yarn token: "hsy 24 2230" / "hey = 24 | 2230" */
+/** Yarn + Pick (+ optional ignored Strings): "hsy 24 2230" / "hey = 24 | 2230" */
 const YARN_PICK_LINE_RE =
-  /\b([A-Za-z]{2,8})\b\s*[=:]?\s*(\d+(?:\.\d+)?)\s*[|/]?\s*(\d{2,5}(?:\.\d+)?)/
+  /\b([A-Za-z]{2,8})\b\s*[=:]?\s*(\d+(?:\.\d+)?|[-–—])(?:\s*[|/]?\s*\d{2,5}(?:\.\d+)?)?/
 
 /**
  * Normalize OCR design tokens to business DIN (letters+digits only).
@@ -154,26 +148,50 @@ function correctOcrDesignPrefix(design: string): string {
   return design
 }
 
-/** Sum of feeder/colour PIC values — used to auto-fill TOTAL LOOM PICK when header missing. */
+/** Sum of feeder/colour PIC values — TOTAL LOOM PICK is always this sum. */
 export function sumWeftPics(rows: Array<{ pic?: string | null }> | null | undefined): string {
   if (!rows?.length) return ''
   const sum = rows.reduce((s, r) => s + (Number(r?.pic) || 0), 0)
-  if (sum <= 0) return ''
+  if (sum < 0) return ''
   return String(Math.round(sum * 100) / 100)
 }
 
-/** Fill loomPick from feeder PIC sum when OCR did not read an explicit total. */
+/**
+ * Always set TOTAL LOOM PICK = Σ Colour/Feeder Pick values.
+ * Never keep a separately-printed total from the photo. Clears Strings.
+ */
 export function ensureLoomPickFromFeederSum(ocr: DesignOcrResult): DesignOcrResult {
-  if (ocr.loomPick.value.trim()) return ocr
-  const sum = sumWeftPics(ocr.weftRows)
-  if (!sum) return ocr
-  return {
+  const cleared: DesignOcrResult = {
     ...ocr,
-    loomPick: { value: sum, confidence: 'high', source: 'sum_feeder_picks' },
-    totalPick: ocr.totalPick.value.trim()
-      ? ocr.totalPick
-      : { value: sum, confidence: 'high', source: 'sum_feeder_picks' },
+    weftRows: ocr.weftRows.map((r) => ({ ...r, strings: '' })),
+    totalStrings: emptyField(),
   }
+  if (!cleared.weftRows.length) return cleared
+  const sum = sumWeftPics(cleared.weftRows)
+  if (sum === '') return cleared
+  return {
+    ...cleared,
+    loomPick: { value: sum, confidence: 'high', source: 'sum_feeder_picks' },
+    totalPick: { value: sum, confidence: 'high', source: 'sum_feeder_picks' },
+  }
+}
+
+/** Blank / dash Pick cell → unused feeder (Pick 0). */
+export function isUnusedPickToken(raw: string | null | undefined): boolean {
+  const v = (raw || '').trim()
+  if (!v) return true
+  if (v === '-' || v === '—' || v === '–' || v === '.' || v === '_' || /^n\/?a$/i.test(v)) return true
+  if (/^\d+(?:\.\d+)?$/.test(v) && Number(v) === 0) return true
+  return false
+}
+
+/** Parse Pick column token → numeric string (0 for dash/blank/unused). */
+export function parseColourPickToken(raw: string | null | undefined): string {
+  const v = (raw || '').trim()
+  if (isUnusedPickToken(v)) return '0'
+  const m = v.match(/^(\d+(?:\.\d+)?)/)
+  if (m) return m[1]
+  return '0'
 }
 
 /** Blank feeder yarn on sheet (no visible text in colour cell) → dash placeholder. */
@@ -353,46 +371,6 @@ function extractDesignNumbers(
   return pickBestDesignNumber(candidates, subject, filename)
 }
 
-function extractLoomPick(text: string): OcrField {
-  // Prefer explicit TOTAL LOOM PICK — never invent from Σ weft PIC
-  const totalLoom = text.match(TOTAL_LOOM_PICK_RE)
-  if (totalLoom?.[1]) {
-    return { value: totalLoom[1], confidence: 'high', source: 'total_loom_pick' }
-  }
-
-  const loom = text.match(LOOM_PICK_RE)
-  if (loom?.[1]) return { value: loom[1], confidence: 'high', source: 'loom_pick' }
-
-  const onLoom = text.match(ON_LOOM_PICK_RE)
-  if (onLoom?.[1]) {
-    return { value: onLoom[1], confidence: 'high', source: 'on_loom' }
-  }
-
-  const totals = extractTotals(text)
-  // "112-pick" / "112pick" / OCR "t12pick" / "112 piox" — take largest plausible header
-  const nPickMatches = [
-    ...text.matchAll(/\b(\d{2,4})\s*[-–]?\s*pick\b/gi),
-    ...text.matchAll(/(?:^|[^\d])(\d{2,4})\s*[-–]?\s*p[il1](?:ck|c?k|ox|cks)\b/gi),
-  ].map((m) => m[1])
-  if (nPickMatches.length) {
-    if (totals.totalPick.value && nPickMatches.includes(totals.totalPick.value)) {
-      return { value: totals.totalPick.value, confidence: 'high', source: 'n_pick_header' }
-    }
-    // Loom pick is the design total — take the largest N-pick header (e.g. 112-pick over stray 37)
-    const best = nPickMatches.reduce((a, b) => (Number(b) > Number(a) ? b : a))
-    if (Number(best) >= 20) {
-      return { value: best, confidence: 'high', source: 'n_pick_header' }
-    }
-  }
-
-  if (totals.totalPick.value) {
-    return { value: totals.totalPick.value, confidence: totals.totalPick.confidence, source: 'total_pick' }
-  }
-
-  // Do NOT fall back to Σ Colour/Feeder PIC — that is TOTAL WEFT PIC, a separate field
-  return emptyField()
-}
-
 function extractFeeders(text: string): DesignOcrFeeder[] {
   const feeders: DesignOcrFeeder[] = []
   let m: RegExpExecArray | null
@@ -413,8 +391,9 @@ function extractFeeders(text: string): DesignOcrFeeder[] {
 }
 
 /**
- * Parse Colour 1 / Colour 2 / Colour 3 table rows (common jacquard sheet layout).
- * Empty yarn cell → "-" dash; yarn like "zaree" → ZARI; Pick → pic; Strings optional.
+ * Parse Colour 1 / Colour 2 / … table rows (jacquard sheet layout).
+ * Captures ONLY the Pick column per Colour row. Strings column is ignored.
+ * Dash / blank Pick → 0 (unused feeder) — not an error or low-confidence flag.
  */
 export function extractColourTable(text: string): {
   feeders: DesignOcrFeeder[]
@@ -422,10 +401,8 @@ export function extractColourTable(text: string): {
   totalPick: string
   totalStrings: string
 } {
-  type ColourEntry = { no: number; yarn: string; pic: string; strings: string; confidence: FieldConfidence }
+  type ColourEntry = { no: number; yarn: string; pic: string; confidence: FieldConfidence }
   const entries: ColourEntry[] = []
-  let totalPick = ''
-  let totalStrings = ''
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
 
   // Pass 1: pipe-delimited colour rows (best for table-region Tesseract)
@@ -439,26 +416,20 @@ export function extractColourTable(text: string): {
       if (/^(ul|ar|ea|n\/a|na)$/i.test(yarnRaw) || yarnRaw.length > 16) yarnRaw = ''
       if (/^hey$/i.test(yarnRaw)) yarnRaw = 'hsy'
       if (/^saree$/i.test(yarnRaw)) yarnRaw = 'zaree'
-      const pic = pm[3]
-      if (Number(pic) === 0) continue
+      const pic = parseColourPickToken(pm[3])
+      const unused = pic === '0'
       entries.push({
         no,
         yarn: normalizeYarnLabel(yarnRaw),
         pic,
-        strings: '',
-        confidence: yarnRaw ? 'high' : 'low',
+        // Unused / zero Pick is fine — not low confidence. Blank yarn on active row stays soft.
+        confidence: unused ? 'high' : yarnRaw ? 'high' : 'low',
       })
     }
   }
 
   for (const line of lines) {
-    const totalInline =
-      line.match(TOTAL_COLOUR_RE) || line.match(TOTAL_LINE_RE) || line.match(TOTAL_FUZZY_RE)
-    if (totalInline && /tota/i.test(line)) {
-      totalPick = totalInline[1]
-      if (totalInline[2]) totalStrings = totalInline[2]
-      continue
-    }
+    if (/^tota/i.test(line)) continue
 
     const colour = line.match(COLOUR_ROW_RE)
     if (!colour) continue
@@ -467,55 +438,52 @@ export function extractColourTable(text: string): {
     if (entries.some((e) => e.no === no)) continue
 
     const rest = (colour[2] || '').trim()
-    const nums = [...rest.matchAll(/(\d+(?:\.\d+)?)/g)].map((x) => x[1])
-    if (nums.length >= 2) {
-      const pic = nums[nums.length - 2]
-      const strings = nums[nums.length - 1]
-      if (Number(pic) === 0 && Number(strings) === 0) continue
-
-      let yarnRaw = rest
-      const lastTwo = new RegExp(
-        `${pic.replace('.', '\\.')}\\s*[|/]?\\s*${strings.replace('.', '\\.')}\\s*$`,
-      )
-      yarnRaw = yarnRaw.replace(lastTwo, '').trim()
-      yarnRaw = yarnRaw.replace(/^[\s|:.\-\[|=]+|[\s|:.\-\]]+$/g, '').trim()
-      if (/^hey$/i.test(yarnRaw)) yarnRaw = 'hsy'
-      if (/^saree$/i.test(yarnRaw)) yarnRaw = 'zaree'
-      if (/^\d+(\.\d+)?$/.test(yarnRaw) || yarnRaw.length > 24) yarnRaw = ''
-
-      entries.push({
-        no,
-        yarn: normalizeYarnLabel(yarnRaw),
-        pic,
-        strings: Number(strings) > 0 ? strings : '',
-        confidence: 'high',
-      })
-    } else if (nums.length === 1 && Number(nums[0]) > 0) {
-      let yarnRaw = rest.replace(nums[0], '').trim().replace(/^[\s|:.\-]+|[\s|:.\-]+$/g, '')
-      if (/^hey$/i.test(yarnRaw)) yarnRaw = 'hsy'
-      if (/^saree$/i.test(yarnRaw)) yarnRaw = 'zaree'
-      if (/^\d+(\.\d+)?$/.test(yarnRaw)) yarnRaw = ''
-      entries.push({
-        no,
-        yarn: normalizeYarnLabel(yarnRaw),
-        pic: nums[0],
-        strings: '',
-        confidence: 'low',
-      })
+    // Sheet columns: yarn | Pick | Strings. When 2+ number/dash tokens exist,
+    // Pick = second-to-last, last = Strings (ignored). Denier in yarn (e.g. "300 Tex")
+    // stays in the yarn slice before Pick.
+    let yarnRaw = ''
+    let picToken = ''
+    if (isUnusedPickToken(rest) || /^[-–—](?:\s+[-–—])?$/.test(rest)) {
+      picToken = '-'
+    } else {
+      const hits: Array<{ v: string; index: number }> = []
+      const re = /(\d+(?:\.\d+)?|[-–—])/g
+      let hm: RegExpExecArray | null
+      while ((hm = re.exec(rest)) !== null) {
+        hits.push({ v: hm[1], index: hm.index })
+      }
+      if (!hits.length) continue
+      const pickHit = hits.length >= 2 ? hits[hits.length - 2] : hits[0]
+      picToken = pickHit.v
+      yarnRaw = rest.slice(0, pickHit.index).trim().replace(/^[\s|:.\-\[|=]+|[\s|:.\-\]]+$/g, '')
     }
+
+    if (yarnRaw === '-' || yarnRaw === '—' || yarnRaw === '–') yarnRaw = ''
+
+    const pic = parseColourPickToken(picToken)
+    if (/^hey$/i.test(yarnRaw)) yarnRaw = 'hsy'
+    if (/^saree$/i.test(yarnRaw)) yarnRaw = 'zaree'
+    if (/^\d+(\.\d+)?$/.test(yarnRaw) || yarnRaw.length > 24) yarnRaw = ''
+    const unused = pic === '0'
+
+    entries.push({
+      no,
+      yarn: normalizeYarnLabel(yarnRaw),
+      pic,
+      confidence: unused ? 'high' : yarnRaw ? 'high' : 'low',
+    })
   }
 
-  // Sparse PSM: Colour N labels + nearby bare pick numbers
+  // Sparse PSM: Colour N labels + nearby bare pick numbers / dashes
   if (entries.length < 2) {
     const colourNos = [...text.matchAll(/(?:c+olou?r?s?|color|colowr)[\s.\-]*(\d+)/gi)].map((m) =>
       Number(m[1]),
     )
     const picks: string[] = []
     for (const line of lines) {
-      const only = line.match(/^(?:\|?\s*)(\d{1,3}(?:\.\d+)?)(?:\s*\|?\s*)$/)
+      const only = line.match(/^(?:\|?\s*)(\d{1,3}(?:\.\d+)?|[-–—])(?:\s*\|?\s*)$/)
       if (only) {
-        const n = Number(only[1])
-        if (n > 0 && n < 500) picks.push(only[1])
+        picks.push(parseColourPickToken(only[1]))
       }
     }
     const uniqueNos = [...new Set(colourNos.filter((n) => n >= 1 && n <= 6))].sort((a, b) => a - b)
@@ -523,14 +491,18 @@ export function extractColourTable(text: string): {
       for (let i = 0; i < uniqueNos.length; i++) {
         const no = uniqueNos[i]
         if (entries.some((e) => e.no === no)) continue
-        const pic = picks[i] || picks[0]
-        if (!pic || Number(pic) === 0) continue
-        entries.push({ no, yarn: '-', pic, strings: '', confidence: 'low' })
+        const pic = picks[i] ?? '0'
+        entries.push({
+          no,
+          yarn: '-',
+          pic,
+          confidence: pic === '0' ? 'high' : 'low',
+        })
       }
     }
   }
 
-  // Fallback: yarn + pick + strings lines when Colour N labels were garbled by OCR
+  // Fallback: yarn + pick lines when Colour N labels were garbled by OCR (Strings ignored)
   if (!entries.length) {
     let autoNo = 1
     for (const line of lines) {
@@ -543,60 +515,50 @@ export function extractColourTable(text: string): {
       }
       if (/^hey$/i.test(yarn)) yarn = 'hsy'
       if (/^saree$/i.test(yarn)) yarn = 'zaree'
-      const pic = yarnPick[2]
-      const strings = yarnPick[3]
-      if (Number(pic) === 0 && Number(strings) === 0) continue
+      const pic = parseColourPickToken(yarnPick[2])
       if (Number(pic) > 500) continue
       entries.push({
         no: autoNo++,
         yarn: normalizeYarnLabel(yarn),
         pic,
-        strings: Number(strings) > 0 ? strings : '',
-        confidence: 'low',
+        confidence: pic === '0' ? 'high' : 'low',
       })
       if (autoNo > 6) break
     }
   }
 
-  if (!totalPick) {
-    const fuzzy = text.match(TOTAL_FUZZY_RE)
-    if (fuzzy) {
-      totalPick = fuzzy[1]
-      if (fuzzy[2]) totalStrings = fuzzy[2]
-    }
-  }
-
   entries.sort((a, b) => a.no - b.no)
+  // TOTAL LOOM PICK is always Σ picks — do not return a printed total from the sheet
+  const sumPick = sumWeftPics(entries.map((e) => ({ pic: e.pic })))
   return {
     feeders: entries.map((e) => ({
       feederNo: e.no,
       yarnType: e.yarn,
-      confidence: e.yarn === '-' ? 'low' : e.confidence === 'low' ? 'low' : 'high',
+      // Blank yarn on unused feeder is fine; blank yarn on active pick may need review
+      confidence:
+        e.pic === '0' ? 'high' : e.yarn === '-' ? 'low' : e.confidence === 'low' ? 'low' : 'high',
       sourceLabel: `Colour ${e.no}`,
     })),
     weftRows: entries.map((e) => ({
       pic: e.pic,
-      strings: e.strings,
-      confidence: e.confidence,
+      strings: '',
+      confidence: e.pic === '0' ? 'high' : e.confidence,
     })),
-    totalPick,
-    totalStrings,
+    totalPick: sumPick,
+    totalStrings: '',
   }
 }
 
 /**
  * Infer how many Colour/Feeder rows a sheet likely has from OCR text (Colour 1..N).
- * Jacquard sheets often print Colour 1–6 with trailing zero rows — treat 3 as the active set.
+ * Includes unused trailing Colour rows when labels are present.
  */
 export function inferColourRowCount(text: string): number {
   const nos = [...(text || '').matchAll(/(?:c+olou?r?s?|color|colowr|feeder|fd)[\s.\-]*(\d+)/gi)]
     .map((m) => Number(m[1]))
     .filter((n) => n >= 1 && n <= 6)
   if (!nos.length) return 0
-  const max = Math.max(...nos)
-  // Colour 1–3 is the common active set when labels 1..6 are printed
-  if (max >= 3) return 3
-  return max
+  return Math.max(...nos)
 }
 
 /**
@@ -625,12 +587,25 @@ export function ensureReviewFeederRows(ocr: DesignOcrResult): DesignOcrResult {
   const hasFeeders = ocr.feeders.length >= 1
   const hasWefts = ocr.weftRows.some((r) => (r.pic || '').trim() !== '')
   if (hasFeeders && hasWefts) {
-    // Still flag low-confidence rows for review UI
-    const needsFlag = ocr.feeders.some((f) => f.confidence === 'low') ||
-      ocr.weftRows.some((r) => r.confidence === 'low')
-    if (!needsFlag) return ocr
+    // Unused Pick=0 rows are fine — only flag true low-confidence active rows
+    const needsFlag =
+      ocr.feeders.some((f, i) => {
+        const pic = ocr.weftRows[i]?.pic
+        if (parseColourPickToken(pic) === '0') return false
+        return f.confidence === 'low'
+      }) ||
+      ocr.weftRows.some((r) => r.confidence === 'low' && parseColourPickToken(r.pic) !== '0')
+    if (!needsFlag) {
+      return {
+        ...ocr,
+        weftRows: ocr.weftRows.map((r) => ({ ...r, strings: '' })),
+        totalStrings: emptyField(),
+      }
+    }
     return {
       ...ocr,
+      weftRows: ocr.weftRows.map((r) => ({ ...r, strings: '' })),
+      totalStrings: emptyField(),
       readWarning:
         ocr.readWarning ||
         'Some Feeder/Colour or Pick rows are low confidence — please confirm before Confirm.',
@@ -664,11 +639,12 @@ export function ensureReviewFeederRows(ocr: DesignOcrResult): DesignOcrResult {
         sourceLabel: `Colour ${i}`,
       },
     )
-    const pic = (existingW?.pic || '').trim() || picEach
+    const existingPic = (existingW?.pic || '').trim()
+    const pic = existingPic !== '' ? parseColourPickToken(existingPic) : picEach
     weftRows.push({
-      pic,
-      strings: existingW?.strings || '',
-      confidence: existingW?.pic ? existingW.confidence : 'low',
+      pic: pic || '',
+      strings: '',
+      confidence: existingPic !== '' ? (parseColourPickToken(existingPic) === '0' ? 'high' : existingW!.confidence) : 'low',
     })
   }
 
@@ -686,17 +662,19 @@ export function ensureReviewFeederRows(ocr: DesignOcrResult): DesignOcrResult {
     }
   }
 
-  return {
+  const withRows = {
     ...ocr,
     feeders,
     weftRows,
+    totalStrings: emptyField(),
     readWarning:
       ocr.readWarning ||
-      'Feeder/Colour & Pick rows need review — values were estimated from TOTAL LOOM PICK; confirm before Confirm.',
+      'Feeder/Colour & Pick rows need review — values were estimated; confirm before Confirm.',
   }
+  return ensureLoomPickFromFeederSum(withRows)
 }
 
-/** Parse Pick / Strings table rows in document order (exclude Total line). */
+/** Parse Pick column rows in document order (exclude Total line). Strings column ignored. */
 function extractWeftPickRows(text: string): DesignOcrWeftRow[] {
   const rows: DesignOcrWeftRow[] = []
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
@@ -727,14 +705,16 @@ function extractWeftPickRows(text: string): DesignOcrWeftRow[] {
       }
     }
 
+    // First column = Pick; second column (Strings) deliberately ignored
     const pair =
-      line.match(/^(\d+(?:\.\d+)?)\s*[/|,]\s*(\d+(?:\.\d+)?)\s*$/) ||
-      line.match(/^(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)$/)
+      line.match(/^(\d+(?:\.\d+)?|[-–—])\s*[/|,]\s*(\d+(?:\.\d+)?|[-–—])\s*$/) ||
+      line.match(/^(\d+(?:\.\d+)?|[-–—])\s+(\d+(?:\.\d+)?|[-–—])$/) ||
+      line.match(/^(\d+(?:\.\d+)?|[-–—])\s*$/)
 
     if (pair && inTable) {
       rows.push({
-        pic: pair[1],
-        strings: pair[2],
+        pic: parseColourPickToken(pair[1]),
+        strings: '',
         confidence: 'high',
       })
       continue
@@ -744,47 +724,16 @@ function extractWeftPickRows(text: string): DesignOcrWeftRow[] {
   return rows
 }
 
-function extractTotals(text: string): { totalPick: OcrField; totalStrings: OcrField } {
-  const inline = text.match(TOTAL_COLOUR_RE) || text.match(TOTAL_LINE_RE)
-  if (inline) {
-    return {
-      totalPick: { value: inline[1], confidence: 'high', source: 'total_line' },
-      totalStrings: { value: inline[2], confidence: 'high', source: 'total_line' },
-    }
-  }
-  const fuzzy = text.match(TOTAL_FUZZY_RE)
-  if (fuzzy) {
-    return {
-      totalPick: { value: fuzzy[1], confidence: 'high', source: 'total_fuzzy' },
-      totalStrings: { value: fuzzy[2], confidence: 'low', source: 'total_fuzzy' },
-    }
-  }
-  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
-  for (let i = 0; i < lines.length; i++) {
-    if (TOTAL_NEXT_LINE_RE.test(lines[i]) && lines[i + 1]) {
-      const m = lines[i + 1].match(/^(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)$/)
-      if (m) {
-        return {
-          totalPick: { value: m[1], confidence: 'high', source: 'total_line' },
-          totalStrings: { value: m[2], confidence: 'high', source: 'total_line' },
-        }
-      }
-    }
-  }
-  return { totalPick: emptyField(), totalStrings: emptyField() }
-}
-
-/** Format A: "315 / 315 Strings" single width pair */
+/** Format A: "315 / 315 Strings" — Strings ignored; no weft PIC invented. */
 function extractFormatAStringPair(text: string): DesignOcrWeftRow | null {
   const m = text.match(/(\d+(?:\.\d+)?)\s*[/]\s*(\d+(?:\.\d+)?)\s*strings/i)
   if (!m) return null
-  return { pic: '', strings: m[2], confidence: 'low' }
+  return { pic: '', strings: '', confidence: 'low' }
 }
 
 /**
  * Parse OCR / vision text into structured design fields.
- * Preserves Pick/Strings row order for weft mapping.
- * Supports Colour 1/2/3 tables (112-pick sheets) and Feeder / Pick-Strings formats.
+ * Colour/Feeder Pick only; Strings ignored; TOTAL LOOM PICK = Σ Colour Picks.
  */
 export function parseDesignReferenceText(
   text: string,
@@ -826,28 +775,20 @@ export function parseDesignReferenceText(
     result.weftRows = classicWefts
   }
 
-  const totals = extractTotals(normalized)
-  result.totalPick = colour.totalPick
-    ? { value: colour.totalPick, confidence: 'high', source: 'colour_total' }
-    : totals.totalPick
-  result.totalStrings = colour.totalStrings
-    ? { value: colour.totalStrings, confidence: 'high', source: 'colour_total' }
-    : totals.totalStrings
-
-  // Prefer explicit TOTAL LOOM PICK / N-pick header; if missing, fill from Σ feeder picks (editable)
-  result.loomPick = extractLoomPick(normalized)
+  // Printed totals are never used for TOTAL LOOM PICK; Strings never stored
+  result.totalStrings = emptyField()
+  result.totalPick = emptyField()
 
   if (!result.weftRows.length) {
-    // Format A "315 / 315 Strings" is strings-only reference — do NOT invent weft PIC from loom pick.
-    // TOTAL LOOM PICK stays on the header; weft PIC rows must come from colour/pick table or user entry.
+    // Format A "315 / 315 Strings" — do NOT invent weft PIC; Strings ignored
     const formatA = extractFormatAStringPair(normalized)
-    if (formatA && formatA.strings) {
-      // Keep strings as OCR audit only — no weft PIC invented from loom pick
+    if (formatA) {
       result.weftRows = []
     }
   }
 
   result.rawText = normalized
+  // Always TOTAL LOOM PICK = Σ Colour Pick (overrides any printed header)
   return ensureLoomPickFromFeederSum(result)
 }
 
@@ -876,7 +817,8 @@ export function mergeDesignOcrPayload(
   if (api.loomPick?.value) merged.loomPick = { ...api.loomPick, source: api.loomPick.source || 'vision' }
   if (api.qualityName?.value) merged.qualityName = api.qualityName
   if (api.totalPick?.value) merged.totalPick = api.totalPick
-  if (api.totalStrings?.value) merged.totalStrings = api.totalStrings
+  // Strings column is ignored entirely
+  merged.totalStrings = emptyField()
 
   if (api.feeders?.length) {
     merged.feeders = api.feeders.map((f) => ({
@@ -889,8 +831,8 @@ export function mergeDesignOcrPayload(
 
   if (api.weftRows?.length) {
     merged.weftRows = api.weftRows.map((r) => ({
-      pic: r.pic || '',
-      strings: r.strings || '',
+      pic: parseColourPickToken(r.pic || ''),
+      strings: '',
       confidence: r.confidence || 'high',
     }))
   }
@@ -1171,7 +1113,7 @@ export async function readDesignReference(
   return attachReadMeta({ ...withSum, rawText: text || withSum.rawText }, 'tesseract', warning)
 }
 
-/** Map OCR review → weft rows. Pick → PIC only. Strings are NEVER used for width/costing. */
+/** Map OCR review → weft rows. Pick → PIC only. Strings are never stored or used. */
 export function mapOcrToWeftRows(
   ocr: DesignOcrResult,
   designLength: string,
@@ -1183,7 +1125,7 @@ export function mapOcrToWeftRows(
 
   let sourceRows: DesignOcrWeftRow[]
   if (ocr.weftRows.length > 0) {
-    sourceRows = [...ocr.weftRows]
+    sourceRows = ocr.weftRows.map((r) => ({ ...r, strings: '' }))
   } else if (ocr.feeders.length > 0) {
     // One costing row per feeder when Pick table was not readable — PIC blank for user
     sourceRows = ocr.feeders.map(() => ({
@@ -1216,8 +1158,6 @@ export function mapOcrToWeftRows(
       ? feeder.sourceLabel || `Colour ${feederNo}`
       : `Colour ${feederNo}`
     const pic = (src.pic || '').trim()
-    // Strings are OCR reference only — never map to Width. Default Width = 52.
-    const stringsRef = (src.strings || '').trim()
     const rawYarn = feeder ? normalizeYarnLabel(feeder.yarnType) : ''
     const yarnName = isBlankYarnName(rawYarn) ? '' : rawYarn
 
@@ -1229,7 +1169,7 @@ export function mapOcrToWeftRows(
       width: String(DEFAULT_WIDTH),
       length_mtr: length,
       weft_name: yarnName,
-      strings_ref: stringsRef,
+      strings_ref: '',
     }
     if (yarnName) {
       row = applyWeftItemFromMaster(row, yarnName, rates, costingDate)
@@ -1377,6 +1317,14 @@ export async function uploadDesignReferenceImage(
     return pub.publicUrl
   }
 
+  return uploadDinStorageObject(path, file)
+}
+
+/** Upload physical fabric sample photo — separate from DIN sheet OCR image. */
+export async function uploadSampleImage(file: File, dinNumber?: string): Promise<string> {
+  const ext = file.name.split('.').pop() || 'jpg'
+  const din = (dinNumber || 'sample').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '') || 'sample'
+  const path = `sample-images/${din}/${Date.now()}-${crypto.randomUUID()}.${ext}`
   return uploadDinStorageObject(path, file)
 }
 
