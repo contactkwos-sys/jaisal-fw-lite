@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 
 export type DesignNoOption = {
   dinNumber: string
@@ -18,6 +18,9 @@ type Props = {
   onPick?: (option: DesignNoOption) => void
 }
 
+/** Debounce filter list so typing stays snappy (local filter — never hits Supabase). */
+const FILTER_DEBOUNCE_MS = 200
+
 /**
  * Searchable Design No. combobox — filter local options (no per-keystroke DB).
  * Free text allowed for brand-new Design Nos.
@@ -36,11 +39,17 @@ export function DesignNoCombobox({
   const wrapRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState(value)
-  const deferredQuery = useDeferredValue(query)
+  const [debouncedQuery, setDebouncedQuery] = useState(value)
 
   useEffect(() => {
     setQuery(value)
+    setDebouncedQuery(value)
   }, [value])
+
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedQuery(query), FILTER_DEBOUNCE_MS)
+    return () => window.clearTimeout(t)
+  }, [query])
 
   useEffect(() => {
     function onDoc(e: MouseEvent) {
@@ -51,7 +60,7 @@ export function DesignNoCombobox({
   }, [])
 
   const matches = useMemo(() => {
-    const q = deferredQuery.trim().toLowerCase()
+    const q = debouncedQuery.trim().toLowerCase()
     const list = q
       ? options.filter(
           (o) =>
@@ -60,7 +69,7 @@ export function DesignNoCombobox({
         )
       : options
     return list.slice(0, 40)
-  }, [options, deferredQuery])
+  }, [options, debouncedQuery])
 
   const showNewHint =
     open &&

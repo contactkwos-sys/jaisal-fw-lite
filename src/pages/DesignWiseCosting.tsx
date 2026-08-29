@@ -2079,7 +2079,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
             <thead>
               <tr>
                 <th>S.R.</th>
-                <th>Feeder/Colour</th>
+                <th>PIC</th>
                 <th>Weft Name</th>
                 <th>Base Denier</th>
                 <th>Costing Denier</th>
