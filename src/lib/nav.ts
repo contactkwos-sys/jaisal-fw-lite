@@ -140,12 +140,6 @@ export const MAIN_MODULES: MainModule[] = [
         hint: 'Import photo → OCR → warp/weft costing (single page)',
       },
       {
-        id: 'din-intake',
-        label: 'Design Intake (opens DIN Costing)',
-        screen: 'design-wise-costing',
-        hint: 'Redirect — use DIN Costing Design Import',
-      },
-      {
         id: 'formula-master',
         label: 'Formula Master',
         screen: 'formula-master',
