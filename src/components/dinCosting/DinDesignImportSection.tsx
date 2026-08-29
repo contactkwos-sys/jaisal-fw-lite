@@ -404,7 +404,17 @@ export function DinDesignImportSection({
         <span className="text-muted">{busy ? 'Reading design…' : 'Drag & drop design image here'}</span>
       </label>
 
-      {error ? <p className="form-error">{error}</p> : null}
+      {error ? (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+      {!busy && ocrDraft.readSource === 'tesseract' && ocrDraft.designNumber.value ? (
+        <p className="text-muted2">
+          Browser OCR से भरा गया (Vision key missing हो सकती है). Design No. / Loom Pick / Feeder
+          चेक करके Confirm करें.
+        </p>
+      ) : null}
 
       {duplicateDin ? (
         <div className="dwc-duplicate-banner" role="alert">

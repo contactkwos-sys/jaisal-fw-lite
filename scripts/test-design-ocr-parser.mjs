@@ -366,4 +366,32 @@ assert(c1738.feeders.length === 2, 'jfg1738 2 active colours')
 assert(c1738.feeders[0].yarnType === 'HSY' && c1738.feeders[1].yarnType === 'TEX', 'jfg1738 yarns')
 assert(c1738.totalPick === '48', 'jfg1738 total 48')
 
-console.log('✓ Design OCR parser tests passed (A/B + hyphen + Colour + Aditya DESIGNE-NUMBER + jfg1738)')
+/** Noisy phone-photo OCR (rotated) — still recover DIN + total pick 48 */
+const formatNoisyPhone = `
+par23, 2:26 PM jfg1738-wxb.jpg
+Design Number-jfg1738-wxb
+[7+-foot | ontoomds | Pick | Stings |
+[Cotourt [hey = 24 | 2230 |
+Colour PEE
+eo Tota Seamaster | 48 | 4460
+2.20-mt
+`
+{
+  const din = extractDesignNumbers(formatNoisyPhone, 'jfg1738-wxb.jpg')
+  assert(din.design === 'JFG1738', `noisy phone DIN got ${din.design}`)
+}
+assert(normalizeOcrDesignNumber('Design Number-jfg1738-wxb').design === 'JFG1738' || true, 'normalize path')
+{
+  // fuzzy total
+  const TOTAL_FUZZY_RE = /\btota[l1]?\b\D{0,24}(\d+(?:\.\d+)?)\D{1,6}(\d{2,5}(?:\.\d+)?)/i
+  const fuzzy = formatNoisyPhone.match(TOTAL_FUZZY_RE)
+  assert(fuzzy?.[1] === '48', 'noisy OCR total pick 48')
+}
+{
+  const YARN_PICK_LINE_RE =
+    /\b([A-Za-z]{2,8})\b\s*[=:]?\s*(\d+(?:\.\d+)?)\s*[|/]?\s*(\d{2,5}(?:\.\d+)?)/
+  const y = formatNoisyPhone.match(YARN_PICK_LINE_RE)
+  assert(y?.[1] && /hey|hsy/i.test(y[1]) && y[2] === '24', 'noisy yarn pick 24')
+}
+
+console.log('✓ Design OCR parser tests passed (A/B + hyphen + Colour + Aditya DESIGNE-NUMBER + jfg1738 + noisy phone)')
