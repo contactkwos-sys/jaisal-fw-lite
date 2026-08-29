@@ -1215,6 +1215,11 @@ function n(v: string | number | null | undefined): number {
   return Number.isFinite(x) ? x : 0
 }
 
+/**
+ * @deprecated DIN Costing UI must NOT call this.
+ * Feeder/Colour / Weft Name / PIC auto-fill from OCR was removed — Design No. only.
+ * Kept for parser unit tests; do not wire back into DinDesignImportSection.
+ */
 export function applyOcrToCostingDraft(
   ocr: DesignOcrResult,
   opts: {
