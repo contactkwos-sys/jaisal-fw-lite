@@ -1,13 +1,15 @@
 /**
  * DIN / Design reference OCR — parse, map to costing rows, Rate Master lookup.
- * Colour/Feeder rows: capture Pick only. Strings column is ignored entirely.
- * TOTAL LOOM PICK is always Σ Colour Pick values (never a printed total from the photo).
+ * Colour/Feeder rows: capture Pick only. Strings column is ignored entirely (never used for costing).
+ * TOTAL LOOM PICK is read from the DIN/design sheet separately — NOT calculated from Strings,
+ * and NOT forced to equal Σ Colour Picks (Weft PIC sum is separate).
  */
 
 import {
   DEFAULT_LENGTH_MTR,
   DEFAULT_WIDTH,
   emptyWeft,
+  formatCostingDenier,
   type WeftDraft,
   type WarpDraft,
 } from './designWiseCosting'
@@ -99,8 +101,11 @@ const COLOUR_ROW_RE =
 const COLOUR_PIPE_RE =
   /(?:c+olou?r?s?|color|colowr|feeder|fd)[\s.\-]*(\d+)\s*[|:.\-]+\s*([^|\n]{0,24}?)\s*[|:.\-]+\s*(\d+(?:\.\d+)?|[-–—])/gi
 const PICK_STRINGS_HEADER = /pick\s*strings|(?:\d+\s*[-–]?\s*pick).*(?:pick|strings)/i
+const LOOM_PICK_RE = /(?:loom[\s-]*pick|loom\s*pick|total\s*loom\s*pick)[\s:=-]*(\d+(?:\.\d+)?)/i
+const PICK_ONLY_RE = /\b(\d+(?:\.\d+)?)\s*[-–]?\s*pick\b/i
 const TOTAL_LINE_RE = /^total\s*[:.]?\s*(\d+(?:\.\d+)?)\s*[/\s]\s*(\d+(?:\.\d+)?)/im
 const TOTAL_NEXT_LINE_RE = /^total\s*[:.]?\s*$/im
+const TOTAL_COLOUR_RE = /^total\s*[:.]?\s*(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)/im
 /** Yarn + Pick (+ optional ignored Strings): "hsy 24 2230" / "hey = 24 | 2230" */
 const YARN_PICK_LINE_RE =
   /\b([A-Za-z]{2,8})\b\s*[=:]?\s*(\d+(?:\.\d+)?|[-–—])(?:\s*[|/]?\s*\d{2,5}(?:\.\d+)?)?/
@@ -148,7 +153,7 @@ function correctOcrDesignPrefix(design: string): string {
   return design
 }
 
-/** Sum of feeder/colour PIC values — TOTAL LOOM PICK is always this sum. */
+/** Sum of feeder/colour PIC values — TOTAL WEFT PIC only (never forced onto TOTAL LOOM PICK). */
 export function sumWeftPics(rows: Array<{ pic?: string | null }> | null | undefined): string {
   if (!rows?.length) return ''
   const sum = rows.reduce((s, r) => s + (Number(r?.pic) || 0), 0)
@@ -157,23 +162,88 @@ export function sumWeftPics(rows: Array<{ pic?: string | null }> | null | undefi
 }
 
 /**
- * Always set TOTAL LOOM PICK = Σ Colour/Feeder Pick values.
- * Never keep a separately-printed total from the photo. Clears Strings.
+ * Clear Strings from OCR (never used for costing).
+ * Does NOT overwrite TOTAL LOOM PICK with Σ Colour Picks.
  */
-export function ensureLoomPickFromFeederSum(ocr: DesignOcrResult): DesignOcrResult {
-  const cleared: DesignOcrResult = {
+export function clearOcrStrings(ocr: DesignOcrResult): DesignOcrResult {
+  return {
     ...ocr,
     weftRows: ocr.weftRows.map((r) => ({ ...r, strings: '' })),
     totalStrings: emptyField(),
   }
+}
+
+/**
+ * @deprecated Prefer clearOcrStrings. Kept for callers that previously forced loom = Σ picks.
+ * Now only clears Strings — preserves sheet TOTAL LOOM PICK when present.
+ */
+export function ensureLoomPickFromFeederSum(ocr: DesignOcrResult): DesignOcrResult {
+  const cleared = clearOcrStrings(ocr)
+  // If sheet loom pick already present, keep it
+  if (cleared.loomPick.value.trim()) return cleared
+  // Soft fallback only when sheet total missing — low confidence
   if (!cleared.weftRows.length) return cleared
   const sum = sumWeftPics(cleared.weftRows)
   if (sum === '') return cleared
   return {
     ...cleared,
-    loomPick: { value: sum, confidence: 'high', source: 'sum_feeder_picks' },
-    totalPick: { value: sum, confidence: 'high', source: 'sum_feeder_picks' },
+    loomPick: { value: sum, confidence: 'low', source: 'sum_feeder_picks_fallback' },
   }
+}
+
+function extractTotals(text: string): { totalPick: OcrField; totalStrings: OcrField } {
+  const inline = text.match(TOTAL_COLOUR_RE) || text.match(TOTAL_LINE_RE)
+  if (inline) {
+    return {
+      totalPick: { value: inline[1], confidence: 'high', source: 'total_line' },
+      // Strings total is reference only — never used for costing
+      totalStrings: { value: inline[2], confidence: 'high', source: 'total_line' },
+    }
+  }
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+  for (let i = 0; i < lines.length; i++) {
+    if (TOTAL_NEXT_LINE_RE.test(lines[i]) && lines[i + 1]) {
+      const m = lines[i + 1].match(/^(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)$/)
+      if (m) {
+        return {
+          totalPick: { value: m[1], confidence: 'high', source: 'total_line' },
+          totalStrings: { value: m[2], confidence: 'high', source: 'total_line' },
+        }
+      }
+    }
+  }
+  return { totalPick: emptyField(), totalStrings: emptyField() }
+}
+
+/**
+ * Read TOTAL LOOM PICK from the DIN/design sheet text.
+ * Prefer explicit "Loom Pick" / "N-pick" header / printed Total — never Strings.
+ */
+export function extractLoomPick(text: string, fallbackFromRows?: string): OcrField {
+  const loom = text.match(LOOM_PICK_RE)
+  if (loom?.[1]) return { value: loom[1], confidence: 'high', source: 'loom_pick' }
+
+  const totals = extractTotals(text)
+  const nPickMatches = [...text.matchAll(/\b(\d{2,4})\s*[-–]?\s*pick\b/gi)].map((m) => m[1])
+  if (nPickMatches.length) {
+    if (totals.totalPick.value && nPickMatches.includes(totals.totalPick.value)) {
+      return { value: totals.totalPick.value, confidence: 'high', source: 'n_pick_header' }
+    }
+    const best = nPickMatches.reduce((a, b) => (Number(b) > Number(a) ? b : a))
+    return { value: best, confidence: 'high', source: 'n_pick_header' }
+  }
+
+  if (totals.totalPick.value) {
+    return { value: totals.totalPick.value, confidence: totals.totalPick.confidence, source: 'total_pick' }
+  }
+
+  const pickOnly = text.match(PICK_ONLY_RE)
+  if (pickOnly?.[1]) return { value: pickOnly[1], confidence: 'low', source: 'pick_label' }
+
+  if (fallbackFromRows) {
+    return { value: fallbackFromRows, confidence: 'low', source: 'sum_colour_picks_fallback' }
+  }
+  return emptyField()
 }
 
 /** Blank / dash Pick cell → unused feeder (Pick 0). */
@@ -528,7 +598,7 @@ export function extractColourTable(text: string): {
   }
 
   entries.sort((a, b) => a.no - b.no)
-  // TOTAL LOOM PICK is always Σ picks — do not return a printed total from the sheet
+  // Weft PIC sum is reference only — TOTAL LOOM PICK is read separately from the sheet
   const sumPick = sumWeftPics(entries.map((e) => ({ pic: e.pic })))
   return {
     feeders: entries.map((e) => ({
@@ -733,7 +803,8 @@ function extractFormatAStringPair(text: string): DesignOcrWeftRow | null {
 
 /**
  * Parse OCR / vision text into structured design fields.
- * Colour/Feeder Pick only; Strings ignored; TOTAL LOOM PICK = Σ Colour Picks.
+ * Colour/Feeder Pick → Weft PIC rows. Strings ignored.
+ * TOTAL LOOM PICK read from sheet (separate from Σ Weft PIC).
  */
 export function parseDesignReferenceText(
   text: string,
@@ -775,9 +846,15 @@ export function parseDesignReferenceText(
     result.weftRows = classicWefts
   }
 
-  // Printed totals are never used for TOTAL LOOM PICK; Strings never stored
+  // Strings never used for costing — store cleared
+  const totals = extractTotals(normalized)
   result.totalStrings = emptyField()
-  result.totalPick = emptyField()
+  // totalPick here = Σ weft colour picks (reference); loom pick read separately
+  result.totalPick = colour.totalPick
+    ? { value: colour.totalPick, confidence: 'high', source: 'sum_colour_picks' }
+    : sumWeftPics(result.weftRows)
+      ? { value: sumWeftPics(result.weftRows), confidence: 'high', source: 'sum_colour_picks' }
+      : emptyField()
 
   if (!result.weftRows.length) {
     // Format A "315 / 315 Strings" — do NOT invent weft PIC; Strings ignored
@@ -788,8 +865,16 @@ export function parseDesignReferenceText(
   }
 
   result.rawText = normalized
-  // Always TOTAL LOOM PICK = Σ Colour Pick (overrides any printed header)
-  return ensureLoomPickFromFeederSum(result)
+  const sumFallback = result.totalPick.value || undefined
+  result.loomPick = extractLoomPick(normalized, sumFallback)
+  // Prefer explicit sheet total when extractLoomPick fell back and totals has a value
+  if (
+    result.loomPick.source === 'sum_colour_picks_fallback' &&
+    totals.totalPick.value
+  ) {
+    result.loomPick = { ...totals.totalPick, source: totals.totalPick.source || 'total_pick' }
+  }
+  return clearOcrStrings(result)
 }
 
 /** Merge vision API JSON with regex parser (vision wins when confident). */
@@ -838,7 +923,12 @@ export function mergeDesignOcrPayload(
   }
 
   merged.rawText = text || api.rawText
-  return ensureLoomPickFromFeederSum(merged)
+  const cleared = clearOcrStrings(merged)
+  // Preserve sheet/vision loom pick; only soft-fallback when missing
+  if (!cleared.loomPick.value.trim()) {
+    return ensureLoomPickFromFeederSum(cleared)
+  }
+  return cleared
 }
 
 /** Downscale / recompress camera photos for faster browser OCR. */
@@ -1192,8 +1282,9 @@ export function detectMissingRates(
     const name = row.yarn_name.trim()
     if (isBlankYarnName(name)) return
     if (row.rate_source === 'manual' && n(row.rate_per_kg) > 0) return
+    const costingDenier = formatCostingDenier(row)
     const found = lookupRateForCosting(rates, 'warp', name, costingDate, {
-      denier: row.base_denier || undefined,
+      denier: costingDenier || row.base_denier || undefined,
     })
     if (!found && !n(row.rate_per_kg)) missing.push({ category: 'warp', itemName: name, rowIndex: idx })
   })
@@ -1201,8 +1292,9 @@ export function detectMissingRates(
     const name = row.weft_name.trim()
     if (isBlankYarnName(name)) return
     if (row.rate_source === 'manual' && n(row.rate_per_kg) > 0) return
+    const costingDenier = formatCostingDenier(row)
     const found = lookupRateForCosting(rates, 'weft', name, costingDate, {
-      denier: row.base_denier || undefined,
+      denier: costingDenier || row.base_denier || undefined,
     })
     if (!found && !n(row.rate_per_kg)) missing.push({ category: 'weft', itemName: name, rowIndex: idx })
   })
@@ -1216,9 +1308,9 @@ function n(v: string | number | null | undefined): number {
 }
 
 /**
- * @deprecated DIN Costing UI must NOT call this.
- * Feeder/Colour / Weft Name / PIC auto-fill from OCR was removed — Design No. only.
- * Kept for parser unit tests; do not wire back into DinDesignImportSection.
+ * Map OCR confirmation → Warp/Weft costing drafts.
+ * Colour/Feeder N maps 1:1 to Weft PIC. Strings never used.
+ * Rate Master lookup uses COSTING denier (base + 10).
  */
 export function applyOcrToCostingDraft(
   ocr: DesignOcrResult,

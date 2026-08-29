@@ -10,7 +10,7 @@
  */
 
 import { supabase } from './supabase'
-import { costingDenierFromBase, n, round2 } from './designWiseCosting'
+import { costingDenierFromBase, DENIER_COSTING_OFFSET, n, round2 } from './designWiseCosting'
 import { assertDesignMasterWrite } from './permissions'
 
 export type RateCategory = 'warp' | 'weft'
@@ -107,6 +107,29 @@ export function gstLabel(gstPercent: number): string {
   return `GST ${round2(gstPercent)}%`
 }
 
+/**
+ * Match Rate Master denier against lookup denier.
+ * RM stores BASE denier; DIN Costing may look up by COSTING denier (base + 10).
+ * Accepts exact match, same/blank, or base↔costing pair (300 ↔ 310).
+ */
+export function denierMatchesForLookup(
+  rateMasterDenier: string | null | undefined,
+  lookupDenier: string | null | undefined,
+): boolean {
+  const rd = normalizeDenier(rateMasterDenier)
+  const ld = normalizeDenier(lookupDenier)
+  if (!ld) return true
+  if (!rd || rd === 'same' || ld === 'same') return true
+  if (rd === ld) return true
+  const rn = Number(rd)
+  const ln = Number(ld)
+  if (Number.isFinite(rn) && Number.isFinite(ln) && rn > 0 && ln > 0) {
+    if (rn + DENIER_COSTING_OFFSET === ln) return true
+    if (ln + DENIER_COSTING_OFFSET === rn) return true
+  }
+  return false
+}
+
 /** Pick latest rate where effective_from <= asOfDate */
 export function pickLatestRate(
   rates: RateMasterRow[],
@@ -116,7 +139,6 @@ export function pickLatestRate(
   opts?: { denier?: string; supplier?: string },
 ): RateMasterRow | null {
   const itemNorm = normalizeItemName(itemName)
-  const denierNorm = normalizeDenier(opts?.denier)
   const supplierNorm = (opts?.supplier || '').trim().toLowerCase()
 
   let candidates = rates.filter(
@@ -127,11 +149,8 @@ export function pickLatestRate(
       normalizeItemName(r.item_name) === itemNorm,
   )
 
-  if (denierNorm) {
-    const byDenier = candidates.filter((r) => {
-      const rd = normalizeDenier(r.denier)
-      return !rd || rd === 'same' || rd === denierNorm || denierNorm === 'same'
-    })
+  if (opts?.denier) {
+    const byDenier = candidates.filter((r) => denierMatchesForLookup(r.denier, opts.denier))
     if (byDenier.length) candidates = byDenier
   }
 
@@ -178,7 +197,6 @@ export function lookupRateForCosting(
   }
 
   const yarnNorm = normalizeItemName(trimmed)
-  const denierNorm = normalizeDenier(opts?.denier)
   let partialCandidates = rates.filter(
     (r) =>
       r.category === category &&
@@ -190,11 +208,8 @@ export function lookupRateForCosting(
         yarnNorm.includes(normalizeItemName(r.item_name))),
   )
 
-  if (denierNorm) {
-    const byDenier = partialCandidates.filter((r) => {
-      const rd = normalizeDenier(r.denier)
-      return !rd || rd === 'same' || rd === denierNorm || denierNorm === 'same'
-    })
+  if (opts?.denier) {
+    const byDenier = partialCandidates.filter((r) => denierMatchesForLookup(r.denier, opts.denier))
     if (byDenier.length) partialCandidates = byDenier
   }
 

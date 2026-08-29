@@ -5,11 +5,13 @@
 
 import {
   DEFAULT_LENGTH_MTR,
+  DEFAULT_TAR_ENDS,
   DEFAULT_WIDTH,
   computeBuildup,
   emptyWarp,
   emptyWeft,
   ensureBaseDenier,
+  formatCostingDenier,
   persistCostingDenier,
   resolveDenierForCalc,
   syncCostingDenierFromBase,
@@ -112,13 +114,23 @@ export function applyWarpItemFromMaster(
   asOfDate: string,
 ): WarpDraft {
   const name = itemName.trim()
-  let next: WarpDraft = { ...row, yarn_name: name }
+  let next: WarpDraft = {
+    ...row,
+    yarn_name: name,
+    tar_ends: row.tar_ends || String(DEFAULT_TAR_ENDS),
+    width: row.width || String(DEFAULT_WIDTH),
+    length_mtr: row.length_mtr || String(DEFAULT_LENGTH_MTR),
+  }
   if (!name || !asOfDate) return next
   const cat = WARP_CATALOGUE.find((c) => c.item_name === name)
+  next = applyCatalogueOrMasterBaseDenier(next, name, undefined, cat?.denier) as WarpDraft
+  const costingDenier = formatCostingDenier(next)
   const found = lookupRateForCosting(rates, 'warp', name, asOfDate, {
-    denier: next.base_denier || undefined,
+    denier: costingDenier || next.base_denier || undefined,
   })
-  next = applyCatalogueOrMasterBaseDenier(next, name, found?.row.denier, cat?.denier) as WarpDraft
+  if (found?.row.denier) {
+    next = applyCatalogueOrMasterBaseDenier(next, name, found.row.denier, cat?.denier) as WarpDraft
+  }
   if (!found) return next
   return {
     ...next,
@@ -145,10 +157,14 @@ export function applyWeftItemFromMaster(
   if (!next.width) next.width = String(DEFAULT_WIDTH)
   if (!next.length_mtr) next.length_mtr = String(DEFAULT_LENGTH_MTR)
   const cat = WEFT_CATALOGUE.find((c) => c.item_name === name)
+  next = applyCatalogueOrMasterBaseDenier(next, name, undefined, cat?.denier) as WeftDraft
+  const costingDenier = formatCostingDenier(next)
   const found = lookupRateForCosting(rates, 'weft', name, asOfDate, {
-    denier: next.base_denier || undefined,
+    denier: costingDenier || next.base_denier || undefined,
   })
-  next = applyCatalogueOrMasterBaseDenier(next, name, found?.row.denier, cat?.denier) as WeftDraft
+  if (found?.row.denier) {
+    next = applyCatalogueOrMasterBaseDenier(next, name, found.row.denier, cat?.denier) as WeftDraft
+  }
   if (!found) return next
   return {
     ...next,
@@ -190,7 +206,8 @@ function mapWarpRow(r: Record<string, unknown>, i: number): WarpDraft {
     yarn_name: String(r.yarn_name || ''),
     base_denier: base,
     denier,
-    tar_ends: r.tar_ends != null ? String(r.tar_ends) : '',
+    tar_ends: r.tar_ends != null ? String(r.tar_ends) : String(DEFAULT_TAR_ENDS),
+    width: String(DEFAULT_WIDTH),
     length_mtr: r.length_mtr != null ? String(r.length_mtr) : String(DEFAULT_LENGTH_MTR),
     rate_per_kg: r.rate_per_kg != null ? String(r.rate_per_kg) : '',
     rate_source: (r.rate_source as WarpDraft['rate_source']) || undefined,
