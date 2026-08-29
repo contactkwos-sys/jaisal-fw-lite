@@ -225,19 +225,20 @@ export function DinDesignImportSection({
 
   function updateWeftRow(idx: number, patch: Partial<DesignOcrWeftRow>) {
     setOcrDraft((prev) => {
-      const weftRows = prev.weftRows.map((r, i) => (i === idx ? { ...r, ...patch } : r))
+      const weftRows = prev.weftRows.map((r, i) =>
+        i === idx ? { ...r, ...patch, strings: '' } : { ...r, strings: '' },
+      )
       const sum = sumWeftPics(weftRows)
-      const loomFromSum =
-        !prev.loomPick.value.trim() ||
-        prev.loomPick.source === 'sum_feeder_picks' ||
-        prev.loomPick.confidence === 'missing'
       return {
         ...prev,
         weftRows,
-        loomPick:
-          loomFromSum && sum
-            ? { value: sum, confidence: 'high', source: 'sum_feeder_picks' }
-            : prev.loomPick,
+        totalStrings: { value: '', confidence: 'missing' },
+        loomPick: sum
+          ? { value: sum, confidence: 'high', source: 'sum_feeder_picks' }
+          : { value: '', confidence: 'missing' },
+        totalPick: sum
+          ? { value: sum, confidence: 'high', source: 'sum_feeder_picks' }
+          : { value: '', confidence: 'missing' },
       }
     })
   }
@@ -318,8 +319,8 @@ export function DinDesignImportSection({
     <section className="dwc-panel dwc-import-panel dwc-compact-block">
       <h2 className="section-title">1 · Design Import</h2>
       <p className="text-muted2 dwc-import-hint">
-        Upload a DIN sheet photo → browser OCR (Tesseract, free, no API key) fills Design No.,
-        Feeder/Colour + PIC, and TOTAL LOOM PICK. Review / edit below, then Confirm.
+        Upload a DIN sheet photo → browser OCR fills Design No., Colour Pick values, and
+        TOTAL LOOM PICK (Σ Colour Picks). Strings column is ignored. Review / edit, then Confirm.
       </p>
 
       <div className="dwc-import-actions">
@@ -457,8 +458,13 @@ export function DinDesignImportSection({
             <div className="dwc-ocr-fields-col">
               <h3 className="dwc-ocr-subtitle">OCR Review — edit before applying</h3>
               {!busy &&
-              (ocrDraft.feeders.some((f) => f.confidence === 'low') ||
-                ocrDraft.weftRows.some((r) => r.confidence === 'low')) ? (
+              (ocrDraft.feeders.some((f, i) => {
+                if (String(ocrDraft.weftRows[i]?.pic ?? '').trim() === '0') return false
+                return f.confidence === 'low'
+              }) ||
+                ocrDraft.weftRows.some(
+                  (r) => r.confidence === 'low' && String(r.pic).trim() !== '0',
+                )) ? (
                 <p className="dwc-ocr-review-banner">
                   Review table — low-confidence Feeder/Colour or Pick rows are pre-filled; confirm or edit,
                   then Confirm.
@@ -485,23 +491,17 @@ export function DinDesignImportSection({
               <label className="field">
                 <span>
                   TOTAL LOOM PICK {confidenceLabel(ocrDraft.loomPick.confidence)}
-                  {ocrDraft.loomPick.source === 'sum_feeder_picks' ? (
-                    <em className="dwc-auto-tag"> Σ feeder picks</em>
-                  ) : null}
-                  {busy ? (
-                    <em className="dwc-auto-tag"> Reading…</em>
-                  ) : ocrDraft.loomPick.confidence === 'low' ? (
-                    <em className="dwc-low-conf"> Please confirm</em>
-                  ) : null}
+                  <em className="dwc-auto-tag"> Σ Colour Picks</em>
+                  {busy ? <em className="dwc-auto-tag"> Reading…</em> : null}
                   {!busy && ocrDraft.loomPick.confidence === 'missing' && !ocrDraft.loomPick.value ? (
-                    <em className="dwc-low-conf"> Enter manually or add feeder PIC rows</em>
+                    <em className="dwc-low-conf"> Enter Colour Pick rows</em>
                   ) : null}
                 </span>
                 <input
                   className="num"
                   value={ocrDraft.loomPick.value}
                   onChange={(e) => updateLoomPick(e.target.value)}
-                  placeholder="Auto from Σ feeder picks"
+                  placeholder="Σ Colour Picks"
                   disabled={busy}
                 />
               </label>
@@ -537,7 +537,7 @@ export function DinDesignImportSection({
 
               <div className="dwc-ocr-weft">
                 <div className="dwc-ocr-block-head">
-                  <span>Weft Pick (maps 1:1 to Feeder/Colour — Strings not used for costing)</span>
+                  <span>Colour Pick (maps 1:1 to Feeder/Colour — unused = 0)</span>
                   <button type="button" className="btn-ghost btn-sm" onClick={addWeftRow} disabled={busy}>
                     + Row
                   </button>
@@ -547,18 +547,20 @@ export function DinDesignImportSection({
                 ) : ocrDraft.weftRows.length ? (
                   ocrDraft.weftRows.map((row, idx) => (
                     <div key={idx} className="dwc-ocr-weft-row">
-                      <span className="num">#{idx + 1}</span>
+                      <span className="num">
+                        {ocrDraft.feeders[idx]?.sourceLabel || `Colour ${idx + 1}`}
+                      </span>
                       <label>
-                        PIC
+                        Pick
                         <input
                           className="num"
                           value={row.pic}
                           onChange={(e) => updateWeftRow(idx, { pic: e.target.value })}
-                          placeholder="Pick"
+                          placeholder="0 if unused"
                           disabled={busy}
                         />
                       </label>
-                      {row.confidence === 'low' ? (
+                      {row.confidence === 'low' && String(row.pic).trim() !== '0' ? (
                         <em className="dwc-low-conf">Please confirm</em>
                       ) : null}
                     </div>
@@ -566,26 +568,7 @@ export function DinDesignImportSection({
                 ) : (
                   <p className="text-muted2">Could not confidently read Pick rows — add manually.</p>
                 )}
-                {ocrDraft.totalPick.value ? (
-                  <p className="text-muted2 dwc-ocr-totals">Colour total pick (ref): {ocrDraft.totalPick.value}</p>
-                ) : null}
               </div>
-
-              {(ocrDraft.totalStrings.value || ocrDraft.weftRows.some((r) => r.strings)) && (
-                <details className="dwc-ocr-source-details">
-                  <summary>Source / OCR Details (Strings — not used in costing)</summary>
-                  <p className="text-muted2">
-                    Total Strings: {ocrDraft.totalStrings.value || '—'}
-                  </p>
-                  {ocrDraft.weftRows.map((row, idx) =>
-                    row.strings ? (
-                      <p key={idx} className="text-muted2">
-                        Row {idx + 1} Strings: {row.strings}
-                      </p>
-                    ) : null,
-                  )}
-                </details>
-              )}
 
               <button
                 type="button"

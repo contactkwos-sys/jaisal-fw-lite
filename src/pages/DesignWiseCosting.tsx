@@ -55,6 +55,7 @@ import { RateMasterYarnSelect } from '../components/dinCosting/RateMasterYarnSel
 import {
   detectMissingRates,
   checkDuplicateDin,
+  uploadSampleImage,
   type DesignImportSource,
   type DesignOcrResult,
 } from '../lib/designOcr'
@@ -214,6 +215,8 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
   const liveSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [masterRates, setMasterRates] = useState<RateMasterRow[]>([])
   const [designImageUrl, setDesignImageUrl] = useState<string | null>(null)
+  const [sampleImageUrl, setSampleImageUrl] = useState<string | null>(null)
+  const [sampleUploading, setSampleUploading] = useState(false)
   const [importSource, setImportSource] = useState<DesignImportSource | null>(null)
   const [ocrExtractedJson, setOcrExtractedJson] = useState<DesignOcrResult | null>(null)
   const [ocrConfirmedJson, setOcrConfirmedJson] = useState<DesignOcrResult | null>(null)
@@ -446,6 +449,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     setCostingDate(String(header.costing_date || todayISO()))
     setDiaryUrl((header.diary_image_url as string | null) || null)
     setDesignImageUrl((header.design_image_url as string | null) || null)
+    setSampleImageUrl((header.sample_image_url as string | null) || null)
     setImportSource((header.import_source as DesignImportSource | null) || null)
     setOcrExtractedJson((header.ocr_extracted_json as DesignOcrResult | null) || null)
     setOcrConfirmedJson((header.ocr_confirmed_json as DesignOcrResult | null) || null)
@@ -657,6 +661,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     setDiaryUrl(null)
     setOcrNote(null)
     setDesignImageUrl(null)
+    setSampleImageUrl(null)
     setImportSource(null)
     setOcrExtractedJson(null)
     setOcrConfirmedJson(null)
@@ -732,6 +737,40 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     }
   }
 
+  async function handleSampleImageFile(file: File | null) {
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setError('Please upload an image file for the sample')
+      return
+    }
+    setSampleUploading(true)
+    setError(null)
+    try {
+      const url = await uploadSampleImage(file, dinNumber || undefined)
+      setSampleImageUrl(url)
+      setMessage('Sample image uploaded — save costing to keep it on this Design No.')
+      if (savedId && !isLocked) {
+        const { error: uErr } = await supabase
+          .from('design_costing')
+          .update({ sample_image_url: url, updated_at: new Date().toISOString() })
+          .eq('id', savedId)
+        if (uErr && /sample_image_url/i.test(uErr.message)) {
+          setMessage(
+            'Sample image uploaded locally — run migration-din-sample-image.sql on Supabase, then Save.',
+          )
+        } else if (uErr) {
+          throw uErr
+        } else {
+          setMessage('Sample image saved for this Design No.')
+        }
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Sample image upload failed')
+    } finally {
+      setSampleUploading(false)
+    }
+  }
+
   type PersistOverrides = {
     dinNumber?: string
     qualityName?: string
@@ -740,6 +779,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     warps?: WarpDraft[]
     wefts?: WeftDraft[]
     designImageUrl?: string | null
+    sampleImageUrl?: string | null
     diaryUrl?: string | null
     importSource?: DesignImportSource | null
     ocrExtractedJson?: DesignOcrResult | null
@@ -817,6 +857,8 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
       const diaryToSave = overrides?.diaryUrl !== undefined ? overrides.diaryUrl : diaryUrl
       const designImgToSave =
         overrides?.designImageUrl !== undefined ? overrides.designImageUrl : designImageUrl
+      const sampleImgToSave =
+        overrides?.sampleImageUrl !== undefined ? overrides.sampleImageUrl : sampleImageUrl
       const importToSave =
         overrides?.importSource !== undefined ? overrides.importSource : importSource
       const ocrExtractedToSave =
@@ -849,6 +891,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         costing_date: costingDate,
         diary_image_url: diaryToSave,
         design_image_url: designImgToSave,
+        sample_image_url: sampleImgToSave,
         import_source: importToSave,
         ocr_extracted_json: ocrExtractedToSave,
         ocr_confirmed_json: ocrConfirmedToSave,
@@ -908,7 +951,22 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
           .update(updatePayload)
           .eq('id', costingId)
         if (uErr) {
-          if (/loom_pick/i.test(uErr.message)) {
+          if (/sample_image_url/i.test(uErr.message)) {
+            const { sample_image_url: _si, ...rest } = updatePayload as Record<string, unknown>
+            void _si
+            const { error: uSample } = await supabase
+              .from('design_costing')
+              .update(rest)
+              .eq('id', costingId)
+            if (uSample && /loom_pick/i.test(uSample.message)) {
+              const { loom_pick: _lp, ...rest2 } = rest
+              void _lp
+              const { error: u2 } = await supabase.from('design_costing').update(rest2).eq('id', costingId)
+              if (u2) throw u2
+            } else if (uSample) {
+              throw uSample
+            }
+          } else if (/loom_pick/i.test(uErr.message)) {
             const { loom_pick: _lp, ...rest } = updatePayload as Record<string, unknown>
             void _lp
             const { error: u2 } = await supabase.from('design_costing').update(rest).eq('id', costingId)
@@ -937,7 +995,32 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
           .select('id')
           .single()
         if (iErr) {
-          if (/loom_pick/i.test(iErr.message)) {
+          if (/sample_image_url/i.test(iErr.message)) {
+            const { sample_image_url: _si, ...rest } = header as Record<string, unknown>
+            void _si
+            const { data: dSample, error: iSample } = await supabase
+              .from('design_costing')
+              .insert(rest)
+              .select('id')
+              .single()
+            if (iSample && /loom_pick/i.test(iSample.message)) {
+              const { loom_pick: _lp, ...rest2 } = rest
+              void _lp
+              const { data: d2, error: i2 } = await supabase
+                .from('design_costing')
+                .insert(rest2)
+                .select('id')
+                .single()
+              if (i2) throw i2
+              costingId = d2.id
+              setSavedId(costingId)
+            } else if (iSample) {
+              throw iSample
+            } else {
+              costingId = dSample.id
+              setSavedId(costingId)
+            }
+          } else if (/loom_pick/i.test(iErr.message)) {
             const { loom_pick: _lp, ...rest } = header as Record<string, unknown>
             void _lp
             const { data: d2, error: i2 } = await supabase
@@ -1604,7 +1687,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
               onChange={(e) => setLoomPick(e.target.value)}
               placeholder="e.g. 112"
             />
-            <span className="dwc-hint">Source design value — not Σ Weft PIC</span>
+            <span className="dwc-hint">Σ Colour Pick values from Design Import</span>
           </label>
         </div>
         {loomPickWeftPicWarning(loomPick, buildup.totalPic) ? (
@@ -1629,6 +1712,68 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
             <strong className="num">{fmtQty(wastageDisplay.usableLengthMtr, 0)} Mtr</strong>
             <span className="dwc-auto-tag">Auto</span>
           </div>
+        </div>
+      </section>
+
+      <section className="dwc-panel dwc-compact-block" id="dwc-sample-image">
+        <h2 className="section-title">Sample Image</h2>
+        <p className="text-muted2">
+          Upload the physical fabric sample photo later (after cutting from the DIN sheet). Separate from
+          Design Import OCR image.
+        </p>
+        <div className="dwc-upload-row">
+          <label className="dwc-dropzone">
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              hidden
+              disabled={isReadOnly || sampleUploading}
+              onChange={(e) => {
+                const f = e.target.files?.[0] ?? null
+                void handleSampleImageFile(f)
+                e.target.value = ''
+              }}
+            />
+            <span className="text-muted">
+              {sampleUploading
+                ? 'Uploading sample…'
+                : sampleImageUrl
+                  ? 'Replace sample image'
+                  : 'Upload sample photo'}
+            </span>
+          </label>
+          {sampleImageUrl ? (
+            <div className="dwc-sample-preview-col">
+              <a
+                className="dwc-diary-preview"
+                href={sampleImageUrl}
+                target="_blank"
+                rel="noreferrer"
+                title="Open sample image"
+                style={{ backgroundImage: `url(${sampleImageUrl})`, display: 'block' }}
+              />
+              <div className="dwc-sample-actions">
+                <a className="btn-ghost btn-sm" href={sampleImageUrl} target="_blank" rel="noreferrer" download>
+                  Download
+                </a>
+                {!isReadOnly ? (
+                  <button
+                    type="button"
+                    className="btn-ghost btn-sm"
+                    onClick={() => {
+                      setSampleImageUrl(null)
+                      setMessage('Sample image cleared — Save to update record.')
+                    }}
+                  >
+                    Clear
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ) : (
+            <div className="dwc-diary-preview empty">No sample image</div>
+          )}
         </div>
       </section>
 

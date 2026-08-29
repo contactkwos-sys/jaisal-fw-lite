@@ -85,6 +85,20 @@
   font-size: 0.85rem;
 }
 
+.dwc-sample-preview-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  align-items: stretch;
+}
+
+.dwc-sample-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  justify-content: center;
+}
+
 .dwc-panel-head {
   display: flex;
   justify-content: space-between;
