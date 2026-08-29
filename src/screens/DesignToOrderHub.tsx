@@ -66,7 +66,6 @@ export function DesignToOrderHub({ onNavigate }: Props) {
   const matchings = detail?.din_matchings?.slice().sort((a, b) => a.matching_no - b.matching_no) || []
 
   const quickDesign = [
-    { id: 'intake', label: 'Design Intake', onClick: () => onNavigate({ screen: 'dto-intake', module: 'design-to-order' }) },
     {
       id: 'costing',
       label: 'DIN / Design Costing',
@@ -115,16 +114,16 @@ export function DesignToOrderHub({ onNavigate }: Props) {
         <div>
           <h1>Design Master</h1>
           <p className="text-muted">
-            Design / Technical module — Intake · DIN Costing · Formula · Rate · Sample · Reports
+            Design / Technical module — DIN Costing · Formula · Rate · Sample · Reports
           </p>
         </div>
         <div className="dto-header-actions">
           <button
             type="button"
             className="primary-save"
-            onClick={() => onNavigate({ screen: 'dto-intake', module: 'design-to-order' })}
+            onClick={() => onNavigate({ screen: 'design-wise-costing', module: 'design-to-order' })}
           >
-            Create DIN
+            Create DIN Costing
           </button>
         </div>
       </header>
@@ -166,7 +165,7 @@ export function DesignToOrderHub({ onNavigate }: Props) {
             />
           </div>
           {filtered.length === 0 ? (
-            <DtoEmpty>No DESIGN records yet. Start with Design Intake.</DtoEmpty>
+            <DtoEmpty>No DESIGN records yet. Start with DIN Costing.</DtoEmpty>
           ) : (
             <div className="table-wrap">
               <table className="data-table dto-table">
