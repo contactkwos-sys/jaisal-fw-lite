@@ -79,8 +79,9 @@ const DESIGN_NO_HYPHEN_RE = /\b([A-Z]{2,5})[\s\-]+(\d{3,6})(?:[\s\-]+[A-Za-z0-9]
 const DESIGN_NO_QUALITY_RE =
   /\b([A-Z]{2,5})[\s\-]*(\d{3,6})(?:[\s\-]+([A-Za-z]{2,8}))\b/gi
 /**
- * Explicit header — Aditya Graphics sheets often use "DESIGNE-NUMBER" (extra E)
- * and values like "JFG2247 BRT" / "JFG-1674-wxb" / "jfg1738-wxb".
+ * Explicit header — diner DIN sheets (e.g. Aditya Graphics letterhead) often use
+ * "DESIGNE-NUMBER" (extra E) and values like "JFG2247 BRT" / "JFG-1674-wxb".
+ * "Aditya" is the diner name, not part of the DIN.
  */
 const DESIGN_NUMBER_LABEL_RE =
   /(?:design[e]?[\s\-]*(?:number|no\.?|num)?|desi[\s\-]*(?:no\.?|number)?)\s*[-:=]?\s*\[?\s*([A-Za-z]{2,5}[\s\-]?\d{3,6}|\d{3,6})(?:[\s\-]+([A-Za-z]{2,8}))?\s*\]?/i
@@ -88,7 +89,7 @@ const PHONE_RE = /\b\d{10,}\b/
 const LOOM_PICK_RE =
   /(?:total\s+)?(?:loom[\s-]*pick|loom\s*pick)[\s:=-]*(\d+(?:\.\d+)?)/i
 const TOTAL_LOOM_PICK_RE = /total\s+loom[\s-]*pick[\s:=-]*(\d+(?:\.\d+)?)/i
-/** Aditya sheet header: "on-loom-48" / "on loom 50" */
+/** Diner DIN sheet header: "on-loom-48" / "on loom 50" */
 const ON_LOOM_PICK_RE = /on[\s\-]*loom[\s\-:=]*(\d+(?:\.\d+)?)/i
 /** Yarn codes may be letters (HSY, ZAREE) or numeric denier/codes (37, 80/2). */
 const FEEDER_RE =
@@ -242,7 +243,7 @@ function scanDesignNumberCandidates(
     if (design) {
       let score = baseScore + 20
       if (lineIdx != null && lineIdx <= 2) score += 5
-      // Prefer Aditya / Design Number headers over phone/sidebar noise
+      // Prefer Design Number / DESIGNE-NUMBER headers over diner phone/sidebar noise
       if (/designe|design\s*number/i.test(text)) score += 5
       candidates.push({ value: design, quality, source: 'design_number_label', score })
     }
@@ -305,7 +306,7 @@ function extractDesignNumbers(
   lines.forEach((line, idx) => {
     candidates.push(...scanDesignNumberCandidates(line, 'ocr_text', 5, idx, lines.length))
 
-    // Aditya sheets often put label on one line and "JFG2247 BRT" on the next
+    // Diner DIN sheets often put label on one line and "JFG2247 BRT" on the next
     const bareLabel =
       /^(?:design[e]?[\s\-]*(?:number|no\.?|num)?|desi[\s\-]*(?:no\.?|number)?)\s*[-:=]?\s*$/i.test(
         line.trim(),

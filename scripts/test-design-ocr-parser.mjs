@@ -1,5 +1,5 @@
 /**
- * Design OCR parser tests — Format A/B + Colour 1/2/3 + Aditya Graphics real sheets.
+ * Design OCR parser tests — Format A/B + Colour 1/2/3 + diner DIN sheets (e.g. Aditya).
  * Run: node scripts/test-design-ocr-parser.mjs
  */
 
@@ -321,7 +321,7 @@ const weftPicSum = jfgColour.weftRows.reduce((s, r) => s + Number(r.pic), 0)
 assert(weftPicSum === 50, 'JFG2249 Total Weft PIC = 50')
 assert(extractLoomPick(formatJfg2249) !== String(weftPicSum), 'Loom Pick must not equal Weft PIC sum')
 
-/** Real Aditya Graphics sheet: DESIGNE-NUMBER + JFG2247 BRT + feeder-1/2 */
+/** Real diner DIN sheet (Aditya letterhead): DESIGNE-NUMBER + JFG2247 BRT + feeder-1/2 */
 const formatAditya = `
 www.adityagraphics.com
 9998309548

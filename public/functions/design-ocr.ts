@@ -82,6 +82,7 @@ Deno.serve(async (req) => {
     }
 
     const prompt = `You are reading a textile jacquard DESIGN / DIN reference sheet for costing.
+This is a DIN sheet from a diner (design vendor) — e.g. Aditya / Aditya Graphics is the DINER name on the letterhead, NOT a product/card name. Ignore diner branding.
 The photo may be rotated 90°/180° or taken at an angle — mentally rotate so text is upright, then extract.
 Extract ONLY costing-relevant fields. Return ONLY valid JSON (no markdown):
 
@@ -102,19 +103,19 @@ Extract ONLY costing-relevant fields. Return ONLY valid JSON (no markdown):
   "raw_text": "full OCR text of the document"
 }
 
-Rules — REAL ADITYA / JAQUARD SHEET LAYOUTS (all common):
-1) DESIGN NUMBER (required):
+Rules — DIN SHEET LAYOUTS FROM DINERS (all common):
+1) DESIGN / DIN NUMBER (required):
    - Labels: "Design Number - …", "DESIGNE-NUMBER" (often misspelled with extra E), "DESI / Design No."
    - Values often include a QUALITY SUFFIX: "JFG2247 BRT", "jfg1738-wxb", "JFG-1674-wxb", "Design Number-jfg1738-wxb".
    - designNumber.value = letters+digits ONLY (e.g. JFG2247, JFG1738, JFG1674). Put the suffix (BRT, WXB) into qualityName.value.
-   - NEVER use phone numbers (e.g. 9998309548), websites (adityagraphics.com), QR text, or Gmail/Yahoo chrome as the design number.
+   - NEVER use diner names (Aditya, Aditya Graphics), phone numbers (e.g. 9998309548), websites (adityagraphics.com), QR text, or Gmail/Yahoo chrome as the design number.
    - Filenames like jfg2247-50-brt.EP / jfg1738-wxb.jpg are strong hints for designNumber + qualityName.
-2) Feeder / Colour rows (dynamic count):
-   - Layout A (Aditya): "feeder-1" / "feeder-2" with yarn in coloured cell (hsy, tex) + Pick + Strings columns.
+2) Feeder / Colour rows (= filters; dynamic count 2, 3, …):
+   - Layout A (common diner print): "feeder-1" / "feeder-2" with yarn in coloured cell (hsy, tex) + Pick + Strings columns.
    - Layout B: "Colour 1" … "Colour 6" table with Pick / Strings; skip rows where Pick and Strings are both 0.
    - Layout C: column-wise colour swatches left-to-right = Feeder 1, 2, 3…
    - Map row/column N → feeders[N] + weftRows[N].pic in the SAME order. Yarn blank → yarnType "-". zaree/zari/jari → "ZARI". hsy→HSY, tex→TEX.
-3) TOTAL LOOM PICK:
+3) TOTAL LOOM PICK = sum of the feeder/filter picks (2 filters, 3 filters, whatever is printed):
    - Prefer explicit "Total" pick, "112-pick", "on-loom-48", "TOTAL LOOM PICK".
    - Else SUM of active feeder/colour Pick values → loomPick AND totalPick.
 4) Strings column is optional reference only — empty string OK; never invent strings.
