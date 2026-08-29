@@ -482,7 +482,7 @@ export function DashboardScreen({ onNavigate }: Props) {
 
   const quick: Array<{ label: string; screen: AppScreen; sub?: string; filter?: string; module?: import('../lib/nav').MainModuleId }> = [
     { label: 'New Customer Order', screen: 'order-to-program', filter: 'order-entry', module: 'order-to-program' },
-    { label: 'New DIN', screen: 'dto-intake', module: 'design-to-order' },
+    { label: 'New DIN', screen: 'design-wise-costing', module: 'design-to-order' },
     { label: 'New Program', screen: 'order-to-program', filter: 'program', module: 'order-to-program' },
     { label: 'Production Entry', screen: 'program-dispatch', sub: 'entry', module: 'program-dispatch' },
     { label: 'Checking Entry', screen: 'program-dispatch', sub: 'folding', module: 'program-dispatch' },

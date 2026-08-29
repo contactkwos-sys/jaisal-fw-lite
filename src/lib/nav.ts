@@ -133,7 +133,6 @@ export const MAIN_MODULES: MainModule[] = [
     mobileNav: true,
     navGroup: 'DESIGN',
     items: [
-      { id: 'din-intake', label: 'Design Intake', screen: 'dto-intake', hint: 'Upload · Photo · Gmail inbox' },
       {
         id: 'din-costing',
         label: 'DIN Costing',
@@ -172,7 +171,7 @@ export const MAIN_MODULES: MainModule[] = [
         id: 'legacy-design-register',
         label: 'Design Register (Old / Historical)',
         screen: 'design',
-        hint: 'Old design list — use Design Intake for new DINs',
+        hint: 'Old design list — use DIN Costing for new DINs',
       },
       {
         id: 'legacy-sample-card',
@@ -849,7 +848,7 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   'daily-pending-work': 'Daily Pending Work',
   notebook: 'Digital Factory Notebook',
   'ceo-data-review': 'CEO Data Review',
-  'dto-intake': 'Design Intake',
+  'dto-intake': 'DIN Costing',
   'dto-sample-job': 'Sample Job Card',
   'dto-tracking': 'Sample Tracking',
   'dto-order-booking': 'Customer Order',

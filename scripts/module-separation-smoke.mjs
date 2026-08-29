@@ -5,7 +5,6 @@
 import assert from 'node:assert/strict'
 
 const DESIGN_MASTER_SUBS = [
-  'din-intake',
   'din-costing',
   'formula-master',
   'rate-master',
@@ -24,7 +23,6 @@ const OTP_SUBS = [
 ]
 
 const SALESMAN_BLOCKED = [
-  'din-intake',
   'din-costing',
   'formula-master',
   'rate-master',
