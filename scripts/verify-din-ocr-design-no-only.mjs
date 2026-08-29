@@ -182,5 +182,36 @@ for (const bad of garbageNames) {
 
 console.log('PASS  Simulated OCR with garbage IO/SILI/FAT/EL/FE/FL → only Design No. filled')
 console.log('PASS  Weft Name + Feeder/Colour remain EMPTY after OCR apply')
+
+// ── 5. No UI file may still call applyOcrToCostingDraft / mapOcrToWeftRows ───
+const uiFiles = [
+  'src/pages/DesignWiseCosting.tsx',
+  'src/components/dinCosting/DinDesignImportSection.tsx',
+  'src/components/dinCosting/DinCostingViewOnly.tsx',
+  'src/App.tsx',
+  'src/lib/nav.ts',
+]
+for (const rel of uiFiles) {
+  const src = read(rel)
+  assert.ok(
+    !/\bapplyOcrToCostingDraft\b/.test(src),
+    `${rel} must not reference applyOcrToCostingDraft (old weft/feeder autofill)`,
+  )
+  assert.ok(
+    !/\bmapOcrToWeftRows\b/.test(src),
+    `${rel} must not reference mapOcrToWeftRows`,
+  )
+}
+// Payload construction in import section: only dinNumber from OCR
+assert.ok(
+  /dinNumber:\s*din/.test(importSrc),
+  'processFile must apply dinNumber from OCR designNumber',
+)
+assert.ok(
+  !/weft_name:\s*[^,\n]*ocr|feeder_label:\s*[^,\n]*ocr|loomPick:\s*ocr/i.test(importSrc),
+  'import section must not map OCR into weft_name / feeder_label / loomPick',
+)
+
+console.log('PASS  No DIN Costing UI path references applyOcrToCostingDraft / mapOcrToWeftRows')
 console.log('')
 console.log('All verify-din-ocr-design-no-only checks passed.')
