@@ -89,18 +89,23 @@ const PHONE_RE = /\b\d{10,}\b/
 const LOOM_PICK_RE =
   /(?:total\s+)?(?:loom[\s-]*pick|loom\s*pick)[\s:=-]*(\d+(?:\.\d+)?)/i
 const TOTAL_LOOM_PICK_RE = /total\s+loom[\s-]*pick[\s:=-]*(\d+(?:\.\d+)?)/i
-/** Diner DIN sheet header: "on-loom-48" / "on loom 50" */
-const ON_LOOM_PICK_RE = /on[\s\-]*loom[\s\-:=]*(\d+(?:\.\d+)?)/i
+/** Diner DIN sheet header: "on-loom-48" / "on loom 50" (OCR may garble "loom") */
+const ON_LOOM_PICK_RE = /on[\s\-]*l?o+m[\w]*[\s\-:=]*(\d+(?:\.\d+)?)/i
 /** Yarn codes may be letters (HSY, ZAREE) or numeric denier/codes (37, 80/2). */
 const FEEDER_RE =
   /(?:feeder|fd)[\s.-]*(\d+)\s*[=:\-]?\s*([A-Z0-9][A-Z0-9./-]{0,15})/gi
-/** Colour / Feeder N rows — allow "feeder-1" / "Colour 1" + yarn + Pick + Strings */
+/** Colour / Feeder N rows — allow OCR typos (Cotour, Coloum) and "feeder-1" */
 const COLOUR_ROW_RE =
-  /^(?:colour|color|col\.?|feeder|fd)[\s.\-]*(\d+)\s*(?:[|:.\-]\s*|\s+)(.*)$/i
+  /^(?:colou?r|color|col\.?|cotou?r|coloum|coum|feeder|fd)[\s.\-]*(\d+)\s*(?:[|:.\-]\s*|\s+)(.*)$/i
 const PICK_STRINGS_HEADER = /pick\s*strings|(?:\d+\s*[-–]?\s*pick).*(?:pick|strings)/i
 const TOTAL_LINE_RE = /^total\s*[:.]?\s*(\d+(?:\.\d+)?)\s*[/\s]\s*(\d+(?:\.\d+)?)/im
 const TOTAL_NEXT_LINE_RE = /^total\s*[:.]?\s*$/im
 const TOTAL_COLOUR_RE = /^total\s*[:.]?\s*(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)/im
+/** Fuzzy Total row from noisy OCR: "Tota … 48 | 4460" / "eo Total … 50.00 864" */
+const TOTAL_FUZZY_RE = /\btota[l1]?\b\D{0,24}(\d+(?:\.\d+)?)\D{1,6}(\d{2,5}(?:\.\d+)?)/i
+/** Standalone pick/strings pair after yarn token: "hsy 24 2230" / "hey = 24 | 2230" */
+const YARN_PICK_LINE_RE =
+  /\b([A-Za-z]{2,8})\b\s*[=:]?\s*(\d+(?:\.\d+)?)\s*[|/]?\s*(\d{2,5}(?:\.\d+)?)/
 
 /**
  * Normalize OCR design tokens to business DIN (letters+digits only).
@@ -398,8 +403,9 @@ export function extractColourTable(text: string): {
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
 
   for (const line of lines) {
-    const totalInline = line.match(TOTAL_COLOUR_RE) || line.match(TOTAL_LINE_RE)
-    if (totalInline && /^total/i.test(line)) {
+    const totalInline =
+      line.match(TOTAL_COLOUR_RE) || line.match(TOTAL_LINE_RE) || line.match(TOTAL_FUZZY_RE)
+    if (totalInline && /tota/i.test(line)) {
       totalPick = totalInline[1]
       totalStrings = totalInline[2]
       continue
@@ -420,10 +426,12 @@ export function extractColourTable(text: string): {
 
       let yarnRaw = rest
       const lastTwo = new RegExp(
-        `${pic.replace('.', '\\.')}\\s+${strings.replace('.', '\\.')}\\s*$`,
+        `${pic.replace('.', '\\.')}\\s*[|/]?\\s*${strings.replace('.', '\\.')}\\s*$`,
       )
       yarnRaw = yarnRaw.replace(lastTwo, '').trim()
-      yarnRaw = yarnRaw.replace(/^[\s|:.\-]+|[\s|:.\-]+$/g, '').trim()
+      yarnRaw = yarnRaw.replace(/^[\s|:.\-\[|=]+|[\s|:.\-\]]+$/g, '').trim()
+      // OCR often reads "hsy" as "hey"
+      if (/^hey$/i.test(yarnRaw)) yarnRaw = 'hsy'
       if (/^\d+(\.\d+)?$/.test(yarnRaw) || yarnRaw.length > 24) yarnRaw = ''
 
       entries.push({
@@ -435,6 +443,7 @@ export function extractColourTable(text: string): {
       })
     } else if (nums.length === 1 && Number(nums[0]) > 0) {
       let yarnRaw = rest.replace(nums[0], '').trim().replace(/^[\s|:.\-]+|[\s|:.\-]+$/g, '')
+      if (/^hey$/i.test(yarnRaw)) yarnRaw = 'hsy'
       if (/^\d+(\.\d+)?$/.test(yarnRaw)) yarnRaw = ''
       entries.push({
         no,
@@ -446,12 +455,47 @@ export function extractColourTable(text: string): {
     }
   }
 
+  // Fallback: yarn + pick + strings lines when Colour N labels were garbled by OCR
+  if (!entries.length) {
+    let autoNo = 1
+    for (const line of lines) {
+      if (/tota/i.test(line)) continue
+      const yarnPick = line.match(YARN_PICK_LINE_RE)
+      if (!yarnPick) continue
+      let yarn = yarnPick[1]
+      if (/^(pick|strings|total|colour|color|feeder|design|number|feet|loom|ontoom)/i.test(yarn)) {
+        continue
+      }
+      if (/^hey$/i.test(yarn)) yarn = 'hsy'
+      const pic = yarnPick[2]
+      const strings = yarnPick[3]
+      if (Number(pic) === 0 && Number(strings) === 0) continue
+      if (Number(pic) > 500) continue // likely strings-only misread
+      entries.push({
+        no: autoNo++,
+        yarn: normalizeYarnLabel(yarn),
+        pic,
+        strings: Number(strings) > 0 ? strings : '',
+        confidence: 'low',
+      })
+      if (autoNo > 6) break
+    }
+  }
+
+  if (!totalPick) {
+    const fuzzy = text.match(TOTAL_FUZZY_RE)
+    if (fuzzy) {
+      totalPick = fuzzy[1]
+      totalStrings = fuzzy[2]
+    }
+  }
+
   entries.sort((a, b) => a.no - b.no)
   return {
     feeders: entries.map((e) => ({
       feederNo: e.no,
       yarnType: e.yarn,
-      confidence: e.yarn === '-' ? 'low' : 'high',
+      confidence: e.yarn === '-' ? 'low' : e.confidence === 'low' ? 'low' : 'high',
       sourceLabel: `Colour ${e.no}`,
     })),
     weftRows: entries.map((e) => ({
@@ -518,6 +562,13 @@ function extractTotals(text: string): { totalPick: OcrField; totalStrings: OcrFi
     return {
       totalPick: { value: inline[1], confidence: 'high', source: 'total_line' },
       totalStrings: { value: inline[2], confidence: 'high', source: 'total_line' },
+    }
+  }
+  const fuzzy = text.match(TOTAL_FUZZY_RE)
+  if (fuzzy) {
+    return {
+      totalPick: { value: fuzzy[1], confidence: 'high', source: 'total_fuzzy' },
+      totalStrings: { value: fuzzy[2], confidence: 'low', source: 'total_fuzzy' },
     }
   }
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
@@ -662,37 +713,64 @@ export function mergeDesignOcrPayload(
 
 /** Downscale / recompress large camera photos so Edge Function + Anthropic stay under size/timeout limits. */
 async function prepareImageForOcr(file: File): Promise<{ base64: string; mediaType: string }> {
+  const blob = await renderImageBlob(file, 0)
+  if (!blob) return fileToBase64Raw(file)
+  return blobToBase64(blob)
+}
+
+async function blobToBase64(blob: Blob): Promise<{ base64: string; mediaType: string }> {
+  const buf = await blob.arrayBuffer()
+  const bytes = new Uint8Array(buf)
+  let binary = ''
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
+  return { base64: btoa(binary), mediaType: blob.type || 'image/jpeg' }
+}
+
+/** Render file to JPEG, optionally rotated 0/90/180/270° clockwise, with contrast boost for OCR. */
+async function renderImageBlob(file: File, rotateDeg: 0 | 90 | 180 | 270): Promise<Blob | null> {
   if (typeof createImageBitmap === 'undefined' || typeof OffscreenCanvas === 'undefined') {
-    return fileToBase64Raw(file)
+    return null
   }
   try {
-    // Honor EXIF orientation so phone photos of landscape DIN sheets are upright.
     let bitmap: ImageBitmap
     try {
       bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' } as ImageBitmapOptions)
     } catch {
       bitmap = await createImageBitmap(file)
     }
-    const maxEdge = 1600
+    const maxEdge = 1800
     const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height))
-    const w = Math.max(1, Math.round(bitmap.width * scale))
-    const h = Math.max(1, Math.round(bitmap.height * scale))
-    const canvas = new OffscreenCanvas(w, h)
+    const sw = Math.max(1, Math.round(bitmap.width * scale))
+    const sh = Math.max(1, Math.round(bitmap.height * scale))
+    const swap = rotateDeg === 90 || rotateDeg === 270
+    const cw = swap ? sh : sw
+    const ch = swap ? sw : sh
+    const canvas = new OffscreenCanvas(cw, ch)
     const ctx = canvas.getContext('2d')
     if (!ctx) {
       bitmap.close()
-      return fileToBase64Raw(file)
+      return null
     }
-    ctx.drawImage(bitmap, 0, 0, w, h)
+    ctx.fillStyle = '#fff'
+    ctx.fillRect(0, 0, cw, ch)
+    ctx.save()
+    if (rotateDeg === 90) {
+      ctx.translate(cw, 0)
+      ctx.rotate(Math.PI / 2)
+    } else if (rotateDeg === 180) {
+      ctx.translate(cw, ch)
+      ctx.rotate(Math.PI)
+    } else if (rotateDeg === 270) {
+      ctx.translate(0, ch)
+      ctx.rotate(-Math.PI / 2)
+    }
+    ctx.filter = 'contrast(1.25) saturate(0.15) brightness(1.05)'
+    ctx.drawImage(bitmap, 0, 0, sw, sh)
+    ctx.restore()
     bitmap.close()
-    const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.82 })
-    const buf = await blob.arrayBuffer()
-    const bytes = new Uint8Array(buf)
-    let binary = ''
-    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
-    return { base64: btoa(binary), mediaType: 'image/jpeg' }
+    return await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.88 })
   } catch {
-    return fileToBase64Raw(file)
+    return null
   }
 }
 
@@ -706,13 +784,63 @@ async function fileToBase64Raw(file: File): Promise<{ base64: string; mediaType:
   return { base64, mediaType }
 }
 
-async function ocrViaTesseract(file: File): Promise<string> {
+function scoreOcrParse(ocr: DesignOcrResult): number {
+  let s = 0
+  if (ocr.designNumber.value) s += 10
+  if (ocr.designNumber.confidence === 'high') s += 4
+  if (ocr.loomPick.value) s += 5
+  s += ocr.feeders.length * 3
+  s += ocr.weftRows.filter((r) => r.pic).length * 3
+  if (ocr.totalPick.value) s += 2
+  return s
+}
+
+/**
+ * Browser Tesseract fallback — try upright + 90° rotations (phone DIN sheet photos
+ * are often sideways). Pick the orientation that yields the best structured parse.
+ */
+async function ocrViaTesseract(
+  file: File,
+  hints?: { subject?: string; filename?: string },
+): Promise<{ text: string; parsed: DesignOcrResult }> {
+  const empty = { text: '', parsed: emptyDesignOcrResult() }
   try {
     const mod = await import('tesseract.js')
-    const result = await mod.recognize(file, 'eng')
-    return result.data.text || ''
+    const rotations: Array<0 | 90 | 180 | 270> = [0, 90, 270, 180]
+    let bestText = ''
+    let bestParsed = emptyDesignOcrResult()
+    let bestScore = -1
+
+    for (const deg of rotations) {
+      const blob = (await renderImageBlob(file, deg)) || (deg === 0 ? file : null)
+      if (!blob) continue
+      const input =
+        blob instanceof File
+          ? blob
+          : new File([blob], file.name || 'din-sheet.jpg', { type: blob.type || 'image/jpeg' })
+      try {
+        const result = await mod.recognize(input, 'eng')
+        const text = (result.data.text || '').trim()
+        if (!text) continue
+        const parsed = ensureLoomPickFromFeederSum(parseDesignReferenceText(text, hints))
+        const score = scoreOcrParse(parsed) + Math.min(3, Math.floor(text.length / 200))
+        if (score > bestScore) {
+          bestScore = score
+          bestText = text
+          bestParsed = parsed
+        }
+        // Early exit when DIN + at least one feeder/pick is solid
+        if (parsed.designNumber.value && (parsed.feeders.length >= 1 || parsed.loomPick.value)) {
+          break
+        }
+      } catch {
+        // try next rotation
+      }
+    }
+
+    return { text: bestText, parsed: bestParsed }
   } catch {
-    return ''
+    return empty
   }
 }
 
@@ -737,13 +865,13 @@ function attachReadMeta(
   return { ...result, readSource, readWarning }
 }
 
-function describeEdgeInvokeError(error: { message?: string } | null, data: unknown): string | undefined {
+function describeEdgeInvokeError(error: { message?: string; context?: Response } | null, data: unknown): string | undefined {
   if (data && typeof data === 'object' && 'error' in data && (data as { error?: unknown }).error) {
     const err = String((data as { error: unknown }).error)
     const detail =
       'detail' in (data as object) ? String((data as { detail?: unknown }).detail || '') : ''
     if (/ANTHROPIC_API_KEY/i.test(err)) {
-      return 'Design OCR Edge Function is live but ANTHROPIC_API_KEY is not set in Supabase secrets. Add the key, then retry — do not rely on browser OCR.'
+      return 'Vision OCR key missing (ANTHROPIC_API_KEY). Supabase → Edge Functions → Secrets में key डालें। तब तक browser OCR से DIN sheet पढ़ने की कोशिश हो रही है।'
     }
     return detail ? `${err}: ${detail}` : err
   }
@@ -755,7 +883,29 @@ function describeEdgeInvokeError(error: { message?: string } | null, data: unkno
   if (/not found|404/i.test(msg)) {
     return 'design-ocr Edge Function is not deployed on this Supabase project.'
   }
+  if (/non-2xx|Edge Function returned/i.test(msg)) {
+    return 'Design OCR service error — trying browser OCR fallback on this photo…'
+  }
   return msg
+}
+
+/** Read JSON body from FunctionsHttpError.context when invoke returns non-2xx. */
+async function readEdgeErrorPayload(
+  error: { message?: string; context?: Response } | null,
+): Promise<unknown> {
+  const res = error?.context
+  if (!res || typeof res.json !== 'function') return null
+  try {
+    // Clone so we don't lock the body if called twice
+    return await res.clone().json()
+  } catch {
+    try {
+      const text = await res.clone().text()
+      return text ? { error: text.slice(0, 300) } : null
+    } catch {
+      return null
+    }
+  }
 }
 
 /** Invoke design-ocr edge function; browser Tesseract only as last-resort emergency fallback. */
@@ -788,11 +938,18 @@ export async function readDesignReference(
         filename: hints?.filename || file.name,
       },
     })
-    edgeError = describeEdgeInvokeError(error, data)
+    const errorBody = data || (await readEdgeErrorPayload(error as { context?: Response }))
+    edgeError = describeEdgeInvokeError(error as { message?: string; context?: Response }, errorBody)
     if (!edgeError && data) {
       const text = String((data as { raw_text?: string }).raw_text || '')
       const merged = mergeDesignOcrPayload(data as Partial<DesignOcrResult>, text, hints)
-      return attachReadMeta(ensureLoomPickFromFeederSum(merged), 'edge')
+      if (ocrHasDetectedFields(merged)) {
+        return attachReadMeta(ensureLoomPickFromFeederSum(merged), 'edge')
+      }
+      // Vision returned empty — still try browser OCR on rotations before giving up
+      edgeError =
+        edgeError ||
+        'Vision OCR returned no DIN fields — trying browser OCR on rotated views…'
     }
   } catch (e) {
     edgeError = e instanceof Error ? e.message : 'Design OCR service unavailable'
@@ -802,18 +959,32 @@ export async function readDesignReference(
     }
   }
 
-  // Last resort only — user asked not to depend on browser OCR for design sheets
-  const text = await ocrViaTesseract(file)
-  const parsed = ensureLoomPickFromFeederSum(parseDesignReferenceText(text, hints))
+  // Last resort — multi-orientation Tesseract (works when ANTHROPIC_API_KEY is missing)
+  const { text, parsed } = await ocrViaTesseract(file, hints)
+  const withSum = ensureLoomPickFromFeederSum(parsed)
+  // Filename / subject often carry the DIN even when image OCR is weak
+  if (!withSum.designNumber.value.trim()) {
+    const fromHints = parseDesignReferenceText(
+      [hints?.subject, hints?.filename, file.name].filter(Boolean).join('\n'),
+      hints,
+    )
+    if (fromHints.designNumber.value) {
+      withSum.designNumber = fromHints.designNumber
+      if (fromHints.qualityName.value && !withSum.qualityName.value) {
+        withSum.qualityName = fromHints.qualityName
+      }
+    }
+  }
+
   const warning =
-    edgeError && !ocrHasDetectedFields(parsed)
-      ? `${edgeError} Browser OCR also could not read this sheet — enter Design No. / feeder picks manually.`
-      : edgeError
-        ? `${edgeError} Showing weak browser-OCR fallback — review every field.`
-        : !ocrHasDetectedFields(parsed)
-          ? 'Could not read design sheet from this image. Try a clearer photo.'
+    edgeError && !ocrHasDetectedFields(withSum)
+      ? `${edgeError} Browser OCR भी DIN नंबर / pick नहीं पढ़ सका — Design No. और feeder picks मैन्युअली भरें।`
+      : edgeError && ocrHasDetectedFields(withSum)
+        ? `${edgeError} Browser OCR से भर दिया — कृपया Design No. और loom pick चेक करें।`
+        : !ocrHasDetectedFields(withSum)
+          ? 'Could not read design sheet from this image. Try a clearer, upright photo.'
           : undefined
-  return attachReadMeta(parsed, 'tesseract', warning)
+  return attachReadMeta({ ...withSum, rawText: text || withSum.rawText }, 'tesseract', warning)
 }
 
 /** Map OCR review → weft rows. Pick → PIC only. Strings are NEVER used for width/costing. */
