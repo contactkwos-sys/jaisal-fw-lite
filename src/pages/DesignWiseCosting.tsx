@@ -220,8 +220,6 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
   const [ocrConfirmedJson, setOcrConfirmedJson] = useState<DesignOcrResult | null>(null)
   const [missingRates, setMissingRates] = useState<MissingRateItem[]>([])
   const [savedCreatedAt, setSavedCreatedAt] = useState<string | null>(null)
-  /** OCR filled Design No. — show Please confirm until user edits */
-  const [designNoNeedsConfirm, setDesignNoNeedsConfirm] = useState(false)
 
   const warpYarnOptions = useMemo(() => rateMasterItemNames(masterRates, 'warp'), [masterRates])
   const weftYarnOptions = useMemo(() => rateMasterItemNames(masterRates, 'weft'), [masterRates])
@@ -445,7 +443,6 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     setSavedId(String(header.id))
     setSavedCreatedAt(header.created_at ? String(header.created_at) : null)
     setDinNumber(String(header.din_number || ''))
-    setDesignNoNeedsConfirm(false)
     setQualityName(String(header.quality_name || ''))
     setCostingDate(String(header.costing_date || todayISO()))
     setDiaryUrl((header.diary_image_url as string | null) || null)
@@ -685,7 +682,6 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     setLengthError(null)
     setError(null)
     setMessage(null)
-    setDesignNoNeedsConfirm(false)
   }
 
   async function handleDiaryFile(file: File | null) {
@@ -1275,8 +1271,8 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
   }
 
   /**
-   * OCR upload → Design No. ONLY.
-   * Never sets warps, wefts, loomPick, quality from OCR, or missingRates from OCR yarns.
+   * Section 1 upload → attach reference image ONLY.
+   * Never sets Design No., warps, wefts, loomPick, or rates from OCR (OCR removed).
    */
   async function handleOcrApply(payload: DinOcrApplyPayload) {
     skipDinAutoloadRef.current = true
@@ -1285,17 +1281,8 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     setImportSource(payload.importSource)
     setOcrExtractedJson(null)
     setOcrConfirmedJson(null)
-    // Explicitly do NOT touch warps / wefts / loomPick / missingRates from OCR
     setMissingRates([])
-
-    const din = payload.dinNumber.trim()
-    if (din) {
-      setDinNumber(din)
-      setDesignNoNeedsConfirm(true)
-      setMessage(`Design No. detected: ${din} — please confirm. Enter Warp/Weft manually.`)
-    } else {
-      setDesignNoNeedsConfirm(false)
-    }
+    setMessage('DIN sheet photo attached — type DESI / Design No. manually below.')
 
     requestAnimationFrame(() => {
       document.getElementById('dwc-design-details')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -1451,7 +1438,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         <div>
           <h1>DIN Costing</h1>
           <p className="text-muted">
-            Upload photo for Design No. only → enter Warp/Weft manually (Rate Master) → Internal Cost + Final Customer Rate
+            Attach DIN sheet photo → type Design No. + Warp/Weft manually (Rate Master) → Internal Cost + Final Customer Rate
           </p>
         </div>
         {savedId ? (
@@ -1465,12 +1452,6 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         <DinDesignImportSection
           disabled={isReadOnly}
           onApply={handleOcrApply}
-          onOpenExisting={(din) => {
-            skipDinAutoloadRef.current = false
-            setDesignNoNeedsConfirm(false)
-            setDinNumber(din)
-            void loadExisting(din).catch((e: Error) => setError(e.message))
-          }}
           onOpenRateMaster={
             onNavigate ? () => onNavigate({ screen: 'rate-master', module: 'masters' }) : undefined
           }
@@ -1517,17 +1498,11 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         <h2 className="section-title">2 · Design Details</h2>
         <div className="dwc-details-row">
           <label className="field">
-            <span className="text-muted">
-              DESI / Design No. (formerly DIN)
-              {designNoNeedsConfirm ? <em className="dwc-low-conf"> Please confirm</em> : null}
-            </span>
+            <span className="text-muted">DESI / Design No. (formerly DIN)</span>
             <input
               list="dwc-design-list"
               value={dinNumber}
-              onChange={(e) => {
-                setDesignNoNeedsConfirm(false)
-                onDinSelect(e.target.value)
-              }}
+              onChange={(e) => onDinSelect(e.target.value)}
               onBlur={() => {
                 if (skipDinAutoloadRef.current) {
                   skipDinAutoloadRef.current = false

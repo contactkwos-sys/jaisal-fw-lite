@@ -1,7 +1,6 @@
 /**
- * Verification: DIN Costing OCR must ONLY fill Design No.
- * Simulates an OCR result with garbage weft/feeder names (IO, SILI, FAT…)
- * and asserts the DIN Costing apply path never populates those fields.
+ * Verification: DIN Costing Section 1 is photo-attach only (no OCR).
+ * Design No. / Weft / Feeder / Pick stay fully manual.
  *
  * Run: node scripts/verify-din-ocr-design-no-only.mjs
  */
@@ -16,7 +15,7 @@ function read(rel) {
   return readFileSync(join(root, rel), 'utf8')
 }
 
-// ── 1. Design Intake page must be gone ─────────────────────────────────────
+// ── 1. Design Intake page must stay gone ───────────────────────────────────
 assert.equal(
   existsSync(join(root, 'src/screens/DinIntakeScreen.tsx')),
   false,
@@ -39,48 +38,38 @@ const navSrc = read('src/lib/nav.ts')
 assert.ok(!/label:\s*'Design Intake'/.test(navSrc), 'nav must not list Design Intake')
 assert.ok(!/id:\s*'din-intake'/.test(navSrc), 'nav must not have din-intake item')
 
-const hubSrc = read('src/screens/DesignToOrderHub.tsx')
-assert.ok(!hubSrc.includes("'Design Intake'"), 'Design hub must not link Design Intake')
-assert.ok(!hubSrc.includes("screen: 'dto-intake'"), 'Design hub must not navigate to dto-intake')
-
 console.log('PASS  Design Intake page/route/nav removed')
 
-// ── 2. Import section must not call applyOcrToCostingDraft / mapOcrToWeftRows ─
+// ── 2. Section 1: three upload buttons, no OCR ─────────────────────────────
 const importSrc = read('src/components/dinCosting/DinDesignImportSection.tsx')
-assert.ok(
-  !/from ['"].*designOcr['"]/.test(importSrc) ||
-    !/import\s*\{[^}]*\bapplyOcrToCostingDraft\b/.test(importSrc),
-  'DinDesignImportSection must not import applyOcrToCostingDraft',
-)
-assert.ok(
-  !/import\s*\{[^}]*\bmapOcrToWeftRows\b/.test(importSrc),
-  'DinDesignImportSection must not import mapOcrToWeftRows',
-)
-assert.ok(
-  !/import\s*\{[^}]*\bsumWeftPics\b/.test(importSrc),
-  'DinDesignImportSection must not import sumWeftPics',
-)
-assert.ok(!/\bonLiveSync\b/.test(importSrc), 'Live OCR sync of weft rows must be gone')
-assert.ok(!/\bGmailImportPanel\b/.test(importSrc), 'Gmail OCR import UI must be gone from Section 1')
-assert.ok(
-  !/export type DinOcrApplyPayload = \{[^}]*\bwarps\s*:/.test(importSrc.replace(/\n/g, ' ')),
-  'payload type must not declare warps',
-)
-assert.ok(
-  !/export type DinOcrApplyPayload = \{[^}]*\bwefts\s*:/.test(importSrc.replace(/\n/g, ' ')),
-  'payload type must not declare wefts',
-)
-assert.ok(
-  !/export type DinOcrApplyPayload = \{[^}]*\bloomPick\s*:/.test(importSrc.replace(/\n/g, ' ')),
-  'payload type must not declare loomPick',
-)
-assert.ok(!/\bwarps\s*:/.test(importSrc), 'must not assign warps in apply payload object')
-assert.ok(!/\bwefts\s*:/.test(importSrc), 'must not assign wefts in apply payload object')
-assert.ok(!/\bloomPick\s*:/.test(importSrc), 'must not assign loomPick in apply payload object')
 
-console.log('PASS  DinDesignImportSection has Design-No-only payload (no warps/wefts/loomPick)')
+assert.ok(importSrc.includes('Upload from Photos'), 'must have Upload from Photos button')
+assert.ok(importSrc.includes('Upload from File'), 'must have Upload from File button')
+assert.ok(importSrc.includes('Take Photo'), 'must have Take Photo button')
+assert.ok(importSrc.includes('capture="environment"'), 'Take Photo must use camera capture')
+assert.ok(
+  importSrc.includes('Drag & drop DIN sheet photo here'),
+  'desktop drag-drop zone must remain',
+)
 
-// ── 3. DesignWiseCosting handleOcrApply must not set warps/wefts/loomPick ────
+assert.ok(!/\breadDesignReference\b/.test(importSrc), 'must not call readDesignReference')
+assert.ok(!/\bapplyOcrToCostingDraft\b/.test(importSrc), 'must not call applyOcrToCostingDraft')
+assert.ok(!/\bmapOcrToWeftRows\b/.test(importSrc), 'must not call mapOcrToWeftRows')
+assert.ok(!/\bonLiveSync\b/.test(importSrc), 'live OCR sync must be gone')
+assert.ok(!/\bGmailImportPanel\b/.test(importSrc), 'Gmail OCR UI must be gone')
+assert.ok(!/\bDetected Design No\b/.test(importSrc), 'must not show OCR-detected Design No.')
+assert.ok(!/\bPlease confirm\b/.test(importSrc), 'OCR Please confirm prompt must be gone')
+assert.ok(!/\bloomPick\s*:/.test(importSrc), 'must not assign loomPick')
+assert.ok(!/\bwefts\s*:/.test(importSrc), 'must not assign wefts')
+assert.ok(!/\bwarps\s*:/.test(importSrc), 'must not assign warps')
+assert.ok(
+  /dinNumber:\s*['"]{2}|dinNumber:\s*''/.test(importSrc),
+  'upload payload must pass empty dinNumber (no OCR fill)',
+)
+
+console.log('PASS  Section 1 has 3 upload buttons and no OCR / Design No. extraction')
+
+// ── 3. handleOcrApply attaches image only — never Design No. / wefts ────────
 const costingSrc = read('src/pages/DesignWiseCosting.tsx')
 assert.ok(!costingSrc.includes('handleOcrLiveSync'), 'handleOcrLiveSync must be removed')
 assert.ok(!costingSrc.includes('onLiveSync='), 'onLiveSync prop must not be passed')
@@ -93,125 +82,68 @@ const body = applyFn[0]
 assert.ok(!body.includes('setWarps'), 'handleOcrApply must not call setWarps')
 assert.ok(!body.includes('setWefts'), 'handleOcrApply must not call setWefts')
 assert.ok(!body.includes('setLoomPick'), 'handleOcrApply must not call setLoomPick')
-assert.ok(!body.includes('payload.warps'), 'handleOcrApply must not read payload.warps')
-assert.ok(!body.includes('payload.wefts'), 'handleOcrApply must not read payload.wefts')
-assert.ok(!body.includes('payload.loomPick'), 'handleOcrApply must not read payload.loomPick')
-assert.ok(!body.includes('applyOcrToCostingDraft'), 'handleOcrApply must not call applyOcrToCostingDraft')
-assert.ok(body.includes('setDinNumber'), 'handleOcrApply must set Design No.')
-assert.ok(body.includes('setDesignNoNeedsConfirm(true)'), 'must prompt Please confirm')
+assert.ok(!body.includes('setDinNumber'), 'handleOcrApply must not set Design No. from upload')
+assert.ok(!body.includes('payload.dinNumber'), 'handleOcrApply must ignore payload.dinNumber')
+assert.ok(body.includes('setDesignImageUrl'), 'handleOcrApply must attach design image')
+assert.ok(
+  !body.includes('setDesignNoNeedsConfirm(true)'),
+  'must not prompt Please confirm from OCR',
+)
 
-console.log('PASS  handleOcrApply only touches Design No. (+ image) — never Warp/Weft/Loom Pick')
+console.log('PASS  handleOcrApply attaches photo only — Design No. stays manual')
 
-// ── 4. Simulate OCR garbage → apply path result ─────────────────────────────
-/**
- * Mirrors the production apply contract: given OCR that wrongly detected
- * weft names IO/SILI/FAT/EL/FE/FL, the costing form state after apply must
- * keep weft_name and feeder_label empty.
- */
-function simulateDesignNoOnlyApply(ocrGarbage, formBefore) {
-  // Production DinOcrApplyPayload — Design No. only
+// ── 4. Simulate upload with garbage OCR-like names → nothing filled ─────────
+function simulatePhotoAttachOnly(formBefore) {
   const payload = {
-    dinNumber: ocrGarbage.designNumber,
+    dinNumber: '', // production always passes empty
     designImageUrl: 'https://example.test/din.jpg',
     importSource: 'photo',
-    designNumberConfidence: 'high',
   }
-  // Production handleOcrApply behavior (simplified mirror)
-  const form = {
+  return {
     ...formBefore,
-    dinNumber: payload.dinNumber.trim() ? payload.dinNumber.trim() : formBefore.dinNumber,
+    // Design No. NOT set from upload
+    dinNumber: formBefore.dinNumber,
     designImageUrl: payload.designImageUrl,
-    // CRITICAL: warps/wefts/loomPick untouched
     warps: formBefore.warps,
     wefts: formBefore.wefts,
     loomPick: formBefore.loomPick,
-    missingRates: [],
   }
-  return form
-}
-
-const garbageOcr = {
-  designNumber: 'JFG2249',
-  // These are the exact class of bad OCR yarns from the live bug report
-  feeders: [
-    { feederNo: 1, yarnType: 'IO' },
-    { feederNo: 2, yarnType: 'SILI' },
-    { feederNo: 3, yarnType: 'FAT' },
-    { feederNo: 4, yarnType: 'EL' },
-    { feederNo: 5, yarnType: 'FE' },
-    { feederNo: 6, yarnType: 'FL' },
-  ],
-  weftRows: [
-    { pic: '37' },
-    { pic: '25' },
-    { pic: '12' },
-  ],
-  loomPick: '112',
 }
 
 const before = {
   dinNumber: '',
   loomPick: '',
-  warps: [{ yarn_name: '', base_denier: '', tar_ends: '' }],
+  warps: [{ yarn_name: '' }],
   wefts: [
     { feeder_label: '', weft_name: '', pic: '' },
     { feeder_label: '', weft_name: '', pic: '' },
   ],
-  missingRates: [],
 }
 
-const after = simulateDesignNoOnlyApply(garbageOcr, before)
-
-assert.equal(after.dinNumber, 'JFG2249', 'Design No. must be filled from OCR')
-assert.equal(after.loomPick, '', 'TOTAL LOOM PICK must stay empty (not OCR 112)')
-assert.equal(after.warps[0].yarn_name, '', 'Warp Yarn Name must stay empty')
+const after = simulatePhotoAttachOnly(before)
+assert.equal(after.dinNumber, '', 'Design No. must stay empty after photo attach')
+assert.equal(after.loomPick, '', 'TOTAL LOOM PICK must stay empty')
+assert.equal(after.designImageUrl, 'https://example.test/din.jpg', 'photo must attach')
 for (const row of after.wefts) {
-  assert.equal(row.weft_name, '', `Weft Name must stay empty, got "${row.weft_name}"`)
-  assert.equal(row.feeder_label, '', `Feeder/Colour must stay empty, got "${row.feeder_label}"`)
-  assert.equal(row.pic, '', `PIC must stay empty, got "${row.pic}"`)
-}
-assert.deepEqual(after.missingRates, [], 'Missing Rates must not list garbage OCR yarns')
-
-const garbageNames = ['IO', 'SILI', 'FAT', 'EL', 'FE', 'FL']
-for (const bad of garbageNames) {
-  assert.ok(
-    !after.wefts.some((w) => w.weft_name === bad),
-    `Weft Name must not be OCR garbage "${bad}"`,
-  )
+  assert.equal(row.weft_name, '', 'Weft Name must stay empty')
+  assert.equal(row.feeder_label, '', 'Feeder/Colour must stay empty')
+  assert.equal(row.pic, '', 'PIC must stay empty')
 }
 
-console.log('PASS  Simulated OCR with garbage IO/SILI/FAT/EL/FE/FL → only Design No. filled')
-console.log('PASS  Weft Name + Feeder/Colour remain EMPTY after OCR apply')
+console.log('PASS  Simulated upload → photo attached, Design No. / Weft / Feeder empty')
 
-// ── 5. No UI file may still call applyOcrToCostingDraft / mapOcrToWeftRows ───
-const uiFiles = [
+// ── 5. No UI path references OCR apply helpers ─────────────────────────────
+for (const rel of [
   'src/pages/DesignWiseCosting.tsx',
   'src/components/dinCosting/DinDesignImportSection.tsx',
   'src/components/dinCosting/DinCostingViewOnly.tsx',
-  'src/App.tsx',
-  'src/lib/nav.ts',
-]
-for (const rel of uiFiles) {
+]) {
   const src = read(rel)
-  assert.ok(
-    !/\bapplyOcrToCostingDraft\b/.test(src),
-    `${rel} must not reference applyOcrToCostingDraft (old weft/feeder autofill)`,
-  )
-  assert.ok(
-    !/\bmapOcrToWeftRows\b/.test(src),
-    `${rel} must not reference mapOcrToWeftRows`,
-  )
+  assert.ok(!/\bapplyOcrToCostingDraft\b/.test(src), `${rel}: no applyOcrToCostingDraft`)
+  assert.ok(!/\bmapOcrToWeftRows\b/.test(src), `${rel}: no mapOcrToWeftRows`)
 }
-// Payload construction in import section: only dinNumber from OCR
-assert.ok(
-  /dinNumber:\s*din/.test(importSrc),
-  'processFile must apply dinNumber from OCR designNumber',
-)
-assert.ok(
-  !/weft_name:\s*[^,\n]*ocr|feeder_label:\s*[^,\n]*ocr|loomPick:\s*ocr/i.test(importSrc),
-  'import section must not map OCR into weft_name / feeder_label / loomPick',
-)
 
-console.log('PASS  No DIN Costing UI path references applyOcrToCostingDraft / mapOcrToWeftRows')
+console.log('PASS  No DIN Costing UI path uses OCR text extraction')
 console.log('')
 console.log('All verify-din-ocr-design-no-only checks passed.')
+console.log('OUTCOME: OCR fully removed — Design No. is manual; Section 1 is photo attach only.')
