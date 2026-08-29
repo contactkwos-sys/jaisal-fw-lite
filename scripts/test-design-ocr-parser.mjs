@@ -52,10 +52,41 @@ function isBlankYarnName(name) {
 }
 
 function normalizeYarnLabel(raw) {
-  const t = raw.trim()
+  let t = (raw || '').trim()
   if (isBlankYarnName(t)) return '-'
+  t = t.replace(/\s+/g, ' ')
+  if (/^hey$/i.test(t)) t = 'hsy'
+  if (/^saree$/i.test(t)) t = 'zaree'
+  const letterDenier = t.match(/^([A-Za-z]{2,10})\s*[-/]?\s*(\d{2,4})$/)
+  if (letterDenier && Number(letterDenier[2]) >= 50 && Number(letterDenier[2]) <= 9999) {
+    const base = letterDenier[1].toUpperCase()
+    if (/^(ZAREE|ZARI|JARI|ZARIE)$/.test(base)) return `ZARI-${letterDenier[2]}`
+    return `${base}-${letterDenier[2]}`
+  }
+  const denierLetter = t.match(/^(\d{2,4})\s*[-/]?\s*([A-Za-z]{2,10})$/)
+  if (denierLetter && Number(denierLetter[1]) >= 50 && Number(denierLetter[1]) <= 9999) {
+    return `${denierLetter[1]} ${denierLetter[2].toUpperCase()}`
+  }
   if (/^(ZAREE|ZARI|JARI|ZARIE)$/i.test(t)) return 'ZARI'
-  return t.toUpperCase().replace(/\s+/g, ' ')
+  return t.toUpperCase()
+}
+
+function splitYarnPickStrings(rest) {
+  const cleaned = (rest || '').trim()
+  if (!cleaned) return null
+  const nums = [...cleaned.matchAll(/(\d+(?:\.\d+)?)/g)].map((x) => x[1])
+  if (nums.length < 2) return null
+  const pic = nums[nums.length - 2]
+  const strings = nums[nums.length - 1]
+  if (Number(pic) === 0 && Number(strings) === 0) return null
+  let yarnRaw = cleaned
+    .replace(new RegExp(`${pic.replace('.', '\\.')}\\s*[|/]?\\s*${strings.replace('.', '\\.')}\\s*$`), '')
+    .trim()
+  if (/^\d+(\.\d+)?$/.test(yarnRaw)) {
+    const d = Number(yarnRaw)
+    yarnRaw = d >= 50 && d <= 9999 ? yarnRaw : ''
+  }
+  return { yarn: normalizeYarnLabel(yarnRaw), pic, strings: Number(strings) > 0 ? strings : '' }
 }
 
 function extractDesignNumbers(text, filename) {
@@ -194,25 +225,14 @@ function extractColourTable(text) {
     if (!colour) continue
     const no = Number(colour[1])
     if (!no || no > 6 || entries.some((e) => e.no === no)) continue
-    const rest = (colour[2] || '').trim()
-    const nums = [...rest.matchAll(/(\d+(?:\.\d+)?)/g)].map((x) => x[1])
-    if (nums.length >= 2) {
-      const pic = nums[nums.length - 2]
-      const strings = nums[nums.length - 1]
-      if (Number(pic) === 0 && Number(strings) === 0) continue
-      let yarnRaw = rest
-      const lastTwo = new RegExp(
-        `${pic.replace('.', '\\.')}\\s+${strings.replace('.', '\\.')}\\s*$`,
-      )
-      yarnRaw = yarnRaw.replace(lastTwo, '').trim().replace(/^[\s|:.\-]+|[\s|:.\-]+$/g, '')
-      if (/^\d+(\.\d+)?$/.test(yarnRaw) || yarnRaw.length > 24) yarnRaw = ''
-      entries.push({
-        no,
-        yarn: normalizeYarnLabel(yarnRaw),
-        pic,
-        strings: Number(strings) > 0 ? strings : '',
-      })
-    }
+    const split = splitYarnPickStrings(colour[2] || '')
+    if (!split) continue
+    entries.push({
+      no,
+      yarn: split.yarn,
+      pic: split.pic,
+      strings: split.strings,
+    })
   }
   entries.sort((a, b) => a.no - b.no)
   return {
@@ -445,6 +465,25 @@ Total
   assert(pics.every((p) => p === '37'), 'JFG1674 review prefill 37/37/37')
 }
 
+assert(normalizeYarnLabel('hsy 550') === 'HSY-550', 'hsy 550 → HSY-550')
+assert(normalizeYarnLabel('300 tex') === '300 TEX', '300 tex → 300 TEX')
+{
+  const s = splitYarnPickStrings('hsy 550 24 2230')
+  assert(s && s.yarn === 'HSY-550' && s.pic === '24' && s.strings === '2230', 'split HSY-550 24 2230')
+  const s2 = splitYarnPickStrings('tex 300 24 2230')
+  assert(s2 && s2.yarn === 'TEX-300' && s2.pic === '24', 'split TEX-300')
+}
+{
+  const c1738denier = extractColourTable(`
+Colour 1  hsy 550  24  2230
+Colour 2  tex 300  24  2230
+Total          48  4460
+`)
+  assert(c1738denier.feeders[0].yarnType === 'HSY-550', `Colour1 yarn got ${c1738denier.feeders[0].yarnType}`)
+  assert(c1738denier.feeders[1].yarnType === 'TEX-300', `Colour2 yarn got ${c1738denier.feeders[1].yarnType}`)
+  assert(c1738denier.weftRows[0].pic === '24' && c1738denier.weftRows[1].pic === '24', 'denier rows keep PIC 24')
+}
+
 console.log(
-  '✓ Design OCR parser tests passed (A/B + hyphen + Colour + Aditya DESIGNE-NUMBER + jfg1738 + noisy phone + JFG1674 review)',
+  '✓ Design OCR parser tests passed (A/B + hyphen + Colour + Aditya + jfg1738 + JFG1674 + HSY-550/TEX-300)',
 )
