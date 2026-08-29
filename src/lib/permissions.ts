@@ -144,7 +144,6 @@ const DISPATCH_OTP_SUBS: string[] = ['order-status', 'otp-reports']
 
 /** Design team — full design workflow, no legacy register unless CEO */
 const DESIGN_TEAM_SUBS: string[] = [
-  'din-intake',
   'din-costing',
   'formula-master',
   'rate-master',
@@ -502,7 +501,6 @@ export function firstAllowedLanding(roleName: string): {
 /** Screens belonging to Design Master — salesman must not open these */
 export const DESIGN_MASTER_SCREENS = new Set([
   'dto-hub',
-  'dto-intake',
   'dto-sample-job',
   'dto-tracking',
   'dto-promotion',

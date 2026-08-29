@@ -44,7 +44,6 @@ import { LoanTrackerScreen } from './screens/LoanTrackerScreen'
 import { GebReadingScreen } from './screens/GebReadingScreen'
 import { OrdersPendingScreen } from './screens/OrdersPendingScreen'
 import { DesignToOrderHub } from './screens/DesignToOrderHub'
-import { DinIntakeScreen } from './screens/DinIntakeScreen'
 import { DtoSampleJobScreen } from './screens/DtoSampleJobScreen'
 import { DtoSampleTrackingScreen } from './screens/DtoSampleTrackingScreen'
 import { OrderToProgramScreen } from './screens/OrderToProgramScreen'
@@ -389,7 +388,8 @@ function AuthenticatedApp() {
         />
       ) : null}
       {tab === 'dto-hub' ? <DesignToOrderHub onNavigate={go} /> : null}
-      {tab === 'dto-intake' ? <DinIntakeScreen onNavigate={go} /> : null}
+      {/* Design Intake removed — legacy dto-intake opens DIN Costing */}
+      {tab === 'dto-intake' ? <DesignWiseCosting onNavigate={go} /> : null}
       {tab === 'dto-sample-job' ? <DtoSampleJobScreen onNavigate={go} initialDinId={filter} /> : null}
       {tab === 'dto-tracking' ? <DtoSampleTrackingScreen onNavigate={go} initialDinId={filter} /> : null}
       {tab === 'dto-order-booking' ? (
