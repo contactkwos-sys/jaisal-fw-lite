@@ -39,18 +39,14 @@ Redeploy / deploy these from the Supabase Dashboard (Edge Functions → Deploy f
 | `roles-gate` | https://raw.githubusercontent.com/contactkwos-sys/jaisal-fw-lite/main/supabase/functions/roles-gate/index.ts | Redeployed (update/delete actions) |
 | `pin-reset` | https://raw.githubusercontent.com/contactkwos-sys/jaisal-fw-lite/main/supabase/functions/pin-reset/index.ts | Deployed |
 | `gmail-intake` | https://raw.githubusercontent.com/contactkwos-sys/jaisal-fw-lite/main/supabase/functions/gmail-intake/index.ts | Deployed (Gmail OAuth + import) |
-| `design-ocr` | https://raw.githubusercontent.com/contactkwos-sys/jaisal-fw-lite/main/supabase/functions/design-ocr/index.ts | **Deploy required** — reads JFG / Pick / Strings from design sheets (Design Intake + DIN Costing) |
-| `invoice-ocr` | https://raw.githubusercontent.com/contactkwos-sys/jaisal-fw-lite/main/supabase/functions/invoice-ocr/index.ts | Optional — purchase invoice OCR |
+| `design-ocr` | ~~legacy Edge Vision~~ | **Unused** — DIN Costing Design Import uses **browser Tesseract.js only** (no API key, no Edge call) |
+| `invoice-ocr` | https://raw.githubusercontent.com/contactkwos-sys/jaisal-fw-lite/main/supabase/functions/invoice-ocr/index.ts | Optional — purchase invoice OCR (separate from DIN) |
 
 Also mirrored under `public/functions/` for copy/paste deploy.
 
-**Manual deploy needed (if CLI deploy unavailable):** `pin-login`, `roles-gate`, `pin-reset`, `gmail-intake`, **`design-ocr`**
+**Manual deploy needed (if CLI deploy unavailable):** `pin-login`, `roles-gate`, `pin-reset`, `gmail-intake`
 
-**Design OCR edge function secret** (Supabase Dashboard → Edge Functions → design-ocr → Secrets):
-
-- `ANTHROPIC_API_KEY` — Anthropic API key for Claude Vision (required for reliable design sheet reading on phone photos)
-
-Without `design-ocr` deployed, Design Intake falls back to browser Tesseract which often cannot read jacquard design sheets.
+**DIN Costing Design Import** reads sheets in the browser with **Tesseract.js** only — **no Anthropic key, no `design-ocr` Edge Function, no Supabase secret**. Fields stay editable when auto-read is incomplete.
 
 **Gmail edge function secrets** (Supabase Dashboard → Edge Functions → gmail-intake → Secrets):
 

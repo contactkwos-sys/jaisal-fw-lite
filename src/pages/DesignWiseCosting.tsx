@@ -115,10 +115,9 @@ const HISTORY_SELECT =
   'id, din_number, quality_name, costing_date, design_length_mtr, usable_length_mtr, yarn_cost_per_mtr, total_pic, pic_conversion_rate, conversion_charge, mu_percent, after_mu_per_mtr, gst_percent, gst_amount, final_cost_per_mtr, ceo_final_selling_rate, diary_image_url, status, is_locked, created_at, updated_at, created_by, updated_by'
 
 /**
- * Diary OCR: best-effort via dynamic `tesseract.js` import.
+ * Diary OCR: best-effort via dynamic `tesseract.js` import (browser, no API key).
  * If OCR quality is poor on handwritten pages, fields stay editable.
- * For higher accuracy, set VITE_OCR_API_URL to an external OCR endpoint
- * (may require an API key from the user / env).
+ * Optional: VITE_OCR_API_URL for an external diary OCR endpoint (not used for DIN sheets).
  */
 async function ocrDiaryImage(file: File): Promise<string> {
   const endpoint = import.meta.env.VITE_OCR_API_URL as string | undefined

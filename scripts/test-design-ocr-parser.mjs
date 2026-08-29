@@ -18,18 +18,31 @@ const TOTAL_COLOUR_RE = /^total\s*[:.]?\s*(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)/im
 const COLOUR_ROW_RE = /^(?:colour|color|col\.?|feeder|fd)[\s.\-]*(\d+)\s*(?:[|:.\-]\s*|\s+)(.*)$/i
 
 function normalizeOcrDesignNumber(raw) {
-  const t = (raw || '')
+  let t = (raw || '')
     .trim()
     .toUpperCase()
     .replace(/[\[\]]/g, '')
     .replace(/\.JPG|\.JPEG|\.PNG|\.EP|\.PDF$/i, '')
   if (!t) return { design: '', quality: '' }
+  t = t.replace(/^9(FG[\s\-]?\d{3,6})/, 'J$1')
   const withQuality = t.match(/^([A-Z]{2,5})[\s\-]*(\d{3,6})(?:[\s\-]+([A-Z0-9]{1,8}))$/)
-  if (withQuality) return { design: `${withQuality[1]}${withQuality[2]}`, quality: withQuality[3] }
+  if (withQuality) {
+    let design = `${withQuality[1]}${withQuality[2]}`
+    if (/^[I19]FG\d{3,6}$/.test(design)) design = `J${design.slice(1)}`
+    return { design, quality: withQuality[3] }
+  }
   const compact = t.replace(/[\s\-]+/g, '').match(/^([A-Z]{2,5}\d{3,6})$/)
-  if (compact) return { design: compact[1], quality: '' }
+  if (compact) {
+    let design = compact[1]
+    if (/^[I19]FG\d{3,6}$/.test(design)) design = `J${design.slice(1)}`
+    return { design, quality: '' }
+  }
   const loose = t.match(/([A-Z]{2,5})[\s\-]*(\d{3,6})(?:[\s\-]+([A-Z0-9]{1,8}))?/)
-  if (loose) return { design: `${loose[1]}${loose[2]}`, quality: loose[3] || '' }
+  if (loose) {
+    let design = `${loose[1]}${loose[2]}`
+    if (/^[I19]FG\d{3,6}$/.test(design)) design = `J${design.slice(1)}`
+    return { design, quality: loose[3] || '' }
+  }
   return { design: '', quality: '' }
 }
 
@@ -344,6 +357,8 @@ assert(adityaTable.weftRows[0].pic === '25.00' && adityaTable.weftRows[1].pic ==
 assert(adityaTable.totalPick === '50.00', 'Aditya total pick 50')
 assert(normalizeOcrDesignNumber('JFG2247 BRT').design === 'JFG2247', 'normalize BRT')
 assert(normalizeOcrDesignNumber('jfg1738-wxb').quality === 'WXB', 'normalize wxb')
+assert(normalizeOcrDesignNumber('IFG2247 BRT').design === 'JFG2247', 'OCR I→J on JFG prefix')
+assert(normalizeOcrDesignNumber('9FG2247').design === 'JFG2247', 'OCR 9→J on JFG prefix')
 
 /** Real Colour sheet: Design Number-jfg1738-wxb + on-loom-48 */
 const format1738 = `
