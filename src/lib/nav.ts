@@ -849,7 +849,6 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   'daily-pending-work': 'Daily Pending Work',
   notebook: 'Digital Factory Notebook',
   'ceo-data-review': 'CEO Data Review',
-  'dto-intake': 'Design Intake',
   'dto-sample-job': 'Sample Job Card',
   'dto-tracking': 'Sample Tracking',
   'dto-order-booking': 'Customer Order',
