@@ -380,6 +380,16 @@
   border-color: color-mix(in srgb, var(--warning) 30%, var(--line));
 }
 
+.dwc-status-local-draft {
+  color: var(--teal-deep, var(--teal));
+  background: color-mix(in srgb, var(--teal) 14%, var(--surface));
+  border-color: color-mix(in srgb, var(--teal) 35%, var(--line));
+}
+
+.dwc-draft-restored {
+  margin: 0 0 0.75rem;
+}
+
 .dwc-status-final {
   color: var(--success);
   background: var(--success-soft);

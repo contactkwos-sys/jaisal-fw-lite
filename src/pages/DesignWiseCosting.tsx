@@ -47,6 +47,11 @@ import {
 } from '../lib/rateMaster'
 import { rateMasterItemNames } from '../lib/dinIntakeCosting'
 import {
+  clearDinLocalDraft,
+  loadDinLocalDraft,
+  saveDinLocalDraft,
+} from '../lib/dinCostingLocalDraft'
+import {
   DinDesignImportSection,
   type DinOcrApplyPayload,
   type MissingRateItem,
@@ -213,6 +218,9 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
   /** After "Save As New", skip one DIN blur auto-load so the form is not overwritten. */
   const skipDinAutoloadRef = useRef(false)
   const liveSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** Prevent writing empty form over localStorage before restore runs. */
+  const localDraftReadyRef = useRef(false)
+  const localDraftRestoredRef = useRef(false)
   const [masterRates, setMasterRates] = useState<RateMasterRow[]>([])
   const [designImageUrl, setDesignImageUrl] = useState<string | null>(null)
   const [sampleImageUrl, setSampleImageUrl] = useState<string | null>(null)
@@ -222,6 +230,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
   const [ocrConfirmedJson, setOcrConfirmedJson] = useState<DesignOcrResult | null>(null)
   const [missingRates, setMissingRates] = useState<MissingRateItem[]>([])
   const [savedCreatedAt, setSavedCreatedAt] = useState<string | null>(null)
+  const [draftRestoredNote, setDraftRestoredNote] = useState(false)
 
   const warpYarnOptions = useMemo(() => rateMasterItemNames(masterRates, 'warp'), [masterRates])
   const weftYarnOptions = useMemo(() => rateMasterItemNames(masterRates, 'weft'), [masterRates])
@@ -617,8 +626,111 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     const din = initialDin.trim()
     setDinNumber(din)
     setHistoryFilters((f) => ({ ...f, din }))
+    localDraftReadyRef.current = true
     void loadExisting(din).catch((e: Error) => setError(e.message))
   }, [initialDin, loadExisting])
+
+  /** Restore unsaved local draft (never written to Saved Design Costings). */
+  useEffect(() => {
+    if (localDraftRestoredRef.current) return
+    if (viewOnly || !canEdit) {
+      localDraftReadyRef.current = true
+      return
+    }
+    if (isDinFilter(initialDin)) {
+      localDraftReadyRef.current = true
+      return
+    }
+    localDraftRestoredRef.current = true
+    const draft = loadDinLocalDraft(session?.user?.id)
+    if (!draft) {
+      localDraftReadyRef.current = true
+      return
+    }
+    skipDinAutoloadRef.current = true
+    setDinNumber(draft.dinNumber || '')
+    setQualityName(draft.qualityName || '')
+    setCostingDate(draft.costingDate || todayISO())
+    setDesignLength(draft.designLength || '')
+    setLoomPick(draft.loomPick || '')
+    setWarps(draft.warps?.length ? draft.warps : [emptyWarp(1)])
+    setWefts(draft.wefts?.length ? draft.wefts : [emptyWeft(1)])
+    setPicConversionRate(draft.picConversionRate || '0.45')
+    setMuPercent(draft.muPercent || '0')
+    setGstPercent(draft.gstPercent || '0')
+    setWastageMtr(draft.wastageMtr || '10')
+    setWastagePercent(draft.wastagePercent || '10')
+    setCeoFinalSellingRate(draft.ceoFinalSellingRate || '')
+    setFixedCostPerMtr(draft.fixedCostPerMtr || '')
+    setDesiredProfitPerMtr(draft.desiredProfitPerMtr || '')
+    setProductionMeters(draft.productionMeters || '')
+    setDesignImageUrl(draft.designImageUrl || null)
+    setSampleImageUrl(draft.sampleImageUrl || null)
+    setDiaryUrl(draft.diaryUrl || null)
+    setImportSource(draft.importSource || null)
+    setDraftRestoredNote(true)
+    setMessage('Draft restored — not saved yet. Click Save Draft / Finalize to keep it.')
+    localDraftReadyRef.current = true
+    // session id is enough; avoid re-running on every profile tick
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.id, initialDin, viewOnly, canEdit])
+
+  /** Autosave unsaved form to localStorage (not DB / Saved list). */
+  useEffect(() => {
+    if (!localDraftReadyRef.current) return
+    if (viewOnly || !canEdit || isLocked || savedId) return
+    const t = window.setTimeout(() => {
+      saveDinLocalDraft(session?.user?.id, {
+        dinNumber,
+        qualityName,
+        costingDate,
+        designLength,
+        loomPick,
+        warps,
+        wefts,
+        picConversionRate,
+        muPercent,
+        gstPercent,
+        wastageMtr,
+        wastagePercent,
+        ceoFinalSellingRate,
+        fixedCostPerMtr,
+        desiredProfitPerMtr,
+        productionMeters,
+        designImageUrl,
+        sampleImageUrl,
+        diaryUrl,
+        importSource,
+      })
+    }, 400)
+    return () => window.clearTimeout(t)
+  }, [
+    session?.user?.id,
+    viewOnly,
+    canEdit,
+    isLocked,
+    savedId,
+    dinNumber,
+    qualityName,
+    costingDate,
+    designLength,
+    loomPick,
+    warps,
+    wefts,
+    picConversionRate,
+    muPercent,
+    gstPercent,
+    wastageMtr,
+    wastagePercent,
+    ceoFinalSellingRate,
+    fixedCostPerMtr,
+    desiredProfitPerMtr,
+    productionMeters,
+    designImageUrl,
+    sampleImageUrl,
+    diaryUrl,
+    importSource,
+  ])
 
   const filteredHistory = useMemo(() => {
     const dinQ = historyFilters.din.trim().toLowerCase()
@@ -684,6 +796,8 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     setLengthError(null)
     setError(null)
     setMessage(null)
+    setDraftRestoredNote(false)
+    clearDinLocalDraft(session?.user?.id)
   }
 
   async function handleDiaryFile(file: File | null) {
@@ -1200,6 +1314,8 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
           setMessage(
             `Costing saved to DIN ${din} · Final ${fmtInr(totals.finalCostPerMtr)}/mtr (design register sync: ${designErr.message})`,
           )
+          clearDinLocalDraft(session?.user?.id)
+          setDraftRestoredNote(false)
           await refreshHistory()
           return
         }
@@ -1207,6 +1323,8 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
 
       await refreshHistory()
       const idHint = costingId ? ` · ID ${String(costingId).slice(0, 8)}` : ''
+      clearDinLocalDraft(session?.user?.id)
+      setDraftRestoredNote(false)
       setMessage(
         finalize
           ? `Saved successfully — Costing finalized & locked for ${din}${idHint} · CEO rate ${fmtInr(n(ceoFinalSellingRate) || totals.finalCostPerMtr)}/mtr`
@@ -1543,8 +1661,16 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
           <span className={`dwc-status-chip dwc-status-${status}`}>
             {isLocked ? 'Finalized · Locked' : status === 'final' ? 'Finalized' : 'Draft'}
           </span>
+        ) : draftRestoredNote ? (
+          <span className="dwc-status-chip dwc-status-local-draft">Draft restored</span>
         ) : null}
       </header>
+
+      {draftRestoredNote && !savedId ? (
+        <p className="form-ok text-sage dwc-draft-restored" role="status">
+          Draft restored — local only (not in Saved Design Costings until you Save / Finalize).
+        </p>
+      ) : null}
 
       {!isReadOnly ? (
         <DinDesignImportSection
