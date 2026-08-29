@@ -701,8 +701,9 @@
 
 .dwc-import-actions {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.5rem;
+  max-width: 320px;
 }
 
 .dwc-import-btn {
@@ -725,6 +726,12 @@
 .dwc-import-btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.dwc-import-preview {
+  margin-top: 0.75rem;
+  max-height: 220px;
+  min-height: 120px;
 }
 
 .dwc-design-drop {
@@ -962,7 +969,8 @@
 
 @media (max-width: 768px) {
   .dwc-import-actions {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
+    max-width: none;
   }
 
   .dwc-ocr-layout {
