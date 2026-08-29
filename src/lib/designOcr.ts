@@ -182,6 +182,23 @@ export function isBlankYarnName(name: string | null | undefined): boolean {
   return !v || v === '-' || v === '—' || v === '–' || v === '.' || v === '_'
 }
 
+/** True when OCR yarn cell is noise (timestamps, punctuation soup) — not a real yarn code. */
+export function isGarbageYarnLabel(name: string | null | undefined): boolean {
+  const v = (name || '').trim()
+  if (isBlankYarnName(v)) return false
+  if (v.length > 16) return true
+  if (/[\[\]\\|_~]|\d{1,2}\/\d{1,2}\/\d{2,4}|:\d{2}\s*(AM|PM)/i.test(v)) return true
+  if ((v.match(/[^A-Za-z0-9\s\-.\/]/g) || []).length >= 2) return true
+  // Scattered single letters: "LD AD S A"
+  if ((v.match(/\b[A-Za-z]\b/g) || []).length >= 3) return true
+  // Must look like a yarn token (letters, optional digits) — reject random words soup
+  if (!/^[A-Za-z]{2,10}(\s*-?\s*\d{2,4})?$|^\d{2,4}\s+[A-Za-z]{2,10}$/i.test(v.replace(/\s+/g, ' '))) {
+    // Allow known short codes without denier
+    if (!/^[A-Za-z]{2,8}$/i.test(v)) return true
+  }
+  return false
+}
+
 /** Normalize common OCR yarn spellings for Rate Master match.
  * Keeps denier/count suffixes: HSY-550, 300 TEX, TEX 300.
  */
@@ -680,25 +697,54 @@ export function suggestEqualPics(loom: number, rowCount: number): string {
  * pre-fill low-confidence review rows so the user can confirm instead of a blank table.
  */
 export function ensureReviewFeederRows(ocr: DesignOcrResult): DesignOcrResult {
-  const hasFeeders = ocr.feeders.length >= 1
-  const hasWefts = ocr.weftRows.some((r) => (r.pic || '').trim() !== '')
+  // Drop OCR noise rows (punctuation soup / timestamps) so equal-PIC review can apply
+  const cleanFeeders = ocr.feeders
+    .filter((f) => !isGarbageYarnLabel(f.yarnType))
+    .map((f) =>
+      isGarbageYarnLabel(f.yarnType) ? f : { ...f, yarnType: isBlankYarnName(f.yarnType) ? '-' : f.yarnType },
+    )
+  const paired = cleanFeeders.map((f, i) => ({
+    feeder: f,
+    weft: ocr.weftRows[ocr.feeders.findIndex((x) => x.feederNo === f.feederNo)] || ocr.weftRows[i],
+  }))
+  const sanePairs = paired.filter((p) => {
+    const pic = Number(p.weft?.pic || 0)
+    return pic > 0 && pic <= 200
+  })
+  const usable =
+    sanePairs.length >= 1 &&
+    sanePairs.every((p) => !isGarbageYarnLabel(p.feeder.yarnType)) &&
+    // Prefer real yarns or clean blank cells — reject if every yarn is garbage-filtered empty and pics look random
+    (sanePairs.some((p) => !isBlankYarnName(p.feeder.yarnType)) ||
+      sanePairs.length <= 3)
+
+  const cleanedOcr: DesignOcrResult = usable
+    ? {
+        ...ocr,
+        feeders: sanePairs.map((p) => p.feeder),
+        weftRows: sanePairs.map((p) => p.weft || { pic: '', strings: '', confidence: 'low' as const }),
+      }
+    : { ...ocr, feeders: [], weftRows: [] }
+
+  const hasFeeders = cleanedOcr.feeders.length >= 1
+  const hasWefts = cleanedOcr.weftRows.some((r) => (r.pic || '').trim() !== '')
   if (hasFeeders && hasWefts) {
-    // Still flag low-confidence rows for review UI
-    const needsFlag = ocr.feeders.some((f) => f.confidence === 'low') ||
-      ocr.weftRows.some((r) => r.confidence === 'low')
-    if (!needsFlag) return ocr
+    const needsFlag =
+      cleanedOcr.feeders.some((f) => f.confidence === 'low' || isBlankYarnName(f.yarnType)) ||
+      cleanedOcr.weftRows.some((r) => r.confidence === 'low')
+    if (!needsFlag) return cleanedOcr
     return {
-      ...ocr,
+      ...cleanedOcr,
       readWarning:
-        ocr.readWarning ||
+        cleanedOcr.readWarning ||
         'Some Feeder/Colour or Pick rows are low confidence — please confirm before Confirm.',
     }
   }
 
-  const loom = Number(ocr.loomPick.value) || Number(ocr.totalPick.value) || 0
-  const inferred = inferColourRowCount(ocr.rawText || '')
+  const loom = Number(cleanedOcr.loomPick.value) || Number(cleanedOcr.totalPick.value) || 0
+  const inferred = inferColourRowCount(cleanedOcr.rawText || '')
   let rowCount = hasFeeders
-    ? Math.max(ocr.feeders.length, ocr.weftRows.length, inferred || 0)
+    ? Math.max(cleanedOcr.feeders.length, cleanedOcr.weftRows.length, inferred || 0)
     : inferred || 3
 
   // Prefer 3 colours for typical 48–200 loom jacquard sheets when nothing else known
@@ -712,8 +758,8 @@ export function ensureReviewFeederRows(ocr: DesignOcrResult): DesignOcrResult {
   const feeders: DesignOcrFeeder[] = []
   const weftRows: DesignOcrWeftRow[] = []
   for (let i = 1; i <= rowCount; i++) {
-    const existingF = ocr.feeders.find((f) => f.feederNo === i)
-    const existingW = ocr.weftRows[i - 1]
+    const existingF = cleanedOcr.feeders.find((f) => f.feederNo === i)
+    const existingW = cleanedOcr.weftRows[i - 1]
     feeders.push(
       existingF || {
         feederNo: i,
@@ -731,7 +777,7 @@ export function ensureReviewFeederRows(ocr: DesignOcrResult): DesignOcrResult {
   }
 
   // Recover ZARI on Colour 2 when OCR saw zaree/zari anywhere
-  const raw = ocr.rawText || ''
+  const raw = cleanedOcr.rawText || ''
   if (/\bzaree\b|\bzari\b|\bjari\b/i.test(raw)) {
     const idx = feeders.findIndex((f) => f.feederNo === 2)
     if (idx >= 0 && (feeders[idx].yarnType === '-' || !feeders[idx].yarnType)) {
@@ -745,11 +791,11 @@ export function ensureReviewFeederRows(ocr: DesignOcrResult): DesignOcrResult {
   }
 
   return {
-    ...ocr,
+    ...cleanedOcr,
     feeders,
     weftRows,
     readWarning:
-      ocr.readWarning ||
+      cleanedOcr.readWarning ||
       'Feeder/Colour & Pick rows need review — values were estimated from TOTAL LOOM PICK; confirm before Confirm.',
   }
 }
@@ -1147,11 +1193,21 @@ async function ocrViaTesseract(
           const text = (result.data.text || '').trim()
           if (!text) continue
           const merged = mergeColourParse(bestParsed, text, hints)
-          if (merged.feeders.length > bestParsed.feeders.length) {
-            bestParsed = merged
+          const mergedClean = ensureReviewFeederRows(merged)
+          // Only keep table crop if it adds real colour yarns or clean pics — not OCR soup
+          const addedRealYarn = mergedClean.feeders.some(
+            (f) => !isBlankYarnName(f.yarnType) && !isGarbageYarnLabel(f.yarnType),
+          )
+          const betterThanBefore =
+            (mergedClean.feeders.length > 0 && bestParsed.feeders.length === 0) ||
+            addedRealYarn ||
+            (mergedClean.weftRows.filter((r) => r.pic).length > bestParsed.weftRows.filter((r) => r.pic).length &&
+              !mergedClean.feeders.some((f) => isGarbageYarnLabel(f.yarnType)))
+          if (betterThanBefore) {
+            bestParsed = mergedClean
             bestText = [bestText, text].filter(Boolean).join('\n---table---\n')
           }
-          if (bestParsed.feeders.length >= 2) break
+          if (bestParsed.feeders.length >= 2 && addedRealYarn) break
         } catch {
           // continue
         }
