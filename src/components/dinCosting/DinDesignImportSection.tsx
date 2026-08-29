@@ -6,7 +6,7 @@ import {
   emptyDesignOcrResult,
   ensureLoomPickFromFeederSum,
   normalizeYarnLabel,
-  readDesignReference,
+  readDinDesignSheet,
   readDesignReferenceFromUrl,
   sumWeftPics,
   uploadDesignReferenceImage,
@@ -108,7 +108,12 @@ export function DinDesignImportSection({
       setDesignPreviewUrl(imageUrl)
       setImportSource(source)
 
-      const ocr = ensureLoomPickFromFeederSum(await readDesignReference(file, hints))
+      const ocr = ensureLoomPickFromFeederSum(
+        await readDinDesignSheet(file, {
+          ...hints,
+          filename: hints?.filename || file.name,
+        }),
+      )
       setOcrExtracted(JSON.parse(JSON.stringify(ocr)) as DesignOcrResult)
       setOcrDraft(ocr)
       if (ocr.readWarning) setError(ocr.readWarning)
@@ -318,7 +323,7 @@ export function DinDesignImportSection({
     <section className="dwc-panel dwc-import-panel dwc-compact-block">
       <h2 className="section-title">1 · Design Import</h2>
       <p className="text-muted2 dwc-import-hint">
-        Upload a DIN sheet photo → browser OCR (Tesseract, free, no API key) fills Design No.,
+        Upload a DIN sheet photo → one shared browser OCR (Tesseract, free, no API key) fills Design No.,
         Feeder/Colour + PIC, and TOTAL LOOM PICK. Review / edit below, then Confirm.
       </p>
 

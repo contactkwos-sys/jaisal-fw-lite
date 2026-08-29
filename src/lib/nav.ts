@@ -133,12 +133,17 @@ export const MAIN_MODULES: MainModule[] = [
     mobileNav: true,
     navGroup: 'DESIGN',
     items: [
-      { id: 'din-intake', label: 'Design Intake', screen: 'dto-intake', hint: 'Upload · Photo · Gmail inbox' },
       {
         id: 'din-costing',
         label: 'DIN Costing',
         screen: 'design-wise-costing',
-        hint: 'Jacquard warp/weft costing — CEO sale rate',
+        hint: 'Import photo → OCR → warp/weft costing (single page)',
+      },
+      {
+        id: 'din-intake',
+        label: 'Design Intake (opens DIN Costing)',
+        screen: 'design-wise-costing',
+        hint: 'Redirect — use DIN Costing Design Import',
       },
       {
         id: 'formula-master',
@@ -172,7 +177,7 @@ export const MAIN_MODULES: MainModule[] = [
         id: 'legacy-design-register',
         label: 'Design Register (Old / Historical)',
         screen: 'design',
-        hint: 'Old design list — use Design Intake for new DINs',
+        hint: 'Old design list — use DIN Costing for new designs',
       },
       {
         id: 'legacy-sample-card',
@@ -830,6 +835,7 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   'sample-register': 'Sample Register (Archive)',
   'beam-remaining': 'Beam Remaining',
   'design-wise-costing': 'DIN Costing',
+  'dto-intake': 'DIN Costing',
   'formula-master': 'Formula Master',
   'rate-master': 'Rate Master',
   'design-catalog': 'Design Catalog',

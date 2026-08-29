@@ -182,15 +182,83 @@ export function isBlankYarnName(name: string | null | undefined): boolean {
   return !v || v === '-' || v === '—' || v === '–' || v === '.' || v === '_'
 }
 
-/** Normalize common OCR yarn spellings for Rate Master match. */
+/** Normalize common OCR yarn spellings for Rate Master match.
+ * Keeps denier/count suffixes: HSY-550, 300 TEX, TEX 300.
+ */
 export function normalizeYarnLabel(raw: string): string {
-  const t = raw.trim()
+  let t = (raw || '').trim()
   if (isBlankYarnName(t)) return '-'
-  const upper = t.toUpperCase().replace(/\s+/g, ' ')
+  t = t.replace(/\|/g, ' ').replace(/\s+/g, ' ').trim()
+  if (/^hey$/i.test(t)) t = 'hsy'
+  if (/^saree$/i.test(t)) t = 'zaree'
+
+  // "hsy 550" / "HSY-550" / "hsy550"
+  const letterDenier = t.match(/^([A-Za-z]{2,10})\s*[-/]?\s*(\d{2,4})$/)
+  if (letterDenier && Number(letterDenier[2]) >= 50 && Number(letterDenier[2]) <= 9999) {
+    const base = letterDenier[1].toUpperCase()
+    if (/^(ZAREE|ZARI|JARI|ZARIE)$/.test(base)) return `ZARI-${letterDenier[2]}`
+    return `${base}-${letterDenier[2]}`
+  }
+  // "300 tex" / "300-TEX"
+  const denierLetter = t.match(/^(\d{2,4})\s*[-/]?\s*([A-Za-z]{2,10})$/)
+  if (denierLetter && Number(denierLetter[1]) >= 50 && Number(denierLetter[1]) <= 9999) {
+    const base = denierLetter[2].toUpperCase()
+    if (/^(ZAREE|ZARI|JARI|ZARIE)$/.test(base)) return `${denierLetter[1]} ZARI`
+    return `${denierLetter[1]} ${base}`
+  }
+
+  const upper = t.toUpperCase()
   if (/^(ZAREE|ZARI|JARI|ZARIE|जरी)$/i.test(t) || upper === 'ZAREE' || upper === 'ZARI' || upper === 'JARI') {
     return 'ZARI'
   }
   return upper
+}
+
+/**
+ * From a Colour-row remainder (yarn + pick + strings), pull yarn label including denier
+ * when OCR emits "hsy 550 24 2230" or "tex 300 24 2230".
+ */
+export function splitYarnPickStrings(rest: string): { yarn: string; pic: string; strings: string } | null {
+  const cleaned = (rest || '').trim()
+  if (!cleaned) return null
+  const nums = [...cleaned.matchAll(/(\d+(?:\.\d+)?)/g)].map((x) => x[1])
+  if (nums.length >= 2) {
+    const pic = nums[nums.length - 2]
+    const strings = nums[nums.length - 1]
+    if (Number(pic) === 0 && Number(strings) === 0) return null
+
+    let yarnRaw = cleaned
+    const lastTwo = new RegExp(
+      `${pic.replace('.', '\\.')}\\s*[|/]?\\s*${strings.replace('.', '\\.')}\\s*$`,
+    )
+    yarnRaw = yarnRaw.replace(lastTwo, '').trim()
+    yarnRaw = yarnRaw.replace(/^[\s|:.\-\[|=]+|[\s|:.\-\]]+$/g, '').trim()
+
+    // If yarn still has a trailing denier number (hsy 550), keep it in the label
+    // If yarn is only a denier digit left because letters OCR-failed, drop it
+    if (/^\d+(\.\d+)?$/.test(yarnRaw)) {
+      // "300 24 2230" with missing "tex" — keep denier only if plausible
+      const d = Number(yarnRaw)
+      yarnRaw = d >= 50 && d <= 9999 ? yarnRaw : ''
+    }
+    if (yarnRaw.length > 28) yarnRaw = ''
+
+    return {
+      yarn: normalizeYarnLabel(yarnRaw),
+      pic,
+      strings: Number(strings) > 0 ? strings : '',
+    }
+  }
+  if (nums.length === 1 && Number(nums[0]) > 0) {
+    let yarnRaw = cleaned.replace(nums[0], '').trim().replace(/^[\s|:.\-]+|[\s|:.\-]+$/g, '')
+    if (/^\d+(\.\d+)?$/.test(yarnRaw)) yarnRaw = ''
+    return {
+      yarn: normalizeYarnLabel(yarnRaw),
+      pic: nums[0],
+      strings: '',
+    }
+  }
+  return null
 }
 
 function emptyField(): OcrField {
@@ -436,9 +504,7 @@ export function extractColourTable(text: string): {
       const no = Number(pm[1])
       if (!no || no > 6 || entries.some((e) => e.no === no)) continue
       let yarnRaw = (pm[2] || '').trim().replace(/^[\s|:.\-\[\]=]+|[\s|:.\-\[\]]+$/g, '')
-      if (/^(ul|ar|ea|n\/a|na)$/i.test(yarnRaw) || yarnRaw.length > 16) yarnRaw = ''
-      if (/^hey$/i.test(yarnRaw)) yarnRaw = 'hsy'
-      if (/^saree$/i.test(yarnRaw)) yarnRaw = 'zaree'
+      if (/^(ul|ar|ea|n\/a|na)$/i.test(yarnRaw) || yarnRaw.length > 28) yarnRaw = ''
       const pic = pm[3]
       if (Number(pic) === 0) continue
       entries.push({
@@ -466,43 +532,15 @@ export function extractColourTable(text: string): {
     if (!no || no > 6) continue
     if (entries.some((e) => e.no === no)) continue
 
-    const rest = (colour[2] || '').trim()
-    const nums = [...rest.matchAll(/(\d+(?:\.\d+)?)/g)].map((x) => x[1])
-    if (nums.length >= 2) {
-      const pic = nums[nums.length - 2]
-      const strings = nums[nums.length - 1]
-      if (Number(pic) === 0 && Number(strings) === 0) continue
-
-      let yarnRaw = rest
-      const lastTwo = new RegExp(
-        `${pic.replace('.', '\\.')}\\s*[|/]?\\s*${strings.replace('.', '\\.')}\\s*$`,
-      )
-      yarnRaw = yarnRaw.replace(lastTwo, '').trim()
-      yarnRaw = yarnRaw.replace(/^[\s|:.\-\[|=]+|[\s|:.\-\]]+$/g, '').trim()
-      if (/^hey$/i.test(yarnRaw)) yarnRaw = 'hsy'
-      if (/^saree$/i.test(yarnRaw)) yarnRaw = 'zaree'
-      if (/^\d+(\.\d+)?$/.test(yarnRaw) || yarnRaw.length > 24) yarnRaw = ''
-
-      entries.push({
-        no,
-        yarn: normalizeYarnLabel(yarnRaw),
-        pic,
-        strings: Number(strings) > 0 ? strings : '',
-        confidence: 'high',
-      })
-    } else if (nums.length === 1 && Number(nums[0]) > 0) {
-      let yarnRaw = rest.replace(nums[0], '').trim().replace(/^[\s|:.\-]+|[\s|:.\-]+$/g, '')
-      if (/^hey$/i.test(yarnRaw)) yarnRaw = 'hsy'
-      if (/^saree$/i.test(yarnRaw)) yarnRaw = 'zaree'
-      if (/^\d+(\.\d+)?$/.test(yarnRaw)) yarnRaw = ''
-      entries.push({
-        no,
-        yarn: normalizeYarnLabel(yarnRaw),
-        pic: nums[0],
-        strings: '',
-        confidence: 'low',
-      })
-    }
+    const split = splitYarnPickStrings(colour[2] || '')
+    if (!split) continue
+    entries.push({
+      no,
+      yarn: split.yarn,
+      pic: split.pic,
+      strings: split.strings,
+      confidence: split.strings || !isBlankYarnName(split.yarn) ? 'high' : 'low',
+    })
   }
 
   // Sparse PSM: Colour N labels + nearby bare pick numbers
@@ -530,23 +568,43 @@ export function extractColourTable(text: string): {
     }
   }
 
-  // Fallback: yarn + pick + strings lines when Colour N labels were garbled by OCR
+  // Fallback: yarn + optional denier + pick + strings when Colour N labels were garbled by OCR
   if (!entries.length) {
     let autoNo = 1
     for (const line of lines) {
       if (/tota/i.test(line)) continue
+      // Prefer "hsy 550 24 2230" / "tex 300 24 2230" via shared splitter
+      const looseColour = line.match(
+        /^(?:c+olou?r?s?|color|colowr|feeder|fd)?[\s.\-]*\d*\s*(.*)$/i,
+      )
+      const split = splitYarnPickStrings(looseColour?.[1] || line)
+      if (split && !isBlankYarnName(split.yarn) && Number(split.pic) > 0 && Number(split.pic) <= 500) {
+        const yarnTok = split.yarn.split(/[\s-]/)[0]
+        if (/^(pick|strings|total|colour|color|feeder|design|number|feet|loom|ontoom)$/i.test(yarnTok)) {
+          continue
+        }
+        entries.push({
+          no: autoNo++,
+          yarn: split.yarn,
+          pic: split.pic,
+          strings: split.strings,
+          confidence: 'low',
+        })
+        if (autoNo > 6) break
+        continue
+      }
       const yarnPick = line.match(YARN_PICK_LINE_RE)
       if (!yarnPick) continue
       let yarn = yarnPick[1]
       if (/^(pick|strings|total|colour|color|feeder|design|number|feet|loom|ontoom)/i.test(yarn)) {
         continue
       }
-      if (/^hey$/i.test(yarn)) yarn = 'hsy'
-      if (/^saree$/i.test(yarn)) yarn = 'zaree'
       const pic = yarnPick[2]
       const strings = yarnPick[3]
       if (Number(pic) === 0 && Number(strings) === 0) continue
       if (Number(pic) > 500) continue
+      // If "hsy 550" was read as yarn=hsy pic=550 strings=24 — denier mistaken as pick
+      // Skip; splitter path above handles 4-token lines better.
       entries.push({
         no: autoNo++,
         yarn: normalizeYarnLabel(yarn),
@@ -1129,8 +1187,8 @@ function attachReadMeta(
 }
 
 /**
- * Read a DIN / design sheet photo in the browser with Tesseract.js.
- * No Anthropic API key, no Supabase Edge Function, no external OCR cost.
+ * SINGLE shared DIN / design-sheet OCR entry point (Tesseract.js only — no API key).
+ * Used by DIN Costing Design Import. Design Intake redirects here — do not add a second OCR path.
  * Fields remain editable in the UI when automatic read is weak or incomplete.
  */
 export async function readDesignReference(
@@ -1170,6 +1228,9 @@ export async function readDesignReference(
 
   return attachReadMeta({ ...withSum, rawText: text || withSum.rawText }, 'tesseract', warning)
 }
+
+/** Alias — prefer this name at call sites so there is clearly one DIN OCR path. */
+export const readDinDesignSheet = readDesignReference
 
 /** Map OCR review → weft rows. Pick → PIC only. Strings are NEVER used for width/costing. */
 export function mapOcrToWeftRows(
