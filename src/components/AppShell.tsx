@@ -14,6 +14,7 @@ import {
 import { canAccessModule, canAccessSub, isSalesmanRole } from '../lib/permissions'
 import { todayISO } from '../lib/mutate'
 import { GlobalSearch } from './GlobalSearch'
+import { AppRefreshButton, AppUpdateBanner } from './AppUpdateControls'
 
 type Props = {
   active: AppScreen
@@ -224,6 +225,7 @@ export function AppShell({ active, sub, filter, activeModule, onNavigate, childr
 
   return (
     <div className={drawerOpen ? 'app-shell drawer-is-open' : 'app-shell'} data-screen={active}>
+      <AppUpdateBanner />
       <header className="mobile-topbar">
         <button
           type="button"
@@ -239,7 +241,10 @@ export function AppShell({ active, sub, filter, activeModule, onNavigate, childr
           <span className="mobile-brand-name">JAISAL FW</span>
           <span className="mobile-topbar-title">{pageTitle}</span>
         </div>
-        <span className="mobile-role-chip">{roleName}</span>
+        <div className="mobile-topbar-actions">
+          <AppRefreshButton />
+          <span className="mobile-role-chip">{roleName}</span>
+        </div>
       </header>
 
       <div className="drawer-backdrop" onClick={() => setDrawerOpen(false)} aria-hidden="true" />
@@ -339,6 +344,10 @@ export function AppShell({ active, sub, filter, activeModule, onNavigate, childr
           </div>
           <div className="content-top-actions">
             <GlobalSearch onNavigate={onNavigate} />
+            <AppRefreshButton />
+            <span className="content-role-chip" title={roleName}>
+              {roleName}
+            </span>
           </div>
         </div>
         <main className="app-main">{children}</main>

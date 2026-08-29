@@ -1,0 +1,15 @@
+/*
+  Netlify _headers — ensure the SPA shell always revalidates.
+  Hashed assets under /assets/ can still be cached long-term by Netlify defaults.
+*/
+/index.html
+  Cache-Control: no-cache, no-store, must-revalidate
+  Pragma: no-cache
+
+/
+  Cache-Control: no-cache, no-store, must-revalidate
+  Pragma: no-cache
+
+/build-id.json
+  Cache-Control: no-cache, no-store, must-revalidate
+  Pragma: no-cache
