@@ -3,6 +3,13 @@ import { useAuth } from '../lib/auth'
 import { todayISO } from '../lib/mutate'
 import { supabase } from '../lib/supabase'
 import {
+  sortDesignNosBySeries,
+  suggestNextDesignNo,
+  uniqueDesignNosFromCostings,
+  type DesignNoSeriesRow,
+} from '../lib/designNoSeries'
+import { DesignNoCombobox } from '../components/dinCosting/DesignNoCombobox'
+import {
   CALC_FACTOR,
   CALC_HINTS,
   DEFAULT_LENGTH_MTR,
@@ -58,12 +65,12 @@ import {
   type DesignImportSource,
   type DesignOcrResult,
 } from '../lib/designOcr'
-import { applyEditDeleteOrQueue } from '../lib/pendingApprovals'
+import { applyEditDeleteOrQueue, isWithinEditWindow } from '../lib/pendingApprovals'
 import type { NavTarget } from '../lib/nav'
 
 type Props = { initialDin?: string; viewOnly?: boolean; onNavigate?: (t: NavTarget) => void }
 
-type DesignOpt = { id: string; dno: string; colour: string | null }
+const HISTORY_PAGE_SIZE = 40
 
 type CostingHistoryRow = {
   id: string
@@ -180,7 +187,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
   const [qualityName, setQualityName] = useState('')
   const [designLength, setDesignLength] = useState('')
   const [loomPick, setLoomPick] = useState('')
-  const [designOpts, setDesignOpts] = useState<DesignOpt[]>([])
+  const [designNoSeries, setDesignNoSeries] = useState<DesignNoSeriesRow[]>([])
   const [diaryUrl, setDiaryUrl] = useState<string | null>(null)
   const [ocrNote, setOcrNote] = useState<string | null>(null)
   const [warps, setWarps] = useState<WarpDraft[]>([emptyWarp(1)])
@@ -199,9 +206,15 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
   const [savedId, setSavedId] = useState<string | null>(null)
   const [status, setStatus] = useState<'draft' | 'final'>('draft')
   const [history, setHistory] = useState<CostingHistoryRow[]>([])
+  const [historyHasMore, setHistoryHasMore] = useState(false)
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [listTab, setListTab] = useState<'costings' | 'series'>('costings')
+  const [seriesQuery, setSeriesQuery] = useState('')
   const [userNames, setUserNames] = useState<Record<string, string>>({})
   const [yarnByCosting, setYarnByCosting] = useState<Record<string, string>>({})
   const [historyFilters, setHistoryFilters] = useState<HistoryFilters>(EMPTY_FILTERS)
+  const [debouncedHistoryFilters, setDebouncedHistoryFilters] =
+    useState<HistoryFilters>(EMPTY_FILTERS)
   const [busy, setBusy] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -307,6 +320,11 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
   )
 
   useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedHistoryFilters(historyFilters), 280)
+    return () => window.clearTimeout(t)
+  }, [historyFilters])
+
+  useEffect(() => {
     if (!masterRates.length || !costingDate || isLocked) return
     setWarps((prev) =>
       prev.map((row) => {
@@ -331,16 +349,49 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     setMissingRates(detectMissingRates(warps, wefts, masterRates, costingDate))
   }, [warps, wefts, masterRates, costingDate, isLocked])
 
-  useEffect(() => {
-    void (async () => {
-      const { data } = await supabase
-        .from('designs')
-        .select('id, dno, colour')
-        .order('created_at', { ascending: false })
-        .limit(100)
-      setDesignOpts((data as DesignOpt[]) ?? [])
-    })()
+  const refreshDesignNoSeries = useCallback(async () => {
+    const { data, error: sErr } = await supabase
+      .from('design_costing')
+      .select('id, din_number, quality_name, status, updated_at, created_at')
+      .order('updated_at', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(500)
+    if (sErr) {
+      // Soft-fail — combobox can still accept free text
+      console.warn('Design No. series load failed', sErr.message)
+      return
+    }
+    setDesignNoSeries(uniqueDesignNosFromCostings(data ?? []))
   }, [])
+
+  useEffect(() => {
+    void refreshDesignNoSeries()
+  }, [refreshDesignNoSeries])
+
+  const designNoOptions = useMemo(
+    () =>
+      designNoSeries.map((r) => ({
+        dinNumber: r.dinNumber,
+        qualityName: r.qualityName || undefined,
+        latestAt: r.latestAt,
+      })),
+    [designNoSeries],
+  )
+
+  const seriesSorted = useMemo(() => {
+    const q = seriesQuery.trim().toLowerCase()
+    const base = sortDesignNosBySeries(designNoSeries)
+    if (!q) return base
+    return base.filter(
+      (r) =>
+        r.dinNumber.toLowerCase().includes(q) || r.qualityName.toLowerCase().includes(q),
+    )
+  }, [designNoSeries, seriesQuery])
+
+  const nextDesignSuggestion = useMemo(
+    () => suggestNextDesignNo(designNoSeries),
+    [designNoSeries],
+  )
 
   const buildup = useMemo(
     () =>
@@ -371,40 +422,101 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
 
   const isReadOnly = !canEdit || isLocked
 
-  const refreshHistory = useCallback(async () => {
+  const refreshHistory = useCallback(async (opts?: { append?: boolean }) => {
+    const append = Boolean(opts?.append)
+    setHistoryLoading(true)
     setHistoryError(null)
-    const { data, error: hErr } = await supabase
-      .from('design_costing')
-      .select(HISTORY_SELECT)
-      .order('updated_at', { ascending: false })
-      .order('created_at', { ascending: false })
-      .limit(200)
-    let rows: CostingHistoryRow[] = []
-    if (hErr) {
-      // Older DBs may lack new columns — fall back to core fields
-      const { data: fallback, error: fErr } = await supabase
+    const from = append ? history.length : 0
+    const to = from + HISTORY_PAGE_SIZE - 1
+    try {
+      const { data, error: hErr } = await supabase
         .from('design_costing')
-        .select('*')
+        .select(HISTORY_SELECT)
+        .order('updated_at', { ascending: false })
         .order('created_at', { ascending: false })
-        .limit(200)
-      if (fErr) {
-        setHistoryError(fErr.message)
-        setHistory([])
-        return
+        .range(from, to)
+      let rows: CostingHistoryRow[] = []
+      if (hErr) {
+        // Older DBs may lack new columns — fall back to core fields
+        const { data: fallback, error: fErr } = await supabase
+          .from('design_costing')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .range(from, to)
+        if (fErr) {
+          setHistoryError(fErr.message)
+          if (!append) setHistory([])
+          return
+        }
+        rows = (fallback as CostingHistoryRow[]) ?? []
+        setHistoryError(`Using legacy columns (${hErr.message})`)
+      } else {
+        rows = (data as CostingHistoryRow[]) ?? []
       }
-      rows = (fallback as CostingHistoryRow[]) ?? []
-      setHistoryError(`Using legacy columns (${hErr.message})`)
-    } else {
-      rows = (data as CostingHistoryRow[]) ?? []
-    }
-    setHistory(rows)
 
-    const costingIds = rows.map((r) => r.id)
-    if (costingIds.length) {
+      setHistory((prev) => (append ? [...prev, ...rows] : rows))
+      setHistoryHasMore(rows.length === HISTORY_PAGE_SIZE)
+
+      const costingIds = rows.map((r) => r.id)
+      // Yarn enrichment only when yarn filter is active — avoids N+2 queries on every refresh
+      const yarnQ = historyFilters.yarn.trim()
+      if (yarnQ && costingIds.length) {
+        const [{ data: warpYarns }, { data: weftYarns }] = await Promise.all([
+          supabase.from('design_costing_warp').select('costing_id, yarn_name').in('costing_id', costingIds),
+          supabase.from('design_costing_weft').select('costing_id, weft_name').in('costing_id', costingIds),
+        ])
+        setYarnByCosting((prev) => {
+          const yarnMap = append ? { ...prev } : {}
+          for (const w of warpYarns ?? []) {
+            const key = w.costing_id as string
+            yarnMap[key] = `${yarnMap[key] || ''} ${w.yarn_name || ''}`.trim()
+          }
+          for (const w of weftYarns ?? []) {
+            const key = w.costing_id as string
+            yarnMap[key] = `${yarnMap[key] || ''} ${w.weft_name || ''}`.trim()
+          }
+          return yarnMap
+        })
+      } else if (!append) {
+        setYarnByCosting({})
+      }
+
+      const ids = [
+        ...new Set(
+          rows
+            .flatMap((r) => [r.created_by, r.updated_by])
+            .filter((id): id is string => Boolean(id)),
+        ),
+      ]
+      if (ids.length) {
+        const { data: users } = await supabase.from('users').select('id, full_name').in('id', ids)
+        if (users?.length) {
+          const map: Record<string, string> = {}
+          for (const u of users) map[u.id] = u.full_name || u.id
+          setUserNames((prev) => ({ ...prev, ...map }))
+        }
+      }
+    } finally {
+      setHistoryLoading(false)
+    }
+  }, [history.length, historyFilters.yarn])
+
+  useEffect(() => {
+    void refreshHistory()
+  }, []) // initial load only — Refresh / Load more / save/delete call explicitly
+
+  // When yarn filter becomes active, enrich yarns for currently loaded rows
+  useEffect(() => {
+    const yarnQ = debouncedHistoryFilters.yarn.trim()
+    if (!yarnQ || !history.length) return
+    const costingIds = history.map((r) => r.id)
+    let cancelled = false
+    void (async () => {
       const [{ data: warpYarns }, { data: weftYarns }] = await Promise.all([
         supabase.from('design_costing_warp').select('costing_id, yarn_name').in('costing_id', costingIds),
         supabase.from('design_costing_weft').select('costing_id, weft_name').in('costing_id', costingIds),
       ])
+      if (cancelled) return
       const yarnMap: Record<string, string> = {}
       for (const w of warpYarns ?? []) {
         const key = w.costing_id as string
@@ -415,29 +527,11 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         yarnMap[key] = `${yarnMap[key] || ''} ${w.weft_name || ''}`.trim()
       }
       setYarnByCosting(yarnMap)
-    } else {
-      setYarnByCosting({})
+    })()
+    return () => {
+      cancelled = true
     }
-
-    const ids = [
-      ...new Set(
-        rows
-          .flatMap((r) => [r.created_by, r.updated_by])
-          .filter((id): id is string => Boolean(id)),
-      ),
-    ]
-    if (!ids.length) return
-    const { data: users } = await supabase.from('users').select('id, full_name').in('id', ids)
-    if (users?.length) {
-      const map: Record<string, string> = {}
-      for (const u of users) map[u.id] = u.full_name || u.id
-      setUserNames((prev) => ({ ...prev, ...map }))
-    }
-  }, [])
-
-  useEffect(() => {
-    void refreshHistory()
-  }, [refreshHistory])
+  }, [debouncedHistoryFilters.yarn, history])
 
   const applyHeader = useCallback((header: Record<string, unknown>) => {
     setSavedId(String(header.id))
@@ -619,11 +713,11 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
   }, [initialDin, loadExisting])
 
   const filteredHistory = useMemo(() => {
-    const dinQ = historyFilters.din.trim().toLowerCase()
-    const qualityQ = historyFilters.quality.trim().toLowerCase()
-    const yarnQ = historyFilters.yarn.trim().toLowerCase()
-    const byQ = historyFilters.createdBy.trim().toLowerCase()
-    const statusQ = historyFilters.status.trim().toLowerCase()
+    const dinQ = debouncedHistoryFilters.din.trim().toLowerCase()
+    const qualityQ = debouncedHistoryFilters.quality.trim().toLowerCase()
+    const yarnQ = debouncedHistoryFilters.yarn.trim().toLowerCase()
+    const byQ = debouncedHistoryFilters.createdBy.trim().toLowerCase()
+    const statusQ = debouncedHistoryFilters.status.trim().toLowerCase()
 
     return history.filter((row) => {
       if (dinQ && !String(row.din_number || '').toLowerCase().includes(dinQ)) return false
@@ -640,15 +734,23 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         const st = (row.status === 'final' ? 'final' : 'draft').toLowerCase()
         if (st !== statusQ) return false
       }
-      if (historyFilters.dateFrom && row.costing_date && row.costing_date < historyFilters.dateFrom) {
+      if (
+        debouncedHistoryFilters.dateFrom &&
+        row.costing_date &&
+        row.costing_date < debouncedHistoryFilters.dateFrom
+      ) {
         return false
       }
-      if (historyFilters.dateTo && row.costing_date && row.costing_date > historyFilters.dateTo) {
+      if (
+        debouncedHistoryFilters.dateTo &&
+        row.costing_date &&
+        row.costing_date > debouncedHistoryFilters.dateTo
+      ) {
         return false
       }
       return true
     })
-  }, [history, historyFilters, userNames, yarnByCosting])
+  }, [history, debouncedHistoryFilters, userNames, yarnByCosting])
 
   function resetForm(keepDin = false) {
     if (!keepDin) setDinNumber('')
@@ -1199,11 +1301,13 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
             `Costing saved to DIN ${din} · Final ${fmtInr(totals.finalCostPerMtr)}/mtr (design register sync: ${designErr.message})`,
           )
           await refreshHistory()
+          await refreshDesignNoSeries()
           return
         }
       }
 
       await refreshHistory()
+      await refreshDesignNoSeries()
       const idHint = costingId ? ` · ID ${String(costingId).slice(0, 8)}` : ''
       setMessage(
         finalize
@@ -1229,9 +1333,14 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
       return
     }
     const ok = window.confirm(
-      isCeo
-        ? 'Delete this design costing permanently?'
-        : 'Delete this design costing? If older than 7 days, CEO approval is required (same rule as Cash Book).',
+      (() => {
+        const within =
+          isCeo ||
+          !createdAt ||
+          isWithinEditWindow(createdAt || savedCreatedAt || new Date().toISOString())
+        if (within) return 'Delete this DIN costing? Cannot be undone'
+        return 'Delete this DIN costing? Cannot be undone. This record is older than 7 days — delete will go to CEO for approval.'
+      })(),
     )
     if (!ok) return
     setBusy(true)
@@ -1252,6 +1361,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
       })
       if (savedId === id) resetForm()
       await refreshHistory()
+      await refreshDesignNoSeries()
       setMessage(
         result === 'applied'
           ? 'Costing deleted'
@@ -1266,8 +1376,8 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
 
   function onDinSelect(value: string) {
     setDinNumber(value)
-    const match = designOpts.find((d) => d.dno === value)
-    if (match?.colour && !qualityName) setQualityName(match.colour)
+    const match = designNoSeries.find((d) => d.dinNumber === value.trim().toUpperCase())
+    if (match?.qualityName && !qualityName) setQualityName(match.qualityName)
   }
 
   /**
@@ -1499,16 +1609,22 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         <div className="dwc-details-row">
           <label className="field">
             <span className="text-muted">DESI / Design No. (formerly DIN)</span>
-            <input
-              list="dwc-design-list"
+            <DesignNoCombobox
               value={dinNumber}
-              onChange={(e) => onDinSelect(e.target.value)}
+              options={designNoOptions}
+              disabled={isReadOnly}
+              required
+              placeholder="Search or type new Design No."
+              onChange={onDinSelect}
+              onPick={(opt) => {
+                onDinSelect(opt.dinNumber)
+                if (opt.qualityName && !qualityName) setQualityName(opt.qualityName)
+              }}
               onBlur={() => {
                 if (skipDinAutoloadRef.current) {
                   skipDinAutoloadRef.current = false
                   return
                 }
-                // Do not overwrite an in-progress new costing with a prior row for the same DIN
                 if (!savedId) {
                   const hasDraftLines =
                     warps.some((r) => r.yarn_name.trim() || n(r.denier) || n(r.tar_ends) || n(r.rate_per_kg)) ||
@@ -1517,16 +1633,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
                 }
                 void loadExisting(dinNumber).catch((e: Error) => setError(e.message))
               }}
-              placeholder="e.g. JFG1591"
-              required
             />
-            <datalist id="dwc-design-list">
-              {designOpts.map((d) => (
-                <option key={d.id} value={d.dno}>
-                  {d.colour || ''}
-                </option>
-              ))}
-            </datalist>
             <datalist id="dwc-warp-rate-items">
               {rateMasterItemNames(masterRates, 'warp').map((name) => (
                 <option key={name} value={name} />
@@ -1537,7 +1644,6 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
                 <option key={name} value={name} />
               ))}
             </datalist>
-
           </label>
           <label className="field">
             <span className="text-muted">Date</span>
@@ -1973,7 +2079,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
             <thead>
               <tr>
                 <th>S.R.</th>
-                <th>Feeder/Colour</th>
+                <th>PIC</th>
                 <th>Weft Name</th>
                 <th>Base Denier</th>
                 <th>Costing Denier</th>
@@ -2535,251 +2641,412 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
 
       <section className="dwc-panel dwc-history">
         <div className="dwc-panel-head">
-          <h2 className="section-title">Saved Design Costings</h2>
-          <button type="button" className="dwc-secondary-btn" onClick={() => void refreshHistory()}>
-            Refresh
-          </button>
-        </div>
-        <p className="text-muted2 dwc-history-lead">
-          Design to Order / Reports → Design Wise Costing · latest first · click DESI/DIN to open full costing · Clear Filters if list looks empty
-        </p>
-        <div className="dwc-filters">
-          <label className="field">
-            <span className="text-muted">Search DIN</span>
-            <input
-              value={historyFilters.din}
-              onChange={(e) => setHistoryFilters((f) => ({ ...f, din: e.target.value }))}
-              placeholder="e.g. JFG1591"
-            />
-          </label>
-          <label className="field">
-            <span className="text-muted">Quality</span>
-            <input
-              value={historyFilters.quality}
-              onChange={(e) => setHistoryFilters((f) => ({ ...f, quality: e.target.value }))}
-              placeholder="Quality name"
-            />
-          </label>
-          <label className="field">
-            <span className="text-muted">Yarn</span>
-            <input
-              value={historyFilters.yarn}
-              onChange={(e) => setHistoryFilters((f) => ({ ...f, yarn: e.target.value }))}
-              placeholder="Yarn / quality text"
-            />
-          </label>
-          <label className="field">
-            <span className="text-muted">Date From</span>
-            <input
-              type="date"
-              value={historyFilters.dateFrom}
-              onChange={(e) => setHistoryFilters((f) => ({ ...f, dateFrom: e.target.value }))}
-            />
-          </label>
-          <label className="field">
-            <span className="text-muted">Date To</span>
-            <input
-              type="date"
-              value={historyFilters.dateTo}
-              onChange={(e) => setHistoryFilters((f) => ({ ...f, dateTo: e.target.value }))}
-            />
-          </label>
-          <label className="field">
-            <span className="text-muted">Created By</span>
-            <input
-              value={historyFilters.createdBy}
-              onChange={(e) => setHistoryFilters((f) => ({ ...f, createdBy: e.target.value }))}
-              placeholder="User name"
-            />
-          </label>
-          <label className="field">
-            <span className="text-muted">Status</span>
-            <select
-              value={historyFilters.status}
-              onChange={(e) => setHistoryFilters((f) => ({ ...f, status: e.target.value }))}
-            >
-              <option value="">All</option>
-              <option value="final">Final</option>
-              <option value="draft">Draft</option>
-            </select>
-          </label>
-          <div className="dwc-filter-actions">
+          <h2 className="section-title">
+            {listTab === 'series' ? 'Design No. Series' : 'Saved Design Costings'}
+          </h2>
+          <div className="dwc-history-head-actions">
             <button
               type="button"
               className="dwc-secondary-btn"
-              onClick={() => setHistoryFilters(EMPTY_FILTERS)}
+              onClick={() => {
+                void refreshHistory()
+                void refreshDesignNoSeries()
+              }}
+              disabled={historyLoading}
             >
-              Clear Filters
+              {historyLoading ? 'Loading…' : 'Refresh'}
             </button>
           </div>
         </div>
-        {historyError ? <p className="form-error text-danger">{historyError}</p> : null}
-        <div className="dwc-table-wrap">
-          <table className="dwc-table dwc-history-table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>DIN</th>
-                <th>Quality</th>
-                <th>Length</th>
-                <th>Yarn ₹/Mtr</th>
-                <th>TOTAL WEFT PIC</th>
-                <th>Conv. Rate</th>
-                <th>Weaving ₹</th>
-                <th>MU %</th>
-                <th>After MU</th>
-                <th>GST %</th>
-                <th>GST ₹</th>
-                <th>Final ₹/Mtr</th>
-                <th>Final Sale Rate</th>
-                <th>Photo</th>
-                <th>Created By</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredHistory.length === 0 ? (
-                <tr>
-                  <td colSpan={18} className="text-muted">
-                    {history.length === 0
-                      ? 'No saved costings yet'
-                      : 'No costings match the current filters'}
-                  </td>
-                </tr>
-              ) : (
-                filteredHistory.map((row) => {
-                  const gstShown =
-                    row.gst_amount != null
-                      ? Number(row.gst_amount)
-                      : row.after_mu_per_mtr != null && row.gst_percent != null
-                        ? Math.round(
-                            (Number(row.after_mu_per_mtr) * Number(row.gst_percent)) / 100 * 100,
-                          ) / 100
-                        : null
-                  const creator =
-                    (row.created_by && userNames[row.created_by]) ||
-                    (row.created_by ? row.created_by.slice(0, 8) : '—')
-                  return (
-                    <tr key={row.id} className={savedId === row.id ? 'dwc-row-active' : undefined}>
-                      <td>{formatDisplayDate(row.costing_date)}</td>
-                      <td>
-                        <button
-                          type="button"
-                          className="dwc-din-link"
-                          title="Open costing detail"
-                          onClick={() =>
-                            void loadById(row.id).catch((e: Error) => setError(e.message))
-                          }
-                        >
-                          {row.din_number}
-                        </button>
-                      </td>
-                      <td>{row.quality_name || '—'}</td>
-                      <td className="num">
-                        {row.design_length_mtr != null
-                          ? fmtQty(Number(row.design_length_mtr), 0)
-                          : '—'}
-                      </td>
-                      <td className="num">
-                        {row.yarn_cost_per_mtr != null
-                          ? fmtMoney(Number(row.yarn_cost_per_mtr))
-                          : '—'}
-                      </td>
-                      <td className="num">
-                        {row.total_pic != null ? fmtQty(Number(row.total_pic), 0) : '—'}
-                      </td>
-                      <td className="num">
-                        {row.pic_conversion_rate != null
-                          ? fmtMoney(Number(row.pic_conversion_rate))
-                          : '—'}
-                      </td>
-                      <td className="num">
-                        {row.conversion_charge != null
-                          ? fmtMoney(Number(row.conversion_charge))
-                          : '—'}
-                      </td>
-                      <td className="num">
-                        {row.mu_percent != null ? fmtQty(Number(row.mu_percent), 0) : '—'}
-                      </td>
-                      <td className="num">
-                        {row.after_mu_per_mtr != null
-                          ? fmtMoney(Number(row.after_mu_per_mtr))
-                          : '—'}
-                      </td>
-                      <td className="num">
-                        {row.gst_percent != null ? fmtQty(Number(row.gst_percent), 0) : '—'}
-                      </td>
-                      <td className="num">{gstShown != null ? fmtMoney(gstShown) : '—'}</td>
-                      <td className="num dwc-emphasis">
-                        {row.final_cost_per_mtr != null
-                          ? fmtInr(Number(row.final_cost_per_mtr))
-                          : '—'}
-                      </td>
-                      <td className="num dwc-emphasis dwc-selling-rate">
-                        {row.ceo_final_selling_rate != null
-                          ? fmtInr(Number(row.ceo_final_selling_rate))
-                          : '—'}
-                      </td>
-                      <td>
-                        {row.diary_image_url ? (
-                          <a
-                            className="dwc-link-btn"
-                            href={row.diary_image_url}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            Photo
-                          </a>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                      <td>{creator}</td>
-                      <td>
-                        <span
-                          className={`dwc-status-chip dwc-status-${row.status === 'final' ? 'final' : 'draft'}`}
-                        >
-                          {row.status === 'final' ? 'Final' : 'Draft'}
-                        </span>
-                      </td>
-                      <td>
-                        <div className="dwc-history-actions">
-                          <button
-                            type="button"
-                            className="dwc-link-btn"
-                            onClick={() =>
-                              void loadById(row.id).catch((e: Error) => setError(e.message))
-                            }
-                          >
-                            View
-                          </button>
-                          <button
-                            type="button"
-                            className="dwc-link-btn"
-                            onClick={() =>
-                              void loadById(row.id).catch((e: Error) => setError(e.message))
-                            }
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            className="dwc-link-btn dwc-link-danger"
-                            disabled={row.status === 'final' && !canDeleteFinal}
-                            onClick={() => void deleteCosting(row.id, row.status, row.created_at)}
-                          >
-                            Delete
-                          </button>
-                        </div>
+
+        <div className="dwc-list-tabs" role="tablist" aria-label="Saved costings views">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={listTab === 'costings'}
+            className={listTab === 'costings' ? 'dwc-list-tab active' : 'dwc-list-tab'}
+            onClick={() => setListTab('costings')}
+          >
+            Saved Costings
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={listTab === 'series'}
+            className={listTab === 'series' ? 'dwc-list-tab active' : 'dwc-list-tab'}
+            onClick={() => setListTab('series')}
+          >
+            Design No. Series
+          </button>
+        </div>
+
+        {listTab === 'series' ? (
+          <div className="dwc-series-panel">
+            <p className="text-muted2 dwc-history-lead">
+              All unique Design Nos. used so far, sorted by letter series then number. Click a row to
+              open the latest costing for edit.
+              {nextDesignSuggestion ? (
+                <>
+                  {' '}
+                  Suggested next:{' '}
+                  <button
+                    type="button"
+                    className="dwc-din-link"
+                    onClick={() => {
+                      setDinNumber(nextDesignSuggestion)
+                      setListTab('costings')
+                      requestAnimationFrame(() => {
+                        document
+                          .getElementById('dwc-design-details')
+                          ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                      })
+                    }}
+                  >
+                    {nextDesignSuggestion}
+                  </button>
+                </>
+              ) : null}
+            </p>
+            <label className="field dwc-series-search">
+              <span className="text-muted">Search Design No.</span>
+              <input
+                value={seriesQuery}
+                onChange={(e) => setSeriesQuery(e.target.value.toUpperCase())}
+                placeholder="Filter e.g. JFG22"
+              />
+            </label>
+            <div className="dwc-table-wrap">
+              <table className="dwc-table dwc-series-table">
+                <thead>
+                  <tr>
+                    <th>Design No.</th>
+                    <th>Quality</th>
+                    <th>Status</th>
+                    <th>Updated</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {seriesSorted.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="text-muted">
+                        No Design Nos. yet
                       </td>
                     </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                  ) : (
+                    seriesSorted.map((row) => (
+                      <tr key={row.dinNumber}>
+                        <td>
+                          <strong>{row.dinNumber}</strong>
+                        </td>
+                        <td>{row.qualityName || '—'}</td>
+                        <td>
+                          <span
+                            className={`dwc-status-chip dwc-status-${row.status === 'final' ? 'final' : 'draft'}`}
+                          >
+                            {row.status === 'final' ? 'Final' : 'Draft'}
+                          </span>
+                        </td>
+                        <td>{row.latestAt ? formatDisplayDate(row.latestAt.slice(0, 10)) : '—'}</td>
+                        <td>
+                          <div className="dwc-history-actions">
+                            <button
+                              type="button"
+                              className="dwc-action-btn dwc-action-edit"
+                              title="Edit latest costing"
+                              onClick={() =>
+                                void loadById(row.costingId).catch((e: Error) => setError(e.message))
+                              }
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              className="dwc-action-btn"
+                              title="Use this Design No. for a new costing"
+                              onClick={() => {
+                                resetForm()
+                                setDinNumber(row.dinNumber)
+                                if (row.qualityName) setQualityName(row.qualityName)
+                                requestAnimationFrame(() => {
+                                  document
+                                    .getElementById('dwc-design-details')
+                                    ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                                })
+                              }}
+                            >
+                              Use No.
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-muted2">
+              Showing {seriesSorted.length} of {designNoSeries.length} unique Design Nos.
+            </p>
+          </div>
+        ) : (
+          <>
+            <p className="text-muted2 dwc-history-lead">
+              Latest first · Edit opens full costing · Delete asks for confirmation (7-day CEO rule
+              applies) · filters are debounced
+            </p>
+            <div className="dwc-filters">
+              <label className="field">
+                <span className="text-muted">Search DIN</span>
+                <input
+                  value={historyFilters.din}
+                  onChange={(e) => setHistoryFilters((f) => ({ ...f, din: e.target.value }))}
+                  placeholder="e.g. JFG1591"
+                />
+              </label>
+              <label className="field">
+                <span className="text-muted">Quality</span>
+                <input
+                  value={historyFilters.quality}
+                  onChange={(e) => setHistoryFilters((f) => ({ ...f, quality: e.target.value }))}
+                  placeholder="Quality name"
+                />
+              </label>
+              <label className="field">
+                <span className="text-muted">Yarn</span>
+                <input
+                  value={historyFilters.yarn}
+                  onChange={(e) => setHistoryFilters((f) => ({ ...f, yarn: e.target.value }))}
+                  placeholder="Yarn / quality text"
+                />
+              </label>
+              <label className="field">
+                <span className="text-muted">Date From</span>
+                <input
+                  type="date"
+                  value={historyFilters.dateFrom}
+                  onChange={(e) => setHistoryFilters((f) => ({ ...f, dateFrom: e.target.value }))}
+                />
+              </label>
+              <label className="field">
+                <span className="text-muted">Date To</span>
+                <input
+                  type="date"
+                  value={historyFilters.dateTo}
+                  onChange={(e) => setHistoryFilters((f) => ({ ...f, dateTo: e.target.value }))}
+                />
+              </label>
+              <label className="field">
+                <span className="text-muted">Created By</span>
+                <input
+                  value={historyFilters.createdBy}
+                  onChange={(e) => setHistoryFilters((f) => ({ ...f, createdBy: e.target.value }))}
+                  placeholder="User name"
+                />
+              </label>
+              <label className="field">
+                <span className="text-muted">Status</span>
+                <select
+                  value={historyFilters.status}
+                  onChange={(e) => setHistoryFilters((f) => ({ ...f, status: e.target.value }))}
+                >
+                  <option value="">All</option>
+                  <option value="final">Final</option>
+                  <option value="draft">Draft</option>
+                </select>
+              </label>
+              <div className="dwc-filter-actions">
+                <button
+                  type="button"
+                  className="dwc-secondary-btn"
+                  onClick={() => setHistoryFilters(EMPTY_FILTERS)}
+                >
+                  Clear Filters
+                </button>
+              </div>
+            </div>
+            {historyError ? <p className="form-error text-danger">{historyError}</p> : null}
+            <div className="dwc-table-wrap">
+              <table className="dwc-table dwc-history-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>DIN</th>
+                    <th>Quality</th>
+                    <th>Length</th>
+                    <th>Yarn ₹/Mtr</th>
+                    <th>TOTAL WEFT PIC</th>
+                    <th>Conv. Rate</th>
+                    <th>Weaving ₹</th>
+                    <th>MU %</th>
+                    <th>After MU</th>
+                    <th>GST %</th>
+                    <th>GST ₹</th>
+                    <th>Final ₹/Mtr</th>
+                    <th>Final Sale Rate</th>
+                    <th>Photo</th>
+                    <th>Created By</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredHistory.length === 0 ? (
+                    <tr>
+                      <td colSpan={18} className="text-muted">
+                        {historyLoading
+                          ? 'Loading…'
+                          : history.length === 0
+                            ? 'No saved costings yet'
+                            : 'No costings match the current filters'}
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredHistory.map((row) => {
+                      const gstShown =
+                        row.gst_amount != null
+                          ? Number(row.gst_amount)
+                          : row.after_mu_per_mtr != null && row.gst_percent != null
+                            ? Math.round(
+                                (Number(row.after_mu_per_mtr) * Number(row.gst_percent)) / 100 * 100,
+                              ) / 100
+                            : null
+                      const creator =
+                        (row.created_by && userNames[row.created_by]) ||
+                        (row.created_by ? row.created_by.slice(0, 8) : '—')
+                      return (
+                        <tr key={row.id} className={savedId === row.id ? 'dwc-row-active' : undefined}>
+                          <td>{formatDisplayDate(row.costing_date)}</td>
+                          <td>
+                            <button
+                              type="button"
+                              className="dwc-din-link"
+                              title="Edit this costing"
+                              onClick={() =>
+                                void loadById(row.id).catch((e: Error) => setError(e.message))
+                              }
+                            >
+                              {row.din_number}
+                            </button>
+                          </td>
+                          <td>{row.quality_name || '—'}</td>
+                          <td className="num">
+                            {row.design_length_mtr != null
+                              ? fmtQty(Number(row.design_length_mtr), 0)
+                              : '—'}
+                          </td>
+                          <td className="num">
+                            {row.yarn_cost_per_mtr != null
+                              ? fmtMoney(Number(row.yarn_cost_per_mtr))
+                              : '—'}
+                          </td>
+                          <td className="num">
+                            {row.total_pic != null ? fmtQty(Number(row.total_pic), 0) : '—'}
+                          </td>
+                          <td className="num">
+                            {row.pic_conversion_rate != null
+                              ? fmtMoney(Number(row.pic_conversion_rate))
+                              : '—'}
+                          </td>
+                          <td className="num">
+                            {row.conversion_charge != null
+                              ? fmtMoney(Number(row.conversion_charge))
+                              : '—'}
+                          </td>
+                          <td className="num">
+                            {row.mu_percent != null ? fmtQty(Number(row.mu_percent), 0) : '—'}
+                          </td>
+                          <td className="num">
+                            {row.after_mu_per_mtr != null
+                              ? fmtMoney(Number(row.after_mu_per_mtr))
+                              : '—'}
+                          </td>
+                          <td className="num">
+                            {row.gst_percent != null ? fmtQty(Number(row.gst_percent), 0) : '—'}
+                          </td>
+                          <td className="num">{gstShown != null ? fmtMoney(gstShown) : '—'}</td>
+                          <td className="num dwc-emphasis">
+                            {row.final_cost_per_mtr != null
+                              ? fmtInr(Number(row.final_cost_per_mtr))
+                              : '—'}
+                          </td>
+                          <td className="num dwc-emphasis dwc-selling-rate">
+                            {row.ceo_final_selling_rate != null
+                              ? fmtInr(Number(row.ceo_final_selling_rate))
+                              : '—'}
+                          </td>
+                          <td>
+                            {row.diary_image_url ? (
+                              <a
+                                className="dwc-link-btn"
+                                href={row.diary_image_url}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                Photo
+                              </a>
+                            ) : (
+                              '—'
+                            )}
+                          </td>
+                          <td>{creator}</td>
+                          <td>
+                            <span
+                              className={`dwc-status-chip dwc-status-${row.status === 'final' ? 'final' : 'draft'}`}
+                            >
+                              {row.status === 'final' ? 'Final' : 'Draft'}
+                            </span>
+                          </td>
+                          <td>
+                            <div className="dwc-history-actions">
+                              <button
+                                type="button"
+                                className="dwc-action-btn dwc-action-edit"
+                                title="Edit costing"
+                                onClick={() =>
+                                  void loadById(row.id).catch((e: Error) => setError(e.message))
+                                }
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                className="dwc-action-btn dwc-action-delete"
+                                title="Delete costing"
+                                disabled={row.status === 'final' && !canDeleteFinal}
+                                onClick={() =>
+                                  void deleteCosting(row.id, row.status, row.created_at)
+                                }
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="dwc-history-footer">
+              <span className="text-muted2">
+                Showing {filteredHistory.length} on screen · {history.length} loaded
+                {historyHasMore ? ' · more available' : ''}
+              </span>
+              {historyHasMore ? (
+                <button
+                  type="button"
+                  className="dwc-secondary-btn"
+                  disabled={historyLoading}
+                  onClick={() => void refreshHistory({ append: true })}
+                >
+                  {historyLoading ? 'Loading…' : 'Load more'}
+                </button>
+              ) : null}
+            </div>
+          </>
+        )}
       </section>
     </div>
   )
