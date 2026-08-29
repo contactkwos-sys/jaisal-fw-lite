@@ -318,10 +318,8 @@ export function DinDesignImportSection({
     <section className="dwc-panel dwc-import-panel dwc-compact-block">
       <h2 className="section-title">1 · Design Import</h2>
       <p className="text-muted2 dwc-import-hint">
-        Upload → OCR fills Design No., Feeder/Colour + PIC rows, and TOTAL LOOM PICK (sum of feeder picks).
-        Review below, then Warp/Weft + Internal Cost update on the same page.
-        Fast Vision OCR needs secret <code>ANTHROPIC_API_KEY</code> in Supabase Edge Function Secrets
-        (Anthropic <code>sk-ant-…</code> key — do not paste it in chat).
+        Upload a DIN sheet photo → browser OCR (Tesseract, free, no API key) fills Design No.,
+        Feeder/Colour + PIC, and TOTAL LOOM PICK. Review / edit below, then Confirm.
       </p>
 
       <div className="dwc-import-actions">
@@ -411,10 +409,9 @@ export function DinDesignImportSection({
           {error}
         </p>
       ) : null}
-      {!busy && ocrDraft.readSource === 'tesseract' && ocrDraft.designNumber.value ? (
+      {!busy && ocrDraft.readSource === 'tesseract' && (ocrDraft.designNumber.value || ocrDraft.loomPick.value || ocrDraft.feeders.length > 0) ? (
         <p className="text-muted2">
-          Browser OCR से भरा गया (Vision key missing हो सकती है). Design No. / Loom Pick / Feeder
-          चेक करके Confirm करें.
+          Browser OCR (free). Please confirm Design No. / Loom Pick / Feeders — edit any field if needed.
         </p>
       ) : null}
 
