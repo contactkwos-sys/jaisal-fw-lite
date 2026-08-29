@@ -98,10 +98,26 @@ assert.ok(!/yarnCostPerMtr \+ conversionCharge/.test(formulaSrc), 'must not mix 
 const ocrSrc = read('src/lib/designOcr.ts')
 assert.ok(ocrSrc.includes('extractLoomPick'), 'must extract loom pick from sheet')
 assert.ok(ocrSrc.includes('clearOcrStrings'), 'strings cleared / not used for costing')
+assert.ok(ocrSrc.includes('OCR_VERIFY_HINT'), 'verify hint constant')
+assert.ok(ocrSrc.includes('headerCrop'), 'header crop preprocess')
+assert.ok(ocrSrc.includes('rowStrip'), 'row-strip cell OCR')
 assert.ok(
-  !ocrSrc.includes('TOTAL LOOM PICK is always Σ Colour Pick values'),
-  'must not force loom pick = Σ colour picks',
+  /suggestEqualPics[\s\S]*?return ''/.test(ocrSrc),
+  'suggestEqualPics must not invent picks',
+)
+assert.ok(
+  !/sum_feeder_picks_fallback|sum_colour_picks_fallback/.test(ocrSrc) ||
+    !/loomPick:.*sum_feeder/.test(ocrSrc),
+  'must not assign loom pick from feeder sum fallback',
 )
 
-console.log('PASS  Denier + 110/100 formula + loom pick from sheet')
+const importSrc2 = read('src/components/dinCosting/DinDesignImportSection.tsx')
+assert.ok(
+  !/autoApplyAfterRead/.test(importSrc2),
+  'must not auto-Confirm OCR without user review',
+)
+assert.ok(importSrc2.includes('OCR_VERIFY_HINT'), 'UI shows verify hint')
+assert.ok(importSrc2.includes('from DIN sheet (not Σ Colour Picks)'), 'loom pick label clarity')
+
+console.log('PASS  Denier + 110/100 formula + loom pick from sheet (no invent)')
 console.log('\nAll DIN Costing formula/OCR layout checks passed')

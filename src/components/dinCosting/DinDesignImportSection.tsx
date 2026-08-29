@@ -6,6 +6,7 @@ import {
   clearOcrStrings,
   emptyDesignOcrResult,
   normalizeYarnLabel,
+  OCR_VERIFY_HINT,
   readDesignReference,
   readDesignReferenceFromUrl,
   sumWeftPics,
@@ -111,10 +112,12 @@ export function DinDesignImportSection({
       const ocr = clearOcrStrings(await readDesignReference(file, hints))
       setOcrExtracted(JSON.parse(JSON.stringify(ocr)) as DesignOcrResult)
       setOcrDraft(ocr)
+      // Source fidelity: never auto-Confirm. User must verify OCR against the image first.
       if (ocr.readWarning) setError(ocr.readWarning)
-      // Upload → auto-fill Design No. / Colour-Pick / TOTAL LOOM PICK when readable
-      if (ocr.designNumber.value.trim()) {
-        await autoApplyAfterRead(ocr, imageUrl, source)
+      else if (!ocr.designNumber.value.trim() || !ocr.loomPick.value.trim()) {
+        setError(`${OCR_VERIFY_HINT} Review the DIN image and complete missing fields before Confirm.`)
+      } else {
+        setError(null)
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Design read failed')
@@ -123,47 +126,11 @@ export function DinDesignImportSection({
     }
   }
 
-  async function autoApplyAfterRead(
-    ocr: DesignOcrResult,
-    imageUrl: string,
-    source: DesignImportSource,
-  ) {
-    const din = ocr.designNumber.value.trim()
-    if (!din) return
-    const dup = await checkDuplicateDin(din).catch(() => ({ exists: false as const }))
-    if (dup.exists) {
-      setDuplicateDin(din)
-      return
-    }
-    const applied = applyOcrToCostingDraft(ocr, {
-      designLength,
-      rates: masterRates,
-      costingDate,
-      existingWarps,
-    })
-    skipLiveRef.current = true
-    await onApply({
-      dinNumber: din,
-      qualityName: ocr.qualityName.value,
-      loomPick: ocr.loomPick.value || '',
-      warps: applied.warps,
-      wefts: applied.wefts,
-      designImageUrl: imageUrl,
-      importSource: source,
-      ocrExtracted: ocr,
-      ocrConfirmed: ocr,
-      missingRates: applied.missingRates,
-    })
-    setLinkedToCosting(true)
-    queueMicrotask(() => {
-      skipLiveRef.current = false
-    })
-  }
-
   async function handleGmailImported(result: GmailImportResult) {
     setShowGmail(false)
     setBusy(true)
     setError(null)
+    setLinkedToCosting(false)
     try {
       setDesignPreviewUrl(result.imageUrl)
       setImportSource('gmail')
@@ -175,9 +142,9 @@ export function DinDesignImportSection({
       setOcrDraft(ocr)
       if (ocr.readWarning) setError(ocr.readWarning)
       else if (!file) {
-        setError('Design image imported. OCR could not run — enter values manually in review below.')
-      } else if (ocr.designNumber.value.trim()) {
-        await autoApplyAfterRead(ocr, result.imageUrl, 'gmail')
+        setError(`${OCR_VERIFY_HINT} Enter values manually in review below.`)
+      } else if (!ocr.designNumber.value.trim() || !ocr.loomPick.value.trim()) {
+        setError(`${OCR_VERIFY_HINT} Review the DIN image and complete missing fields before Confirm.`)
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Gmail import OCR failed')
@@ -317,8 +284,9 @@ export function DinDesignImportSection({
     <section className="dwc-panel dwc-import-panel dwc-compact-block">
       <h2 className="section-title">1 · DIN Upload &amp; OCR</h2>
       <p className="text-muted2 dwc-import-hint">
-        Upload a DIN sheet → OCR reads Design No., Colour/Feeder Pick, and TOTAL LOOM PICK from the
-        sheet. Strings are ignored (not used for costing). Confirm to auto-fill costing below.
+        Upload a DIN sheet photo. OCR reads Design No., TOTAL LOOM PICK, and Colour/Feeder Pick
+        <em> directly from the image</em> (no invented values). Strings are ignored. Compare every
+        field to the preview, then Confirm.
       </p>
 
       <div className="dwc-import-actions">
@@ -454,18 +422,23 @@ export function DinDesignImportSection({
             </div>
 
             <div className="dwc-ocr-fields-col">
-              <h3 className="dwc-ocr-subtitle">OCR Review — edit before applying</h3>
+              <h3 className="dwc-ocr-subtitle">OCR Review — verify against DIN image before Confirm</h3>
               {!busy &&
-              (ocrDraft.feeders.some((f, i) => {
-                if (String(ocrDraft.weftRows[i]?.pic ?? '').trim() === '0') return false
-                return f.confidence === 'low'
-              }) ||
+              (ocrDraft.designNumber.confidence !== 'high' ||
+                !ocrDraft.loomPick.value ||
+                ocrDraft.loomPick.confidence === 'low' ||
+                ocrDraft.loomPick.confidence === 'missing' ||
+                ocrDraft.feeders.some((f, i) => {
+                  if (String(ocrDraft.weftRows[i]?.pic ?? '').trim() === '0') return false
+                  return f.confidence === 'low' || f.confidence === 'missing'
+                }) ||
                 ocrDraft.weftRows.some(
-                  (r) => r.confidence === 'low' && String(r.pic).trim() !== '0',
+                  (r) =>
+                    (r.confidence === 'low' || r.confidence === 'missing') &&
+                    String(r.pic).trim() !== '0',
                 )) ? (
-                <p className="dwc-ocr-review-banner">
-                  Review table — low-confidence Feeder/Colour or Pick rows are pre-filled; confirm or edit,
-                  then Confirm.
+                <p className="dwc-ocr-review-banner" role="status">
+                  {OCR_VERIFY_HINT} Do not Confirm until each field matches the sheet.
                 </p>
               ) : null}
 
@@ -474,8 +447,11 @@ export function DinDesignImportSection({
                   Detected Design No. {confidenceLabel(ocrDraft.designNumber.confidence)}
                   {busy ? (
                     <em className="dwc-auto-tag"> Reading…</em>
-                  ) : ocrDraft.designNumber.confidence === 'missing' ? (
-                    <em className="dwc-low-conf"> Could not confidently read this field.</em>
+                  ) : ocrDraft.designNumber.confidence === 'missing' ||
+                    (!ocrDraft.designNumber.value && !busy) ? (
+                    <em className="dwc-low-conf"> {OCR_VERIFY_HINT}</em>
+                  ) : ocrDraft.designNumber.confidence === 'low' ? (
+                    <em className="dwc-low-conf"> {OCR_VERIFY_HINT}</em>
                   ) : null}
                 </span>
                 <input
@@ -489,17 +465,20 @@ export function DinDesignImportSection({
               <label className="field">
                 <span>
                   TOTAL LOOM PICK {confidenceLabel(ocrDraft.loomPick.confidence)}
-                  <em className="dwc-auto-tag"> from DIN sheet</em>
+                  <em className="dwc-auto-tag"> from DIN sheet (not Σ Colour Picks)</em>
                   {busy ? <em className="dwc-auto-tag"> Reading…</em> : null}
-                  {!busy && ocrDraft.loomPick.confidence === 'missing' && !ocrDraft.loomPick.value ? (
-                    <em className="dwc-low-conf"> Enter TOTAL LOOM PICK from sheet</em>
+                  {!busy &&
+                  (ocrDraft.loomPick.confidence === 'missing' ||
+                    ocrDraft.loomPick.confidence === 'low' ||
+                    !ocrDraft.loomPick.value) ? (
+                    <em className="dwc-low-conf"> {OCR_VERIFY_HINT}</em>
                   ) : null}
                 </span>
                 <input
                   className="num"
                   value={ocrDraft.loomPick.value}
                   onChange={(e) => updateLoomPick(e.target.value)}
-                  placeholder="e.g. 112"
+                  placeholder="Read from TOTAL LOOM PICK on sheet"
                   disabled={busy}
                 />
               </label>
@@ -523,8 +502,8 @@ export function DinDesignImportSection({
                         placeholder="Yarn name (leave blank if empty)"
                         disabled={busy}
                       />
-                      {f.confidence === 'low' ? (
-                        <em className="dwc-low-conf">Please confirm</em>
+                      {f.confidence === 'low' || f.confidence === 'missing' ? (
+                        <em className="dwc-low-conf">{OCR_VERIFY_HINT}</em>
                       ) : null}
                     </div>
                   ))
@@ -535,7 +514,7 @@ export function DinDesignImportSection({
 
               <div className="dwc-ocr-weft">
                 <div className="dwc-ocr-block-head">
-                  <span>Colour Pick (maps 1:1 to Feeder/Colour — unused = 0)</span>
+                  <span>Colour Pick (1:1 with Colour/Feeder — never shift rows; unused = 0 or blank)</span>
                   <button type="button" className="btn-ghost btn-sm" onClick={addWeftRow} disabled={busy}>
                     + Row
                   </button>
@@ -558,8 +537,9 @@ export function DinDesignImportSection({
                           disabled={busy}
                         />
                       </label>
-                      {row.confidence === 'low' && String(row.pic).trim() !== '0' ? (
-                        <em className="dwc-low-conf">Please confirm</em>
+                      {row.confidence === 'low' ||
+                      (row.confidence === 'missing' && String(row.pic).trim() === '') ? (
+                        <em className="dwc-low-conf">{OCR_VERIFY_HINT}</em>
                       ) : null}
                     </div>
                   ))
@@ -577,7 +557,8 @@ export function DinDesignImportSection({
                 Confirm &amp; Create DIN Costing
               </button>
               <p className="text-muted2 dwc-confirm-hint">
-                Fills Design Details, Weft/Warp rows and Wastage below, then saves costing automatically.
+                Confirm only after every field matches the DIN image. Design No. + TOTAL LOOM PICK +
+                Colour/Feeder + Pick flow into costing (Base Denier → Costing = Base + 10).
                 {linkedToCosting
                   ? ' Edits here now update costing + Rate Master rates instantly.'
                   : ''}

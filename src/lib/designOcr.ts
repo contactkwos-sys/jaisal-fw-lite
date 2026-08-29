@@ -1,8 +1,9 @@
 /**
- * DIN / Design reference OCR — parse, map to costing rows, Rate Master lookup.
- * Colour/Feeder rows: capture Pick only. Strings column is ignored entirely (never used for costing).
- * TOTAL LOOM PICK is read from the DIN/design sheet separately — NOT calculated from Strings,
- * and NOT forced to equal Σ Colour Picks (Weft PIC sum is separate).
+ * DIN / Design reference OCR — source-fidelity first.
+ * Colour/Feeder rows: capture Pick only. Strings ignored (never used for costing).
+ * TOTAL LOOM PICK is read ONLY from the sheet label/field — NEVER from Σ Colour Picks,
+ * NEVER from Strings, NEVER invented or equal-split.
+ * Low confidence → leave field for manual verify (do not guess).
  */
 
 import {
@@ -101,14 +102,19 @@ const COLOUR_ROW_RE =
 const COLOUR_PIPE_RE =
   /(?:c+olou?r?s?|color|colowr|feeder|fd)[\s.\-]*(\d+)\s*[|:.\-]+\s*([^|\n]{0,24}?)\s*[|:.\-]+\s*(\d+(?:\.\d+)?|[-–—])/gi
 const PICK_STRINGS_HEADER = /pick\s*strings|(?:\d+\s*[-–]?\s*pick).*(?:pick|strings)/i
-const LOOM_PICK_RE = /(?:loom[\s-]*pick|loom\s*pick|total\s*loom\s*pick)[\s:=-]*(\d+(?:\.\d+)?)/i
-const PICK_ONLY_RE = /\b(\d+(?:\.\d+)?)\s*[-–]?\s*pick\b/i
+const LOOM_PICK_RE =
+  /(?:total\s+)?loom[\s\-]*pick[\s:=\-]*(\d+(?:\.\d+)?)/i
+const ON_LOOM_PICK_RE = /on[\s\-]*loom[\s\-:=]*(\d+(?:\.\d+)?)/i
+/** Design-header style "112-pick" / "112 pick" near top — not a Colour row Pick. */
+const HEADER_N_PICK_RE = /\b(\d{2,3})\s*[-–]?\s*pick\b/i
 const TOTAL_LINE_RE = /^total\s*[:.]?\s*(\d+(?:\.\d+)?)\s*[/\s]\s*(\d+(?:\.\d+)?)/im
 const TOTAL_NEXT_LINE_RE = /^total\s*[:.]?\s*$/im
-const TOTAL_COLOUR_RE = /^total\s*[:.]?\s*(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)/im
 /** Yarn + Pick (+ optional ignored Strings): "hsy 24 2230" / "hey = 24 | 2230" */
 const YARN_PICK_LINE_RE =
   /\b([A-Za-z]{2,8})\b\s*[=:]?\s*(\d+(?:\.\d+)?|[-–—])(?:\s*[|/]?\s*\d{2,5}(?:\.\d+)?)?/
+
+/** User-facing copy when OCR cannot confidently read a field. */
+export const OCR_VERIFY_HINT = 'Could not confidently read this field — please verify.'
 
 /**
  * Normalize OCR design tokens to business DIN (letters+digits only).
@@ -163,7 +169,7 @@ export function sumWeftPics(rows: Array<{ pic?: string | null }> | null | undefi
 
 /**
  * Clear Strings from OCR (never used for costing).
- * Does NOT overwrite TOTAL LOOM PICK with Σ Colour Picks.
+ * Does NOT invent or overwrite TOTAL LOOM PICK.
  */
 export function clearOcrStrings(ocr: DesignOcrResult): DesignOcrResult {
   return {
@@ -174,75 +180,39 @@ export function clearOcrStrings(ocr: DesignOcrResult): DesignOcrResult {
 }
 
 /**
- * @deprecated Prefer clearOcrStrings. Kept for callers that previously forced loom = Σ picks.
- * Now only clears Strings — preserves sheet TOTAL LOOM PICK when present.
+ * Source fidelity: NEVER fill TOTAL LOOM PICK from Σ Colour/Feeder Picks.
+ * Alias kept for callers — now identical to clearOcrStrings.
  */
 export function ensureLoomPickFromFeederSum(ocr: DesignOcrResult): DesignOcrResult {
-  const cleared = clearOcrStrings(ocr)
-  // If sheet loom pick already present, keep it
-  if (cleared.loomPick.value.trim()) return cleared
-  // Soft fallback only when sheet total missing — low confidence
-  if (!cleared.weftRows.length) return cleared
-  const sum = sumWeftPics(cleared.weftRows)
-  if (sum === '') return cleared
-  return {
-    ...cleared,
-    loomPick: { value: sum, confidence: 'low', source: 'sum_feeder_picks_fallback' },
-  }
-}
-
-function extractTotals(text: string): { totalPick: OcrField; totalStrings: OcrField } {
-  const inline = text.match(TOTAL_COLOUR_RE) || text.match(TOTAL_LINE_RE)
-  if (inline) {
-    return {
-      totalPick: { value: inline[1], confidence: 'high', source: 'total_line' },
-      // Strings total is reference only — never used for costing
-      totalStrings: { value: inline[2], confidence: 'high', source: 'total_line' },
-    }
-  }
-  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
-  for (let i = 0; i < lines.length; i++) {
-    if (TOTAL_NEXT_LINE_RE.test(lines[i]) && lines[i + 1]) {
-      const m = lines[i + 1].match(/^(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)$/)
-      if (m) {
-        return {
-          totalPick: { value: m[1], confidence: 'high', source: 'total_line' },
-          totalStrings: { value: m[2], confidence: 'high', source: 'total_line' },
-        }
-      }
-    }
-  }
-  return { totalPick: emptyField(), totalStrings: emptyField() }
+  return clearOcrStrings(ocr)
 }
 
 /**
- * Read TOTAL LOOM PICK from the DIN/design sheet text.
- * Prefer explicit "Loom Pick" / "N-pick" header / printed Total — never Strings.
+ * Read TOTAL LOOM PICK directly from the DIN sheet text.
+ * Only labeled / header sources. Never Σ Colour Picks. Never Strings.
+ * If uncertain → empty + missing (UI asks user to verify).
  */
-export function extractLoomPick(text: string, fallbackFromRows?: string): OcrField {
-  const loom = text.match(LOOM_PICK_RE)
-  if (loom?.[1]) return { value: loom[1], confidence: 'high', source: 'loom_pick' }
+export function extractLoomPick(text: string, _unusedFallback?: string): OcrField {
+  void _unusedFallback
+  const labeled =
+    text.match(LOOM_PICK_RE) || text.match(ON_LOOM_PICK_RE)
+  if (labeled?.[1]) {
+    return { value: labeled[1], confidence: 'high', source: 'loom_pick_label' }
+  }
 
-  const totals = extractTotals(text)
-  const nPickMatches = [...text.matchAll(/\b(\d{2,4})\s*[-–]?\s*pick\b/gi)].map((m) => m[1])
-  if (nPickMatches.length) {
-    if (totals.totalPick.value && nPickMatches.includes(totals.totalPick.value)) {
-      return { value: totals.totalPick.value, confidence: 'high', source: 'n_pick_header' }
+  // Header region only (first ~12 lines): "112-pick" design total — not a Colour row
+  const head = text.split(/\r?\n/).slice(0, 12).join('\n')
+  const headerPick = head.match(HEADER_N_PICK_RE)
+  if (headerPick?.[1]) {
+    const v = Number(headerPick[1])
+    // Typical loom pick range on these sheets; exclude tiny Colour picks misread as header
+    if (v >= 40 && v <= 400) {
+      return { value: headerPick[1], confidence: 'high', source: 'n_pick_header' }
     }
-    const best = nPickMatches.reduce((a, b) => (Number(b) > Number(a) ? b : a))
-    return { value: best, confidence: 'high', source: 'n_pick_header' }
   }
 
-  if (totals.totalPick.value) {
-    return { value: totals.totalPick.value, confidence: totals.totalPick.confidence, source: 'total_pick' }
-  }
-
-  const pickOnly = text.match(PICK_ONLY_RE)
-  if (pickOnly?.[1]) return { value: pickOnly[1], confidence: 'low', source: 'pick_label' }
-
-  if (fallbackFromRows) {
-    return { value: fallbackFromRows, confidence: 'low', source: 'sum_colour_picks_fallback' }
-  }
+  // Do NOT use colour-table "Total X Y" as TOTAL LOOM PICK (that is Σ picks / Strings).
+  // Do NOT sum Colour Picks. Leave missing for manual entry.
   return emptyField()
 }
 
@@ -632,116 +602,116 @@ export function inferColourRowCount(text: string): number {
 }
 
 /**
- * Split TOTAL LOOM PICK across colour rows for review pre-fill.
- * Handles sheet off-by-one (e.g. 37+37+37=111 printed Total 112).
+ * @deprecated Do not invent Pick by splitting TOTAL LOOM PICK.
+ * Kept exported so callers fail closed (always returns '').
  */
-export function suggestEqualPics(loom: number, rowCount: number): string {
-  if (!(loom > 0) || rowCount < 1) return ''
-  const candidates = [loom, loom - 1, loom + 1]
-  for (const base of candidates) {
-    if (base > 0 && base % rowCount === 0) {
-      const each = base / rowCount
-      if (each >= 8 && each <= 200) return String(each)
-    }
-  }
-  const rounded = Math.round(loom / rowCount)
-  if (rounded >= 8 && rounded <= 200) return String(rounded)
+export function suggestEqualPics(_loom: number, _rowCount: number): string {
+  void _loom
+  void _rowCount
   return ''
 }
 
 /**
- * When DIN + loom pick are known but feeder/pick rows are missing or incomplete,
- * pre-fill low-confidence review rows so the user can confirm instead of a blank table.
+ * Align Colour/Feeder review rows with what was actually read — never invent Pick values.
+ * Missing picks stay blank with low/missing confidence for manual entry.
  */
 export function ensureReviewFeederRows(ocr: DesignOcrResult): DesignOcrResult {
-  const hasFeeders = ocr.feeders.length >= 1
-  const hasWefts = ocr.weftRows.some((r) => (r.pic || '').trim() !== '')
+  const cleared = clearOcrStrings(ocr)
+  const hasFeeders = cleared.feeders.length >= 1
+  const hasWefts = cleared.weftRows.some((r) => (r.pic || '').trim() !== '')
+
   if (hasFeeders && hasWefts) {
-    // Unused Pick=0 rows are fine — only flag true low-confidence active rows
-    const needsFlag =
-      ocr.feeders.some((f, i) => {
-        const pic = ocr.weftRows[i]?.pic
-        if (parseColourPickToken(pic) === '0') return false
-        return f.confidence === 'low'
-      }) ||
-      ocr.weftRows.some((r) => r.confidence === 'low' && parseColourPickToken(r.pic) !== '0')
-    if (!needsFlag) {
-      return {
-        ...ocr,
-        weftRows: ocr.weftRows.map((r) => ({ ...r, strings: '' })),
-        totalStrings: emptyField(),
-      }
+    // Align weft rows 1:1 with feeder order — never shift picks between rows
+    const maxNo = Math.max(
+      ...cleared.feeders.map((f) => f.feederNo),
+      cleared.weftRows.length,
+    )
+    const feeders: DesignOcrFeeder[] = []
+    const weftRows: DesignOcrWeftRow[] = []
+    for (let i = 1; i <= maxNo; i++) {
+      const existingF = cleared.feeders.find((f) => f.feederNo === i)
+      const existingW = cleared.weftRows[i - 1]
+      feeders.push(
+        existingF || {
+          feederNo: i,
+          yarnType: '-',
+          confidence: 'missing',
+          sourceLabel: `Colour ${i}`,
+        },
+      )
+      const picRaw = (existingW?.pic || '').trim()
+      weftRows.push({
+        pic: picRaw,
+        strings: '',
+        confidence: picRaw
+          ? existingW?.confidence || 'low'
+          : existingF
+            ? 'missing'
+            : 'missing',
+      })
     }
+    const needsVerify =
+      feeders.some((f, i) => {
+        if (parseColourPickToken(weftRows[i]?.pic) === '0') return false
+        return f.confidence === 'low' || f.confidence === 'missing'
+      }) ||
+      weftRows.some(
+        (r) =>
+          (r.confidence === 'low' || r.confidence === 'missing') &&
+          parseColourPickToken(r.pic) !== '0',
+      )
     return {
-      ...ocr,
-      weftRows: ocr.weftRows.map((r) => ({ ...r, strings: '' })),
-      totalStrings: emptyField(),
+      ...cleared,
+      feeders,
+      weftRows,
       readWarning:
-        ocr.readWarning ||
-        'Some Feeder/Colour or Pick rows are low confidence — please confirm before Confirm.',
+        cleared.readWarning ||
+        (needsVerify
+          ? `${OCR_VERIFY_HINT} Check Colour/Feeder and Pick rows before Confirm.`
+          : undefined),
     }
   }
 
-  const loom = Number(ocr.loomPick.value) || Number(ocr.totalPick.value) || 0
-  const inferred = inferColourRowCount(ocr.rawText || '')
-  let rowCount = hasFeeders
-    ? Math.max(ocr.feeders.length, ocr.weftRows.length, inferred || 0)
-    : inferred || 3
-
-  // Prefer 3 colours for typical 48–200 loom jacquard sheets when nothing else known
-  if (!hasFeeders && !inferred && loom >= 48 && loom <= 200) rowCount = 3
-  if (rowCount < 1) rowCount = 3
-  if (rowCount > 6) rowCount = 6
-
-  const picEach = suggestEqualPics(loom, rowCount)
-
-  // Preserve any yarn/pic already extracted; fill gaps for review
-  const feeders: DesignOcrFeeder[] = []
-  const weftRows: DesignOcrWeftRow[] = []
-  for (let i = 1; i <= rowCount; i++) {
-    const existingF = ocr.feeders.find((f) => f.feederNo === i)
-    const existingW = ocr.weftRows[i - 1]
-    feeders.push(
-      existingF || {
+  // Detected Colour N labels but no picks — create empty rows (no invented picks)
+  const inferred = inferColourRowCount(cleared.rawText || '')
+  if (!hasFeeders && !hasWefts && inferred >= 1) {
+    const feeders: DesignOcrFeeder[] = []
+    const weftRows: DesignOcrWeftRow[] = []
+    for (let i = 1; i <= Math.min(inferred, 6); i++) {
+      feeders.push({
         feederNo: i,
         yarnType: '-',
-        confidence: 'low',
+        confidence: 'missing',
         sourceLabel: `Colour ${i}`,
-      },
-    )
-    const existingPic = (existingW?.pic || '').trim()
-    const pic = existingPic !== '' ? parseColourPickToken(existingPic) : picEach
-    weftRows.push({
-      pic: pic || '',
-      strings: '',
-      confidence: existingPic !== '' ? (parseColourPickToken(existingPic) === '0' ? 'high' : existingW!.confidence) : 'low',
-    })
-  }
-
-  // Recover ZARI on Colour 2 when OCR saw zaree/zari anywhere
-  const raw = ocr.rawText || ''
-  if (/\bzaree\b|\bzari\b|\bjari\b/i.test(raw)) {
-    const idx = feeders.findIndex((f) => f.feederNo === 2)
-    if (idx >= 0 && (feeders[idx].yarnType === '-' || !feeders[idx].yarnType)) {
-      feeders[idx] = {
-        ...feeders[idx],
-        yarnType: 'ZARI',
-        confidence: 'low',
-        sourceLabel: feeders[idx].sourceLabel || 'Colour 2',
-      }
+      })
+      weftRows.push({ pic: '', strings: '', confidence: 'missing' })
+    }
+    return {
+      ...cleared,
+      feeders,
+      weftRows,
+      readWarning:
+        cleared.readWarning ||
+        `${OCR_VERIFY_HINT} Colour rows detected but Pick values were not read — enter manually.`,
     }
   }
 
-  const withRows = {
-    ...ocr,
-    feeders,
-    weftRows,
-    totalStrings: emptyField(),
-    readWarning:
-      ocr.readWarning ||
-      'Feeder/Colour & Pick rows need review — values were estimated; confirm before Confirm.',
+  // Feeders without wefts (or vice versa) — pad blanks only, never invent numbers
+  if (hasFeeders && !hasWefts) {
+    return {
+      ...cleared,
+      weftRows: cleared.feeders.map(() => ({
+        pic: '',
+        strings: '',
+        confidence: 'missing' as const,
+      })),
+      readWarning:
+        cleared.readWarning ||
+        `${OCR_VERIFY_HINT} Pick column not read — enter Pick for each Colour/Feeder.`,
+    }
   }
-  return ensureLoomPickFromFeederSum(withRows)
+
+  return cleared
 }
 
 /** Parse Pick column rows in document order (exclude Total line). Strings column ignored. */
@@ -847,9 +817,8 @@ export function parseDesignReferenceText(
   }
 
   // Strings never used for costing — store cleared
-  const totals = extractTotals(normalized)
   result.totalStrings = emptyField()
-  // totalPick here = Σ weft colour picks (reference); loom pick read separately
+  // totalPick = Σ weft colour picks (reference / TOTAL WEFT PIC only — NOT loom pick)
   result.totalPick = colour.totalPick
     ? { value: colour.totalPick, confidence: 'high', source: 'sum_colour_picks' }
     : sumWeftPics(result.weftRows)
@@ -857,7 +826,6 @@ export function parseDesignReferenceText(
       : emptyField()
 
   if (!result.weftRows.length) {
-    // Format A "315 / 315 Strings" — do NOT invent weft PIC; Strings ignored
     const formatA = extractFormatAStringPair(normalized)
     if (formatA) {
       result.weftRows = []
@@ -865,15 +833,8 @@ export function parseDesignReferenceText(
   }
 
   result.rawText = normalized
-  const sumFallback = result.totalPick.value || undefined
-  result.loomPick = extractLoomPick(normalized, sumFallback)
-  // Prefer explicit sheet total when extractLoomPick fell back and totals has a value
-  if (
-    result.loomPick.source === 'sum_colour_picks_fallback' &&
-    totals.totalPick.value
-  ) {
-    result.loomPick = { ...totals.totalPick, source: totals.totalPick.source || 'total_pick' }
-  }
+  // TOTAL LOOM PICK from sheet label only — never Σ picks
+  result.loomPick = extractLoomPick(normalized)
   return clearOcrStrings(result)
 }
 
@@ -923,21 +884,33 @@ export function mergeDesignOcrPayload(
   }
 
   merged.rawText = text || api.rawText
-  const cleared = clearOcrStrings(merged)
-  // Preserve sheet/vision loom pick; only soft-fallback when missing
-  if (!cleared.loomPick.value.trim()) {
-    return ensureLoomPickFromFeederSum(cleared)
-  }
-  return cleared
+  return clearOcrStrings(merged)
 }
 
-/** Downscale / recompress camera photos for faster browser OCR. */
+/** Downscale / preprocess DIN sheet photos for table-aware Tesseract OCR. */
 
-/** Render file to JPEG, optionally rotated, optionally cropped to left table region. */
+type RenderOpts = {
+  tableCrop?: boolean
+  /** Top band: Design No. + TOTAL LOOM PICK */
+  headerCrop?: boolean
+  /** Horizontal strip for one Colour row (0-based among top table rows) */
+  rowStrip?: number
+  rowStripCount?: number
+  maxEdge?: number
+  upscale?: number
+  contrast?: number
+  sharpen?: boolean
+  brightness?: number
+}
+
+/**
+ * Render file to JPEG with rotation, contrast, optional sharpen, and region crops.
+ * Regions: full page, header (DIN/loom), left table, or individual Colour row strips.
+ */
 async function renderImageBlob(
   file: File,
   rotateDeg: 0 | 90 | 180 | 270,
-  opts?: { tableCrop?: boolean; maxEdge?: number; upscale?: number; contrast?: number },
+  opts?: RenderOpts,
 ): Promise<Blob | null> {
   if (typeof createImageBitmap === 'undefined' || typeof OffscreenCanvas === 'undefined') {
     return null
@@ -949,7 +922,7 @@ async function renderImageBlob(
     } catch {
       bitmap = await createImageBitmap(file)
     }
-    const maxEdge = opts?.maxEdge ?? 1800
+    const maxEdge = opts?.maxEdge ?? 2000
     const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height))
     const sw = Math.max(1, Math.round(bitmap.width * scale))
     const sh = Math.max(1, Math.round(bitmap.height * scale))
@@ -975,27 +948,70 @@ async function renderImageBlob(
       ctx.translate(0, ch)
       ctx.rotate(-Math.PI / 2)
     }
-    const contrast = opts?.contrast ?? 1.25
-    ctx.filter = `contrast(${contrast}) saturate(0.12) brightness(1.05)`
+    const contrast = opts?.contrast ?? 1.35
+    const brightness = opts?.brightness ?? 1.06
+    ctx.filter = `contrast(${contrast}) saturate(0.08) brightness(${brightness})`
     ctx.drawImage(bitmap, 0, 0, sw, sh)
     ctx.restore()
     bitmap.close()
 
+    // Optional unsharp-mask style pass via contrast redraw
+    if (opts?.sharpen !== false) {
+      try {
+        const imgData = ctx.getImageData(0, 0, cw, ch)
+        const d = imgData.data
+        // Mild threshold boost on dark text against light paper
+        for (let i = 0; i < d.length; i += 4) {
+          const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
+          const v = g < 140 ? Math.max(0, g * 0.82) : Math.min(255, g * 1.08)
+          d[i] = d[i + 1] = d[i + 2] = v
+        }
+        ctx.putImageData(imgData, 0, 0)
+      } catch {
+        /* getImageData may fail on tainted canvas — skip */
+      }
+    }
+
     let outCanvas: OffscreenCanvas = canvas
-    if (opts?.tableCrop) {
-      // Left ~52% × top ~60%: Colour/Pick grid sits under Design Number on diner sheets
-      const y0 = Math.round(ch * 0.06)
-      const tw = Math.round(cw * 0.52)
-      const th = Math.round(ch * 0.56)
+    if (opts?.headerCrop) {
+      const tw = Math.round(cw * 0.72)
+      const th = Math.round(ch * 0.28)
       const crop = new OffscreenCanvas(tw, th)
       const cctx = crop.getContext('2d')
       if (cctx) {
         cctx.fillStyle = '#fff'
         cctx.fillRect(0, 0, tw, th)
-        // High contrast helps faint Pick digits; desaturate drops fabric-sample noise
-        cctx.filter = 'contrast(1.85) saturate(0.02) brightness(1.08)'
+        cctx.filter = 'contrast(1.7) saturate(0.02) brightness(1.1)'
+        cctx.drawImage(canvas, 0, 0, tw, th, 0, 0, tw, th)
+        outCanvas = crop
+      }
+    } else if (opts?.tableCrop) {
+      const y0 = Math.round(ch * 0.06)
+      const tw = Math.round(cw * 0.55)
+      const th = Math.round(ch * 0.58)
+      const crop = new OffscreenCanvas(tw, th)
+      const cctx = crop.getContext('2d')
+      if (cctx) {
+        cctx.fillStyle = '#fff'
+        cctx.fillRect(0, 0, tw, th)
+        cctx.filter = 'contrast(1.9) saturate(0.02) brightness(1.1)'
         cctx.drawImage(canvas, 0, y0, tw, th, 0, 0, tw, th)
         outCanvas = crop
+
+        if (opts.rowStrip != null && opts.rowStrip >= 0) {
+          const n = Math.max(2, opts.rowStripCount || 4)
+          const bandH = Math.max(24, Math.round(th / (n + 1)))
+          const y = Math.min(th - bandH, Math.round(opts.rowStrip * bandH * 0.95 + th * 0.12))
+          const row = new OffscreenCanvas(tw, bandH)
+          const rctx = row.getContext('2d')
+          if (rctx) {
+            rctx.fillStyle = '#fff'
+            rctx.fillRect(0, 0, tw, bandH)
+            rctx.filter = 'contrast(2.1) saturate(0) brightness(1.12)'
+            rctx.drawImage(crop, 0, y, tw, bandH, 0, 0, tw, bandH)
+            outCanvas = row
+          }
+        }
       }
     }
 
@@ -1012,7 +1028,7 @@ async function renderImageBlob(
       }
     }
 
-    return await outCanvas.convertToBlob({ type: 'image/jpeg', quality: 0.92 })
+    return await outCanvas.convertToBlob({ type: 'image/jpeg', quality: 0.94 })
   } catch {
     return null
   }
@@ -1035,56 +1051,107 @@ function mergeColourParse(
   hints?: { subject?: string; filename?: string },
 ): DesignOcrResult {
   const colourParsed = parseDesignReferenceText(colourText, hints)
-  if (colourParsed.feeders.length < 1) return base
+  if (colourParsed.feeders.length < 1 && colourParsed.weftRows.length < 1) return base
+
+  const feeders = [...base.feeders]
+  const weftRows = [...base.weftRows]
+
+  for (const f of colourParsed.feeders) {
+    const idx = feeders.findIndex((x) => x.feederNo === f.feederNo)
+    if (idx >= 0) {
+      // Prefer non-blank yarn; keep higher confidence
+      const cur = feeders[idx]
+      const curBlank = isBlankYarnName(cur.yarnType)
+      const nextBlank = isBlankYarnName(f.yarnType)
+      if ((curBlank && !nextBlank) || (f.confidence === 'high' && cur.confidence !== 'high')) {
+        feeders[idx] = { ...f, sourceLabel: f.sourceLabel || `Colour ${f.feederNo}` }
+      }
+    } else {
+      feeders.push({ ...f, sourceLabel: f.sourceLabel || `Colour ${f.feederNo}` })
+    }
+  }
+  feeders.sort((a, b) => a.feederNo - b.feederNo)
+
+  // Align weft picks 1:1 by Colour index — never shift
+  const maxNo = Math.max(
+    feeders.length ? Math.max(...feeders.map((f) => f.feederNo)) : 0,
+    colourParsed.weftRows.length,
+    weftRows.length,
+  )
+  const nextWefts: DesignOcrWeftRow[] = []
+  for (let i = 0; i < maxNo; i++) {
+    const fromStrip = colourParsed.weftRows[i]
+    const fromBase = weftRows[i]
+    const stripPic = (fromStrip?.pic || '').trim()
+    const basePic = (fromBase?.pic || '').trim()
+    if (stripPic !== '') {
+      nextWefts.push({ pic: stripPic, strings: '', confidence: fromStrip!.confidence })
+    } else if (basePic !== '') {
+      nextWefts.push({ pic: basePic, strings: '', confidence: fromBase!.confidence })
+    } else {
+      nextWefts.push({ pic: '', strings: '', confidence: 'missing' })
+    }
+  }
+
   const merged: DesignOcrResult = {
     ...base,
-    feeders: colourParsed.feeders,
-    weftRows: colourParsed.weftRows,
+    feeders,
+    weftRows: nextWefts,
     rawText: [base.rawText, colourText].filter(Boolean).join('\n---table---\n'),
   }
   if (!merged.loomPick.value && colourParsed.loomPick.value) merged.loomPick = colourParsed.loomPick
   if (!merged.totalPick.value && colourParsed.totalPick.value) merged.totalPick = colourParsed.totalPick
-  return ensureLoomPickFromFeederSum(merged)
+  return clearOcrStrings(merged)
 }
 
 /**
- * Client-side Tesseract.js OCR — no Anthropic / Edge Function / API key.
- * Full page for DIN/loom (multi-orientation), then left-table crop for Feeder/PIC.
- * Does not stop early when only DIN + loom are found. Soft time budget avoids "Reading…" hang.
+ * Client-side Tesseract.js OCR — table-aware DIN sheet pipeline.
+ * 1) Auto-rotate (multi-orientation) + contrast/sharpen full page
+ * 2) Header crop → Design No. + TOTAL LOOM PICK
+ * 3) Left-table crop → Colour/Feeder grid
+ * 4) Individual Colour row strips → cell-level Pick/yarn (no invented values)
  */
 async function ocrViaTesseract(
   file: File,
   hints?: { subject?: string; filename?: string },
 ): Promise<{ text: string; parsed: DesignOcrResult }> {
   const empty = { text: '', parsed: emptyDesignOcrResult() }
-  const deadline = Date.now() + 45_000
+  const deadline = Date.now() + 55_000
   try {
     const mod = await import('tesseract.js')
-    const rotations: Array<0 | 90 | 180 | 270> = [90, 270, 0]
+    const rotations: Array<0 | 90 | 180 | 270> = [90, 270, 0, 180]
     let bestText = ''
     let bestParsed = emptyDesignOcrResult()
     let bestScore = -1
     let bestDeg: 0 | 90 | 180 | 270 = 90
 
-    for (const deg of rotations) {
-      if (Date.now() > deadline) break
-      const blob =
-        (await renderImageBlob(file, deg, { maxEdge: 1600, contrast: 1.3 })) ||
-        (deg === 0 ? file : null)
-      if (!blob) continue
+    async function recognizeBlob(blob: Blob | File, ms = 12_000): Promise<string> {
       const input =
         blob instanceof File
           ? blob
           : new File([blob], file.name || 'din-sheet.jpg', { type: blob.type || 'image/jpeg' })
+      const result = await Promise.race([
+        mod.recognize(input, 'eng'),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+      ])
+      return (result?.data.text || '').trim()
+    }
+
+    // Pass 1: full-page orientations
+    for (const deg of rotations) {
+      if (Date.now() > deadline) break
+      const blob =
+        (await renderImageBlob(file, deg, {
+          maxEdge: 1800,
+          contrast: 1.4,
+          sharpen: true,
+          brightness: 1.06,
+        })) || (deg === 0 ? file : null)
+      if (!blob) continue
       try {
-        const result = await Promise.race([
-          mod.recognize(input, 'eng'),
-          new Promise<null>((resolve) => setTimeout(() => resolve(null), 14_000)),
-        ])
-        if (!result) continue
-        const text = (result.data.text || '').trim()
+        const text = await recognizeBlob(blob, 14_000)
         if (!text) continue
-        const parsed = ensureLoomPickFromFeederSum(parseDesignReferenceText(text, hints))
+        const parsed = clearOcrStrings(parseDesignReferenceText(text, hints))
         const score = scoreOcrParse(parsed) + Math.min(3, Math.floor(text.length / 200))
         if (score > bestScore) {
           bestScore = score
@@ -1092,12 +1159,51 @@ async function ocrViaTesseract(
           bestParsed = parsed
           bestDeg = deg
         }
-        if (parsed.designNumber.value && parsed.feeders.length >= 1) break
+        if (parsed.designNumber.value && parsed.feeders.length >= 1 && parsed.loomPick.value) break
       } catch {
-        // next rotation
+        /* next rotation */
       }
     }
 
+    // Pass 2: header crop for Design No. + TOTAL LOOM PICK (source labels)
+    if (Date.now() < deadline) {
+      const headerBlob = await renderImageBlob(file, bestDeg, {
+        headerCrop: true,
+        maxEdge: 2000,
+        upscale: 1.4,
+        contrast: 1.6,
+        sharpen: true,
+      })
+      if (headerBlob) {
+        try {
+          const headerText = await recognizeBlob(headerBlob, 10_000)
+          if (headerText) {
+            const headerParsed = parseDesignReferenceText(headerText, hints)
+            bestText = [bestText, headerText].filter(Boolean).join('\n---header---\n')
+            if (
+              headerParsed.designNumber.value &&
+              (headerParsed.designNumber.confidence === 'high' ||
+                !bestParsed.designNumber.value)
+            ) {
+              bestParsed = { ...bestParsed, designNumber: headerParsed.designNumber }
+              if (headerParsed.qualityName.value) {
+                bestParsed = { ...bestParsed, qualityName: headerParsed.qualityName }
+              }
+            }
+            if (
+              headerParsed.loomPick.value &&
+              (headerParsed.loomPick.confidence === 'high' || !bestParsed.loomPick.value)
+            ) {
+              bestParsed = { ...bestParsed, loomPick: headerParsed.loomPick }
+            }
+          }
+        } catch {
+          /* keep prior */
+        }
+      }
+    }
+
+    // Pass 3: left-table crop for Colour/Feeder + Pick grid
     if (bestParsed.feeders.length < 1 && Date.now() < deadline) {
       const tableDegs = [bestDeg, 90, 270, 0].filter((v, i, a) => a.indexOf(v) === i) as Array<
         0 | 90 | 180 | 270
@@ -1106,33 +1212,73 @@ async function ocrViaTesseract(
         if (Date.now() > deadline) break
         const blob = await renderImageBlob(file, deg, {
           tableCrop: true,
-          maxEdge: 1800,
-          upscale: 1.5,
-          contrast: 1.6,
+          maxEdge: 2000,
+          upscale: 1.6,
+          contrast: 1.75,
+          sharpen: true,
         })
         if (!blob) continue
-        const input = new File([blob], 'din-table.jpg', { type: 'image/jpeg' })
         try {
-          const result = await Promise.race([
-            mod.recognize(input, 'eng'),
-            new Promise<null>((resolve) => setTimeout(() => resolve(null), 12_000)),
-          ])
-          if (!result) continue
-          const text = (result.data.text || '').trim()
+          const text = await recognizeBlob(blob, 12_000)
           if (!text) continue
           const merged = mergeColourParse(bestParsed, text, hints)
           if (merged.feeders.length > bestParsed.feeders.length) {
             bestParsed = merged
             bestText = [bestText, text].filter(Boolean).join('\n---table---\n')
+            bestDeg = deg
           }
           if (bestParsed.feeders.length >= 2) break
         } catch {
-          // continue
+          /* continue */
         }
       }
     }
 
-    bestParsed = ensureReviewFeederRows(ensureLoomPickFromFeederSum(bestParsed))
+    // Pass 4: individual Colour row strips — cell-level read, 1:1 Pick mapping
+    if (Date.now() < deadline) {
+      const stripCount = Math.max(3, Math.min(6, inferColourRowCount(bestText) || 4))
+      for (let row = 0; row < stripCount; row++) {
+        if (Date.now() > deadline) break
+        const stripBlob = await renderImageBlob(file, bestDeg, {
+          tableCrop: true,
+          rowStrip: row,
+          rowStripCount: stripCount,
+          maxEdge: 2000,
+          upscale: 1.8,
+          contrast: 1.85,
+          sharpen: true,
+        })
+        if (!stripBlob) continue
+        try {
+          const stripText = await recognizeBlob(stripBlob, 8_000)
+          if (!stripText) continue
+          bestText = [bestText, stripText].filter(Boolean).join(`\n---row${row + 1}---\n`)
+          const stripParsed = parseDesignReferenceText(stripText, hints)
+          // Merge only Colour rows that were actually read in this strip — never invent
+          if (stripParsed.feeders.length || stripParsed.weftRows.length) {
+            bestParsed = mergeColourParse(bestParsed, stripText, hints)
+          }
+        } catch {
+          /* next strip */
+        }
+      }
+    }
+
+    bestParsed = ensureReviewFeederRows(clearOcrStrings(bestParsed))
+    // Re-extract loom pick from combined text so header pass wins over noise
+    const loomFromAll = extractLoomPick(bestText)
+    if (loomFromAll.value) {
+      bestParsed = { ...bestParsed, loomPick: loomFromAll }
+    } else if (!bestParsed.loomPick.value) {
+      bestParsed = {
+        ...bestParsed,
+        loomPick: emptyField(),
+        readWarning:
+          bestParsed.readWarning ||
+          `${OCR_VERIFY_HINT} TOTAL LOOM PICK was not found on the sheet.`,
+      }
+    }
+
     return { text: bestText, parsed: bestParsed }
   } catch {
     return empty
@@ -1173,34 +1319,52 @@ export async function readDesignReference(
     subject: hints?.subject,
     filename: hints?.filename || file.name,
   })
-  let withSum = ensureReviewFeederRows(ensureLoomPickFromFeederSum(parsed))
-  // Filename / subject often carry the DIN even when image OCR is weak
-  if (!withSum.designNumber.value.trim()) {
+  let result = ensureReviewFeederRows(clearOcrStrings(parsed))
+
+  // Filename / subject may carry Design No. when image OCR missed it (not a guess — source hint)
+  if (!result.designNumber.value.trim()) {
     const fromHints = parseDesignReferenceText(
       [hints?.subject, hints?.filename, file.name].filter(Boolean).join('\n'),
       hints,
     )
     if (fromHints.designNumber.value) {
-      withSum = {
-        ...withSum,
-        designNumber: fromHints.designNumber,
+      result = {
+        ...result,
+        designNumber: { ...fromHints.designNumber, source: fromHints.designNumber.source || 'filename' },
         qualityName:
-          fromHints.qualityName.value && !withSum.qualityName.value
+          fromHints.qualityName.value && !result.qualityName.value
             ? fromHints.qualityName
-            : withSum.qualityName,
+            : result.qualityName,
       }
     }
   }
 
-  const warning = !ocrHasDetectedFields(withSum)
-    ? 'Could not auto-read this photo. Enter Design No. / feeder picks manually — fields stay editable.'
-    : withSum.readWarning
-      ? withSum.readWarning
-      : withSum.designNumber.confidence !== 'high' || !withSum.loomPick.value
-        ? 'Browser OCR filled what it could — please confirm Design No., loom pick, and Colour/PIC rows before Confirm.'
+  // Never invent loom pick from weft sum
+  if (!result.loomPick.value.trim()) {
+    result = { ...result, loomPick: emptyField() }
+  }
+
+  const needsVerify =
+    result.designNumber.confidence !== 'high' ||
+    !result.loomPick.value ||
+    result.loomPick.confidence === 'low' ||
+    result.loomPick.confidence === 'missing' ||
+    result.feeders.some((f) => f.confidence === 'low' || f.confidence === 'missing') ||
+    result.weftRows.some(
+      (r) =>
+        (r.confidence === 'low' || r.confidence === 'missing') &&
+        parseColourPickToken(r.pic) !== '0',
+    )
+
+  const warning = !ocrHasDetectedFields(result)
+    ? `${OCR_VERIFY_HINT} Enter Design No., TOTAL LOOM PICK, and Colour/Pick manually.`
+    : result.readWarning
+      ? result.readWarning
+      : needsVerify
+        ? `${OCR_VERIFY_HINT} Review every field against the DIN image before Confirm.`
         : undefined
 
-  return attachReadMeta({ ...withSum, rawText: text || withSum.rawText }, 'tesseract', warning)
+  return attachReadMeta({ ...result, rawText: text || result.rawText }, 'tesseract', warning)
 }
 
 /** Map OCR review → weft rows. Pick → PIC only. Strings are never stored or used. */
