@@ -226,8 +226,9 @@ function mapWeftRow(r: Record<string, unknown>, i: number): WeftDraft {
   const row: WeftDraft = {
     key: crypto.randomUUID(),
     sr_no: Number(r.sr_no) || i + 1,
-    feeder_label: String(r.feeder_label || `Colour ${feederNo}`),
+    feeder_label: String(r.feeder_label || `Feeder ${feederNo}`),
     feeder_no: Number.isFinite(feederNo) ? feederNo : i + 1,
+    colour: r.colour != null ? String(r.colour) : '',
     weft_name: String(r.weft_name || ''),
     base_denier: base,
     denier: r.denier != null ? String(r.denier) : '',
@@ -290,7 +291,7 @@ async function loadDraftFromHeader(
     supabase
       .from('design_costing_weft')
       .select(
-        'sr_no, weft_name, denier, base_denier, pic, width, length_mtr, rate_per_kg, rate_source, rate_master_id, feeder_no, feeder_label, strings_ref',
+        'sr_no, weft_name, denier, base_denier, pic, width, length_mtr, rate_per_kg, rate_source, rate_master_id, feeder_no, feeder_label, colour, strings_ref',
       )
       .eq('costing_id', header.id)
       .order('sr_no'),
@@ -494,6 +495,7 @@ export async function saveIntakeCostingDraft(input: {
     rate_master_id: row.rate_master_id || null,
     feeder_no: row.feeder_no,
     feeder_label: row.feeder_label || null,
+    colour: row.colour || null,
     strings_ref: row.strings_ref || null,
   }))
 
@@ -512,12 +514,13 @@ export async function saveIntakeCostingDraft(input: {
   }
   const insertWeft = async (payload: typeof weftPayload) => {
     const { error } = await supabase.from('design_costing_weft').insert(payload)
-    if (error && /base_denier|feeder_|strings_ref/i.test(error.message)) {
+    if (error && /base_denier|feeder_|strings_ref|colour/i.test(error.message)) {
       const slim = payload.map(
-        ({ base_denier: _b, feeder_no: _f, feeder_label: _l, strings_ref: _s, ...rest }) => {
+        ({ base_denier: _b, feeder_no: _f, feeder_label: _l, colour: _c, strings_ref: _s, ...rest }) => {
           void _b
           void _f
           void _l
+          void _c
           void _s
           return rest
         },

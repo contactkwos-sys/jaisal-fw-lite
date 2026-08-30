@@ -24,6 +24,7 @@ export type AppScreen =
   | 'beam-remaining'
   | 'design-wise-costing'
   | 'formula-master'
+  | 'quality-master'
   | 'design-catalog'
   | 'crm'
   | 'cash-book'
@@ -150,6 +151,12 @@ export const MAIN_MODULES: MainModule[] = [
         label: 'Rate Master',
         screen: 'rate-master',
         hint: 'Date-wise warp & weft yarn rates',
+      },
+      {
+        id: 'quality-master',
+        label: 'Quality Master',
+        screen: 'quality-master',
+        hint: 'Quality recipes — auto-fill Warp/Weft in DIN Costing',
       },
       { id: 'sample-job', label: 'Sample', screen: 'dto-sample-job', hint: 'Issue sample cards from DIN' },
       { id: 'sample-tracking', label: 'Sample Approval', screen: 'dto-tracking', hint: 'Produce · receive · approve matching' },
@@ -830,6 +837,7 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   'beam-remaining': 'Beam Remaining',
   'design-wise-costing': 'DIN Costing',
   'formula-master': 'Formula Master',
+  'quality-master': 'Quality Master',
   'rate-master': 'Rate Master',
   'design-catalog': 'Design Catalog',
   crm: 'CRM',
@@ -905,6 +913,7 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
     screen === 'dto-promotion' ||
     screen === 'dto-reports' ||
     screen === 'rate-master' ||
+    screen === 'quality-master' ||
     screen === 'formula-master' ||
     screen === 'design-wise-costing'
   ) {

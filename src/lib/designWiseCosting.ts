@@ -269,6 +269,8 @@ export type WeftDraft = {
   /** Feeder/Colour position label e.g. "Colour 1" / "Feeder 1" */
   feeder_label: string
   feeder_no: number | null
+  /** Colour name from Colour Master / OCR (White, Black, …) */
+  colour: string
   weft_name: string
   /** User / Rate Master entered denier (base). Costing uses base + 10. */
   base_denier: string
@@ -386,14 +388,20 @@ export function emptyWarp(sr = 1, lengthMtr: string | number = DEFAULT_LENGTH_MT
 
 export function emptyWeft(
   sr = 1,
-  opts?: { lengthMtr?: string | number; width?: string | number; feederNo?: number },
+  opts?: {
+    lengthMtr?: string | number
+    width?: string | number
+    feederNo?: number
+    colour?: string
+  },
 ): WeftDraft {
   const feederNo = opts?.feederNo ?? sr
   return {
     key: crypto.randomUUID(),
     sr_no: sr,
-    feeder_label: `Colour ${feederNo}`,
+    feeder_label: `Feeder ${feederNo}`,
     feeder_no: feederNo,
+    colour: opts?.colour ?? '',
     weft_name: '',
     base_denier: '',
     denier: '',
@@ -613,7 +621,8 @@ export function computeProfitProjection(
   const prod = n(productionMeters)
   const targetSellingRate = round2(cost + fixed + desired)
   const effectiveSelling = selling > 0 ? selling : targetSellingRate
-  const profitPerMtr = round2(effectiveSelling - cost)
+  // Profit = Customer Sale Rate − applicable cost (internal + fixed)
+  const profitPerMtr = round2(effectiveSelling - cost - fixed)
   const totalProfit = round2(profitPerMtr * prod)
   const marginPctOnCost = cost > 0 ? round2((profitPerMtr / cost) * 100) : 0
   const marginPctOnSelling = effectiveSelling > 0 ? round2((profitPerMtr / effectiveSelling) * 100) : 0
@@ -631,6 +640,82 @@ export function computeProfitProjection(
   }
 }
 
+/** Default Jacquard Repair machine speed (RPM). */
+export const DEFAULT_MACHINE_SPEED_RPM = 450
+
+/** Default weaving efficiency %. */
+export const DEFAULT_EFFICIENCY_PCT = 100
+
+/**
+ * Inches-per-meter constant used in loom production formula.
+ * Meters/Hour = (RPM × 60 × Efficiency%) / (TOTAL LOOM PICK × 39.37)
+ */
+export const LOOM_INCHES_PER_METER = 39.37
+
+export type ProductionSpeedResult = {
+  rpm: number
+  loomPick: number
+  widthInch: number
+  efficiencyPct: number
+  metersPerHour: number
+  metersPer12Hours: number
+  metersPer24Hours: number
+  billingPerHour: number
+  billingPer12Hours: number
+  billingPer24Hours: number
+  profitPerHour: number
+  profitPer12Hours: number
+  profitPer24Hours: number
+}
+
+/**
+ * Jacquard Repair production / weaving speed.
+ *
+ * Meters/Hour = (RPM × 60 × Efficiency/100) / (TOTAL LOOM PICK × 39.37)
+ *
+ * Billing uses FINAL CUSTOMER SALE RATE (100 Mtr commercial basis) — never internal 110m cost.
+ * Profit/period = Profit per meter × meters for that period.
+ */
+export function computeProductionSpeed(opts: {
+  rpm: number | string | null | undefined
+  loomPick: number | string | null | undefined
+  widthInch?: number | string | null | undefined
+  efficiencyPct?: number | string | null | undefined
+  /** Final customer sale rate ₹/m (100 Mtr basis) */
+  customerSaleRatePerMtr: number | string | null | undefined
+  /** Profit ₹/m after cost + fixed */
+  profitPerMtr?: number | string | null | undefined
+}): ProductionSpeedResult {
+  const rpm = n(opts.rpm)
+  const loomPick = n(opts.loomPick)
+  const widthInch = n(opts.widthInch) || DEFAULT_WIDTH
+  const efficiencyPct = n(opts.efficiencyPct) > 0 ? n(opts.efficiencyPct) : DEFAULT_EFFICIENCY_PCT
+  const saleRate = n(opts.customerSaleRatePerMtr)
+  const profitPerMtr = n(opts.profitPerMtr)
+
+  const denom = loomPick * LOOM_INCHES_PER_METER
+  const metersPerHour =
+    rpm > 0 && denom > 0 ? round2((rpm * 60 * (efficiencyPct / 100)) / denom) : 0
+  const metersPer12Hours = round2(metersPerHour * 12)
+  const metersPer24Hours = round2(metersPerHour * 24)
+
+  return {
+    rpm,
+    loomPick,
+    widthInch,
+    efficiencyPct,
+    metersPerHour,
+    metersPer12Hours,
+    metersPer24Hours,
+    billingPerHour: round2(metersPerHour * saleRate),
+    billingPer12Hours: round2(metersPer12Hours * saleRate),
+    billingPer24Hours: round2(metersPer24Hours * saleRate),
+    profitPerHour: round2(metersPerHour * profitPerMtr),
+    profitPer12Hours: round2(metersPer12Hours * profitPerMtr),
+    profitPer24Hours: round2(metersPer24Hours * profitPerMtr),
+  }
+}
+
 /** Calculation hints for info-icon tooltips (auditable chain). */
 export const CALC_HINTS = {
   yarnCostPerMtr:
@@ -643,11 +728,13 @@ export const CALC_HINTS = {
   finalCostPerMtr:
     'Customer Rate / 100 Mtr = Final Internal Cost (110 Mtr) ÷ 100 — never convert twice',
   conversionMultiplier: 'Production Length ÷ Customer Usable Length (110 ÷ 100 = 1.10) — display only',
-  totalProfit: '(CEO Final Selling Rate − Cost/Mtr) × Production Meters',
+  totalProfit: '(CEO Final Selling Rate − Cost/Mtr − Fixed Cost/Mtr) × Production Meters',
   costingDenier: 'Costing Denier = Base Denier + 10 (derived each time from base — never stacked)',
   finalInternalCost110:
     'Total Yarn Cost + Weaving / Conversion + Other Charges (MU/GST) on 110 Mtr basis',
   customerRatePerMtr: 'Final Internal Cost for 110 Mtr ÷ 100',
+  productionSpeed:
+    'Meters/Hour = (RPM × 60 × Efficiency%) / (TOTAL LOOM PICK × 39.37). Billing uses Final Customer Sale Rate.',
 } as const
 
 /** Role helpers for DIN Costing access */
