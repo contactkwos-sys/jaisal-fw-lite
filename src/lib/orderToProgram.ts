@@ -179,13 +179,13 @@ export async function loadDesignForOrder(dinNumber: string): Promise<DesignForOr
   const primary = await supabase
     .from('design_costing')
     .select(
-      'id, din_number, quality_name, diary_image_url, ceo_final_selling_rate, final_cost_per_mtr, design_length_mtr, status, created_at',
+      'id, din_number, quality_name, diary_image_url, sample_image_url, ceo_final_selling_rate, final_cost_per_mtr, design_length_mtr, status, created_at',
     )
     .eq('din_number', trimmed)
     .order('created_at', { ascending: false })
     .limit(5)
 
-  if (primary.error && /ceo_final_selling_rate|column .* does not exist/i.test(primary.error.message)) {
+  if (primary.error && /ceo_final_selling_rate|sample_image_url|column .* does not exist/i.test(primary.error.message)) {
     const fallback = await supabase
       .from('design_costing')
       .select('id, din_number, quality_name, diary_image_url, final_cost_per_mtr, design_length_mtr, status, created_at')
@@ -219,11 +219,18 @@ export async function loadDesignForOrder(dinNumber: string): Promise<DesignForOr
 
   const matchings = (din?.din_matchings || []).slice().sort((a, b) => a.matching_no - b.matching_no)
 
+  // Sales / customer preview: Final Sample Photo or Matching Collage only — never internal DIN sheet
+  const salesPreview =
+    din?.main_sample_photo_url ||
+    din?.combined_matching_photo_url ||
+    (header as { sample_image_url?: string | null } | null)?.sample_image_url ||
+    null
+
   return {
     dinId: din?.id || '',
     dinNumber: din?.din_number || header?.din_number || trimmed,
     designName: din?.design_name || header?.quality_name || trimmed,
-    previewUrl: header?.diary_image_url || din?.din_image_url || null,
+    previewUrl: salesPreview,
     qualityName: header?.quality_name || din?.common_warp || '—',
     widthLabel,
     salesRate: salesRate ?? 0,

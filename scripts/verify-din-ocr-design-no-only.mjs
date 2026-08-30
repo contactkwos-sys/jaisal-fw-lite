@@ -56,7 +56,7 @@ assert.ok(/\bapplyOcrToCostingDraft\b/.test(importSrc), 'must call applyOcrToCos
 assert.ok(/\bonLiveSync\b/.test(importSrc), 'live OCR sync must be wired')
 assert.ok(/Confirm/.test(importSrc), 'OCR Confirm button must exist')
 assert.ok(/TOTAL LOOM PICK/.test(importSrc), 'must show TOTAL LOOM PICK field')
-assert.ok(/from DIN sheet/.test(importSrc), 'loom pick must be labelled as from sheet')
+assert.ok(/printed on sheet|from DIN sheet|feeder PIC/.test(importSrc), 'loom pick must be labelled clearly')
 
 console.log('PASS  Section 1 OCR upload + confirm path restored')
 
@@ -99,6 +99,7 @@ const ocrSrc = read('src/lib/designOcr.ts')
 assert.ok(ocrSrc.includes('extractLoomPick'), 'must extract loom pick from sheet')
 assert.ok(ocrSrc.includes('clearOcrStrings'), 'strings cleared / not used for costing')
 assert.ok(ocrSrc.includes('OCR_VERIFY_HINT'), 'verify hint constant')
+assert.ok(ocrSrc.includes('Needs Manual Verification'), 'low-confidence wording')
 assert.ok(ocrSrc.includes('headerCrop'), 'header crop preprocess')
 assert.ok(ocrSrc.includes('rowStrip'), 'row-strip cell OCR')
 assert.ok(
@@ -106,10 +107,22 @@ assert.ok(
   'suggestEqualPics must not invent picks',
 )
 assert.ok(
-  !/sum_feeder_picks_fallback|sum_colour_picks_fallback/.test(ocrSrc) ||
-    !/loomPick:.*sum_feeder/.test(ocrSrc),
-  'must not assign loom pick from feeder sum fallback',
+  ocrSrc.includes('ensureLoomPickFromFeederSum'),
+  'must resolve loom pick vs feeder PIC sum with verify warning',
 )
+assert.ok(
+  ocrSrc.includes('sum_feeder_pic_suggest'),
+  'may suggest Σ feeder PIC at low confidence when printed total missing',
+)
+assert.ok(!/\bTRN\b/.test(ocrSrc), 'no TRN in OCR')
+assert.ok(!/\bTRN\b/.test(formulaSrc), 'no TRN in costing formulas')
+assert.ok(!/\bTRN\b/.test(costingSrc), 'no TRN in DIN Costing UI')
+
+assert.ok(formulaSrc.includes('computeProductionSpeed'), 'production speed helper')
+assert.ok(formulaSrc.includes('DEFAULT_MACHINE_SPEED_RPM = 450'), 'default RPM 450')
+assert.ok(costingSrc.includes('Production / Weaving Speed'), 'production UI section')
+assert.ok(costingSrc.includes('Quality Master') || costingSrc.includes('quality-master'), 'Quality Master wired')
+assert.ok(costingSrc.includes('dwc-quality-master'), 'Quality Master dropdown')
 
 const importSrc2 = read('src/components/dinCosting/DinDesignImportSection.tsx')
 assert.ok(
@@ -117,7 +130,10 @@ assert.ok(
   'must not auto-Confirm OCR without user review',
 )
 assert.ok(importSrc2.includes('OCR_VERIFY_HINT'), 'UI shows verify hint')
-assert.ok(importSrc2.includes('from DIN sheet (not Σ Colour Picks)'), 'loom pick label clarity')
+assert.ok(
+  /printed on sheet|feeder PIC|from DIN sheet/.test(importSrc2),
+  'loom pick label clarity',
+)
 
-console.log('PASS  Denier + 110/100 formula + loom pick from sheet (no invent)')
+console.log('PASS  Denier + 110/100 formula + loom pick verify + no TRN + production')
 console.log('\nAll DIN Costing formula/OCR layout checks passed')

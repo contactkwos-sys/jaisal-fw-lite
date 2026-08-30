@@ -1090,7 +1090,7 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
                   Edit Recipe (Program Override)
                 </button>
               ) : (
-                <span className="text-muted">Approved recipe (view only)</span>
+                <span className="text-muted">Internal recipe hidden for Sales</span>
               )}
               {canEditRecipe && feeders.length < MAX_FEEDERS ? (
                 <button type="button" className="btn-warp" onClick={addFeeder}>+ Add Feeder</button>
@@ -1099,6 +1099,13 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
               ) : null}
             </div>
           </div>
+          {salesman ? (
+            <p className="text-muted otp-hint">
+              Sales view shows Design/DIN, Quality, Final Sample / Matching Collage photo, and Final Customer Sale Rate only.
+              Warp/Weft recipe and internal costing stay confidential.
+            </p>
+          ) : (
+          <>
           <div className="table-wrap otp-table-wrap">
             <table className="data-table">
               <thead>
@@ -1173,6 +1180,8 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
             <div><span className="text-muted">Total Weight With Add.</span><strong className="num">{recipeTotals.finalWeight} KG</strong></div>
           </div>
           {recipeOverride ? <p className="text-muted otp-hint">Recipe edits save as PROGRAM OVERRIDE — master Design recipe is unchanged.</p> : null}
+          </>
+          )}
 
           <div className="otp-jobcard surface">
             <div className="otp-panel-head">

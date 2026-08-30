@@ -1,6 +1,7 @@
 /**
- * OCR source-fidelity checks — never invent / never Σ for TOTAL LOOM PICK.
- * Mirrors src/lib/designOcr.ts extractLoomPick + suggestEqualPics + ensure review rules.
+ * OCR source-fidelity checks — printed TOTAL LOOM PICK preferred;
+ * Σ feeder PIC is TOTAL WEFT PIC (and may only suggest loom pick at low confidence).
+ * Mirrors src/lib/designOcr.ts extractLoomPick + ensureLoomPickFromFeederSum rules.
  * Run: node scripts/test-din-ocr-source-fidelity.mjs
  */
 
@@ -35,6 +36,26 @@ function sumWeftPics(rows) {
   return String(rows.reduce((s, r) => s + (Number(r.pic) || 0), 0))
 }
 
+/** Mirror ensureLoomPickFromFeederSum — suggest Σ only when printed missing, at low confidence. */
+function ensureLoomPickFromFeederSum(ocr) {
+  const weftSum = sumWeftPics(ocr.weftRows || [])
+  const printed = (ocr.loomPick?.value || '').trim()
+  if (printed && weftSum && Number(printed) !== Number(weftSum)) {
+    return {
+      ...ocr,
+      loomPick: { ...ocr.loomPick, value: printed },
+      warning: `TOTAL LOOM PICK (${printed}) differs from Σ feeder PIC (${weftSum})`,
+    }
+  }
+  if (!printed && weftSum) {
+    return {
+      ...ocr,
+      loomPick: { value: weftSum, confidence: 'low', source: 'sum_feeder_pic_suggest' },
+    }
+  }
+  return ocr
+}
+
 const checks = []
 
 const jfg = `
@@ -54,6 +75,13 @@ const weftSum = sumWeftPics([{ pic: '25' }, { pic: '25' }, { pic: '50' }])
 checks.push(['Σ Colour Picks = 100 (weft only)', weftSum === '100'])
 checks.push(['Loom stays 112 while Σ is 100', loom.value === '112' && weftSum === '100'])
 
+const resolvedMismatch = ensureLoomPickFromFeederSum({
+  loomPick: loom,
+  weftRows: [{ pic: '25' }, { pic: '25' }, { pic: '50' }],
+})
+checks.push(['Mismatch keeps printed 112', resolvedMismatch.loomPick.value === '112'])
+checks.push(['Mismatch sets warning', Boolean(resolvedMismatch.warning)])
+
 const noLabel = `
 Design Number: JFG9999
 Colour 1  HSY  37  2000
@@ -62,10 +90,17 @@ Colour 3  TEX  37  2000
 Total 111 6000
 `
 const missing = extractLoomPick(noLabel)
-checks.push(['No TOTAL LOOM PICK label → empty (no invent)', missing.value === ''])
+checks.push(['No TOTAL LOOM PICK label → empty (extract)', missing.value === ''])
 checks.push(['Missing confidence', missing.confidence === 'missing'])
-checks.push(['Never use colour Total 111 as loom', missing.value !== '111'])
-checks.push(['Never use Σ 111 as loom', missing.value !== sumWeftPics([{ pic: '37' }, { pic: '37' }, { pic: '37' }])])
+checks.push(['Never use colour Total 111 as printed loom', missing.value !== '111'])
+
+const suggested = ensureLoomPickFromFeederSum({
+  loomPick: missing,
+  weftRows: [{ pic: '37' }, { pic: '37' }, { pic: '37' }],
+})
+checks.push(['Suggest Σ at low confidence when printed missing', suggested.loomPick.value === '111'])
+checks.push(['Suggested sum is low confidence', suggested.loomPick.confidence === 'low'])
+checks.push(['Suggested source marked', suggested.loomPick.source === 'sum_feeder_pic_suggest'])
 
 checks.push(['suggestEqualPics never invents', suggestEqualPics(112, 3) === ''])
 

@@ -271,6 +271,59 @@ checks.push([
 checks.push(['Yarn cost/mtr = yarn ÷ 100', demo.yarnCostPerMtr === round2(demo.totalYarnAmount / 100)])
 checks.push(['Usable / customer basis = 100', demo.usableLengthMtr === 100])
 
+// Spec acceptance: Internal ₹6,500 → Customer ₹65/m (÷100 once, never ÷110 again)
+checks.push(['Spec 6500 ÷ 100 = 65', round2(6500 / 100) === 65])
+checks.push(['Never 6500 ÷ 110 as customer rate', round2(6500 / 110) !== 65])
+
+// Production speed: Meters/Hour = (RPM × 60 × Eff%) / (Loom Pick × 39.37)
+function computeProductionSpeed(opts) {
+  const rpm = n(opts.rpm)
+  const loomPick = n(opts.loomPick)
+  const efficiencyPct = n(opts.efficiencyPct) > 0 ? n(opts.efficiencyPct) : 100
+  const saleRate = n(opts.customerSaleRatePerMtr)
+  const profitPerMtr = n(opts.profitPerMtr)
+  const denom = loomPick * 39.37
+  const metersPerHour =
+    rpm > 0 && denom > 0 ? round2((rpm * 60 * (efficiencyPct / 100)) / denom) : 0
+  return {
+    metersPerHour,
+    metersPer12Hours: round2(metersPerHour * 12),
+    metersPer24Hours: round2(metersPerHour * 24),
+    billingPer12Hours: round2(metersPerHour * 12 * saleRate),
+    profitPer12Hours: round2(metersPerHour * 12 * profitPerMtr),
+  }
+}
+const prod100 = computeProductionSpeed({
+  rpm: 450,
+  loomPick: 112,
+  efficiencyPct: 100,
+  customerSaleRatePerMtr: 65,
+  profitPerMtr: 10,
+})
+const prod85 = computeProductionSpeed({
+  rpm: 450,
+  loomPick: 112,
+  efficiencyPct: 85,
+  customerSaleRatePerMtr: 65,
+  profitPerMtr: 10,
+})
+checks.push(['Production 100% > 0 m/hr', prod100.metersPerHour > 0])
+checks.push(['12h = hour × 12', prod100.metersPer12Hours === round2(prod100.metersPerHour * 12)])
+checks.push(['24h = hour × 24', prod100.metersPer24Hours === round2(prod100.metersPerHour * 24)])
+checks.push(['85% efficiency reduces meters', prod85.metersPerHour < prod100.metersPerHour])
+checks.push([
+  '85% ≈ 85% of 100% meters',
+  Math.abs(prod85.metersPerHour - round2(prod100.metersPerHour * 0.85)) < 0.02,
+])
+checks.push([
+  'Billing uses customer sale rate',
+  prod100.billingPer12Hours === round2(prod100.metersPer12Hours * 65),
+])
+checks.push([
+  'Profit scales with efficiency',
+  prod85.profitPer12Hours < prod100.profitPer12Hours,
+])
+
 // Legacy JFG checks
 const TOTAL_LOOM_PICK = 112
 const wefts = [

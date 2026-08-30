@@ -1455,18 +1455,34 @@ export function mapOcrToWeftRows(
     const pic = (src.pic || '').trim()
     const rawYarn = feeder ? normalizeYarnLabel(feeder.yarnType) : ''
     const yarnName = isBlankYarnName(rawYarn) ? '' : rawYarn
+    // Common colour words from OCR colour column → Colour Master field (not Rate Master yarn)
+    const colourGuess =
+      yarnName &&
+      /^(white|black|gold|silver|red|blue|green|yellow|maroon|cream|beige|brown|pink|orange|grey|gray)$/i.test(
+        yarnName,
+      )
+        ? yarnName.charAt(0).toUpperCase() + yarnName.slice(1).toLowerCase()
+        : ''
 
     let row: WeftDraft = {
-      ...emptyWeft(i + 1, { lengthMtr: length, width: DEFAULT_WIDTH, feederNo }),
-      feeder_label: feederLabel,
+      ...emptyWeft(i + 1, {
+        lengthMtr: length,
+        width: DEFAULT_WIDTH,
+        feederNo,
+        colour: colourGuess,
+      }),
+      feeder_label: feederLabel.startsWith('Colour')
+        ? `Feeder ${feederNo}`
+        : feederLabel,
       feeder_no: feederNo,
+      colour: colourGuess,
       pic,
       width: String(DEFAULT_WIDTH),
       length_mtr: length,
-      weft_name: yarnName,
+      weft_name: colourGuess ? '' : yarnName,
       strings_ref: '',
     }
-    if (yarnName) {
+    if (yarnName && !colourGuess) {
       row = applyWeftItemFromMaster(row, yarnName, rates, costingDate)
     }
     rows.push(row)
