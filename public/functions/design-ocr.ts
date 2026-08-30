@@ -1,30 +1,22 @@
-const corsHeaders = {
+/**
+ * RETIRED — DIN Costing no longer performs OCR / auto-read of design sheets.
+ * DIN sheet images are reference attachments only; all fields are entered manually.
+ */
+import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
+
+const cors = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers':
-    'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Max-Age': '86400',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-/**
- * DEPRECATED — DIN Costing Design Import uses browser Tesseract.js only.
- * No Anthropic / ANTHROPIC_API_KEY. Stub only (mirrors supabase/functions/design-ocr).
- */
-Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
-
+serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   return new Response(
     JSON.stringify({
       error: 'design-ocr Edge Function retired',
-      detail:
-        'DIN Costing reads design sheets in the browser with Tesseract.js — no API key required. Update the app to latest main.',
-      deprecated: true,
+      message:
+        'DIN Costing does not use OCR. Upload the DIN sheet as a reference image and enter all fields manually.',
     }),
-    {
-      status: 410,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    },
+    { status: 410, headers: { ...cors, 'Content-Type': 'application/json' } },
   )
 })

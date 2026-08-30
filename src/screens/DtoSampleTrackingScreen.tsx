@@ -177,7 +177,7 @@ export function DtoSampleTrackingScreen({ onNavigate, initialDinId }: Props) {
           <h2 className="section-title">Final Sample (Sales / Customer)</h2>
           <p className="text-muted2">
             After physical sample: upload exactly two sales photos — Main Sample Photo + ONE Combined Matching
-            Photo (all matchings together). Internal DIN/OCR images stay private.
+            Photo (all matchings together). Internal DIN sheet images stay private.
           </p>
           <div className="dto-photo-row">
             <div>

@@ -36,7 +36,6 @@ import {
   fmtQty,
   loomPickWeftPicWarning,
   n,
-  parseDiaryNumbers,
   persistCostingDenier,
   syncCostingDenierFromBase,
   withBaseDenier,
@@ -69,16 +68,14 @@ import {
 import { rateMasterItemNames } from '../lib/dinIntakeCosting'
 import {
   DinDesignImportSection,
-  type DinOcrApplyPayload,
+  type DinImageAttachPayload,
   type MissingRateItem,
 } from '../components/dinCosting/DinDesignImportSection'
 import { RateMasterYarnSelect } from '../components/dinCosting/RateMasterYarnSelect'
 import {
-  checkDuplicateDin,
   detectMissingRates,
   uploadSampleImage,
   type DesignImportSource,
-  type DesignOcrResult,
 } from '../lib/designOcr'
 import { applyEditDeleteOrQueue, isWithinEditWindow } from '../lib/pendingApprovals'
 import type { NavTarget } from '../lib/nav'
@@ -136,31 +133,6 @@ const EMPTY_FILTERS: HistoryFilters = {
 const HISTORY_SELECT =
   'id, din_number, quality_name, costing_date, design_length_mtr, usable_length_mtr, yarn_cost_per_mtr, total_pic, pic_conversion_rate, conversion_charge, mu_percent, after_mu_per_mtr, gst_percent, gst_amount, final_cost_per_mtr, ceo_final_selling_rate, diary_image_url, status, is_locked, created_at, updated_at, created_by, updated_by'
 
-/**
- * Diary OCR: best-effort via dynamic `tesseract.js` import (browser, no API key).
- * If OCR quality is poor on handwritten pages, fields stay editable.
- * Optional: VITE_OCR_API_URL for an external diary OCR endpoint (not used for DIN sheets).
- */
-async function ocrDiaryImage(file: File): Promise<string> {
-  const endpoint = import.meta.env.VITE_OCR_API_URL as string | undefined
-  if (endpoint) {
-    const body = new FormData()
-    body.append('file', file)
-    const res = await fetch(endpoint, { method: 'POST', body })
-    if (!res.ok) throw new Error(`OCR API ${res.status}`)
-    const json = (await res.json()) as { text?: string }
-    return json.text || ''
-  }
-
-  try {
-    const mod = await import('tesseract.js')
-    const result = await mod.recognize(file, 'eng')
-    return result.data.text || ''
-  } catch {
-    return ''
-  }
-}
-
 function formatDisplayDate(iso: string | null | undefined): string {
   if (!iso) return '—'
   const d = new Date(iso.includes('T') ? iso : `${iso}T00:00:00`)
@@ -204,7 +176,6 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
   const [loomPick, setLoomPick] = useState('')
   const [designNoSeries, setDesignNoSeries] = useState<DesignNoSeriesRow[]>([])
   const [diaryUrl, setDiaryUrl] = useState<string | null>(null)
-  const [ocrNote, setOcrNote] = useState<string | null>(null)
   const [warps, setWarps] = useState<WarpDraft[]>([emptyWarp(1)])
   const [wefts, setWefts] = useState<WeftDraft[]>([emptyWeft(1)])
   const [picConversionRate, setPicConversionRate] = useState('0.45')
@@ -238,7 +209,6 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
   const [lengthError, setLengthError] = useState<string | null>(null)
   const [historyError, setHistoryError] = useState<string | null>(null)
   const skipDinAutoloadRef = useRef(false)
-  const liveSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [masterRates, setMasterRates] = useState<RateMasterRow[]>([])
   const [designImageUrl, setDesignImageUrl] = useState<string | null>(null)
   const [sampleImageUrl, setSampleImageUrl] = useState<string | null>(null)
@@ -251,8 +221,6 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
   const [efficiencyPct, setEfficiencyPct] = useState(String(DEFAULT_EFFICIENCY_PCT))
   const [productionBasis, setProductionBasis] = useState<'hour' | '12h' | '24h'>('12h')
   const [importSource, setImportSource] = useState<DesignImportSource | null>(null)
-  const [ocrExtractedJson, setOcrExtractedJson] = useState<DesignOcrResult | null>(null)
-  const [ocrConfirmedJson, setOcrConfirmedJson] = useState<DesignOcrResult | null>(null)
   const [missingRates, setMissingRates] = useState<MissingRateItem[]>([])
   const [savedCreatedAt, setSavedCreatedAt] = useState<string | null>(null)
 
@@ -683,8 +651,6 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     setDesignImageUrl((header.design_image_url as string | null) || null)
     setSampleImageUrl((header.sample_image_url as string | null) || null)
     setImportSource((header.import_source as DesignImportSource | null) || null)
-    setOcrExtractedJson((header.ocr_extracted_json as DesignOcrResult | null) || null)
-    setOcrConfirmedJson((header.ocr_confirmed_json as DesignOcrResult | null) || null)
     setStatus(header.status === 'final' ? 'final' : 'draft')
     setIsLocked(Boolean(header.is_locked))
 
@@ -920,12 +886,9 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     setEfficiencyPct(String(DEFAULT_EFFICIENCY_PCT))
     setProductionBasis('12h')
     setDiaryUrl(null)
-    setOcrNote(null)
     setDesignImageUrl(null)
     setSampleImageUrl(null)
     setImportSource(null)
-    setOcrExtractedJson(null)
-    setOcrConfirmedJson(null)
     setMissingRates([])
     setWarps([emptyWarp(1)])
     setWefts([emptyWeft(1)])
@@ -951,7 +914,6 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     if (!file) return
     setUploading(true)
     setError(null)
-    setOcrNote(null)
     try {
       const ext = file.name.split('.').pop() || 'jpg'
       const path = `${Date.now()}-${crypto.randomUUID()}.${ext}`
@@ -961,36 +923,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
       if (upErr) throw upErr
       const { data: pub } = supabase.storage.from('costing-diary-images').getPublicUrl(path)
       setDiaryUrl(pub.publicUrl)
-
-      const text = await ocrDiaryImage(file)
-      const parsed = parseDiaryNumbers(text)
-      if (parsed.denier || parsed.tar || parsed.length || parsed.pic || parsed.width) {
-        setWarps((prev) => {
-          let row = { ...prev[0] }
-          if (parsed.denier) row = withBaseDenier(row, parsed.denier)
-          if (parsed.tar) row.tar_ends = parsed.tar
-          if (parsed.length) row.length_mtr = parsed.length
-          if (parsed.rate) row.rate_per_kg = parsed.rate
-          return [row, ...prev.slice(1)]
-        })
-        setWefts((prev) => {
-          let row = { ...prev[0] }
-          if (parsed.denier && !parsed.tar) row = withBaseDenier(row, parsed.denier)
-          if (parsed.pic) row.pic = parsed.pic
-          if (parsed.width) row.width = parsed.width
-          if (parsed.length) row.length_mtr = parsed.length
-          if (parsed.rate) row.rate_per_kg = parsed.rate
-          return [row, ...prev.slice(1)]
-        })
-        if (parsed.length && !designLength) setDesignLength(parsed.length)
-        setOcrNote(
-          'Photo padh li gayi — values neeche auto-fill hue hain, check karke confirm karein',
-        )
-      } else {
-        setOcrNote(
-          'Photo upload ho gayi. OCR se clear numbers nahi mile — fields manually bhariye.',
-        )
-      }
+      setMessage('Diary photo uploaded — enter values manually from the photo')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Diary upload failed')
     } finally {
@@ -1043,8 +976,6 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     sampleImageUrl?: string | null
     diaryUrl?: string | null
     importSource?: DesignImportSource | null
-    ocrExtractedJson?: DesignOcrResult | null
-    ocrConfirmedJson?: DesignOcrResult | null
     /** When true, always insert a new design_costing row (ignore current savedId). */
     forceNew?: boolean
   }
@@ -1186,11 +1117,6 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         overrides?.sampleImageUrl !== undefined ? overrides.sampleImageUrl : sampleImageUrl
       const importToSave =
         overrides?.importSource !== undefined ? overrides.importSource : importSource
-      const ocrExtractedToSave =
-        overrides?.ocrExtractedJson !== undefined ? overrides.ocrExtractedJson : ocrExtractedJson
-      const ocrConfirmedToSave =
-        overrides?.ocrConfirmedJson !== undefined ? overrides.ocrConfirmedJson : ocrConfirmedJson
-
       const totals = computeBuildup(
         warpsToSave,
         weftsToSave,
@@ -1218,8 +1144,6 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         design_image_url: designImgToSave,
         sample_image_url: sampleImgToSave,
         import_source: importToSave,
-        ocr_extracted_json: ocrExtractedToSave,
-        ocr_confirmed_json: ocrConfirmedToSave,
         design_length_mtr: totals.enteredLengthMtr,
         loom_pick: n(overrides?.loomPick ?? loomPick) || null,
         machine_type: machineType || null,
@@ -1725,141 +1649,14 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     if (match?.qualityName && !qualityName) setQualityName(match.qualityName)
   }
 
-  /**
-   * OCR Confirm → auto-populate DI No., Loom Pick, Colour/Feeder Weft rows, then save draft.
-   */
-  async function handleOcrApply(payload: DinOcrApplyPayload) {
-    skipDinAutoloadRef.current = true
-    if (payload.forceNew) {
-      setSavedId(null)
-      setSavedCreatedAt(null)
-      setStatus('draft')
-      setIsLocked(false)
-    } else {
-      const dup = await checkDuplicateDin(payload.dinNumber).catch(() => ({ exists: false as const }))
-      if (dup.exists && dup.costingId && !dup.isLocked) {
-        setSavedId(dup.costingId)
-        setStatus(dup.status === 'final' ? 'final' : 'draft')
-        setIsLocked(false)
-      } else {
-        setSavedId(null)
-        setStatus('draft')
-        setIsLocked(false)
-      }
-    }
-
-    const nextWarps = (payload.warps.length ? payload.warps : [emptyWarp(1)]).map((r) => {
-      let row = syncCostingDenierFromBase({
-        ...r,
-        tar_ends: r.tar_ends || String(DEFAULT_TAR_ENDS),
-        width: r.width || String(DEFAULT_WIDTH),
-        length_mtr: r.length_mtr || String(DEFAULT_LENGTH_MTR),
-      })
-      if (row.yarn_name.trim() && row.rate_source !== 'manual') {
-        row = applyWarpRateFromMaster(row)
-      }
-      return row
-    })
-    const nextWefts = (payload.wefts.length ? payload.wefts : [emptyWeft(1)]).map((r) => {
-      let row = syncCostingDenierFromBase({
-        ...r,
-        width: r.width || String(DEFAULT_WIDTH),
-        length_mtr: r.length_mtr || String(DEFAULT_LENGTH_MTR),
-      })
-      if (row.weft_name.trim() && row.rate_source !== 'manual') {
-        row = applyWeftRateFromMaster(row)
-      }
-      return row
-    })
-    const nextLength =
-      designLength || String(formulaDefaults.default_base_length_mtr || DEFAULT_LENGTH_MTR)
-    const nextQuality =
-      payload.qualityName.trim() || qualityName.trim() || payload.dinNumber
-
-    setDinNumber(payload.dinNumber)
-    setQualityName(nextQuality)
-    if (!designLength) setDesignLength(nextLength)
-    if (payload.loomPick != null && String(payload.loomPick).trim()) {
-      setLoomPick(String(payload.loomPick).trim())
-    } else if (payload.ocrConfirmed?.loomPick?.value) {
-      setLoomPick(payload.ocrConfirmed.loomPick.value)
-    }
-    setWarps(nextWarps)
-    setWefts(nextWefts)
+  /** DIN sheet image attached as reference only — no auto-read. */
+  function handleDesignImageAttach(payload: DinImageAttachPayload) {
     setDesignImageUrl(payload.designImageUrl)
-    if (payload.designImageUrl && !diaryUrl) setDiaryUrl(payload.designImageUrl)
     setImportSource(payload.importSource)
-    setOcrExtractedJson(payload.ocrExtracted)
-    setOcrConfirmedJson(payload.ocrConfirmed)
-    setMissingRates(payload.missingRates)
-
+    setMessage('DIN sheet image attached — enter Design No., Quality, Loom Pick, Warp & Weft manually')
     requestAnimationFrame(() => {
       document.getElementById('dwc-design-details')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
-
-    await persist(true, false, {
-      dinNumber: payload.dinNumber,
-      qualityName: nextQuality,
-      designLength: nextLength,
-      loomPick:
-        payload.loomPick ||
-        payload.ocrConfirmed?.loomPick?.value ||
-        loomPick,
-      warps: nextWarps,
-      wefts: nextWefts,
-      designImageUrl: payload.designImageUrl,
-      diaryUrl: payload.designImageUrl && !diaryUrl ? payload.designImageUrl : diaryUrl,
-      importSource: payload.importSource,
-      ocrExtractedJson: payload.ocrExtracted,
-      ocrConfirmedJson: payload.ocrConfirmed,
-      forceNew: Boolean(payload.forceNew),
-    })
-
-    if (payload.missingRates.length) {
-      setMessage(
-        `DIN costing created · ${payload.missingRates.length} yarn rate(s) missing — Rate not found in Rate Master`,
-      )
-    } else {
-      setMessage('OCR confirmed — costing auto-filled and draft saved')
-    }
-  }
-
-  /** OCR review edits after Confirm → instant costing + Rate Master rates, debounced save. */
-  function handleOcrLiveSync(payload: DinOcrApplyPayload) {
-    if (isLocked || isReadOnly) return
-    skipDinAutoloadRef.current = true
-    const nextWarps = payload.warps.length ? payload.warps : warps
-    const nextWefts = payload.wefts.length ? payload.wefts : wefts
-    const nextQuality =
-      payload.qualityName.trim() || qualityName.trim() || payload.dinNumber
-
-    setDinNumber(payload.dinNumber)
-    if (payload.qualityName.trim()) setQualityName(payload.qualityName.trim())
-    if (payload.loomPick != null && String(payload.loomPick).trim()) {
-      setLoomPick(String(payload.loomPick).trim())
-    }
-    setWarps(nextWarps)
-    setWefts(nextWefts)
-    setOcrConfirmedJson(payload.ocrConfirmed)
-    setMissingRates(payload.missingRates)
-    setMessage('Costing updated from OCR — Rate Master rates applied')
-
-    if (liveSaveTimerRef.current) clearTimeout(liveSaveTimerRef.current)
-    liveSaveTimerRef.current = setTimeout(() => {
-      void persist(true, false, {
-        dinNumber: payload.dinNumber,
-        qualityName: nextQuality,
-        designLength: designLength || String(formulaDefaults.default_base_length_mtr),
-        loomPick: payload.loomPick || payload.ocrConfirmed?.loomPick?.value || loomPick,
-        warps: nextWarps,
-        wefts: nextWefts,
-        designImageUrl: payload.designImageUrl ?? designImageUrl,
-        importSource: payload.importSource,
-        ocrExtractedJson: payload.ocrExtracted,
-        ocrConfirmedJson: payload.ocrConfirmed,
-        forceNew: false,
-      })
-    }, 700)
   }
 
   async function refreshRatesFromMaster() {
@@ -2107,7 +1904,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
       usable_length_mtr: row.usable_length_mtr,
       ceo_final_selling_rate: row.ceo_final_selling_rate,
       final_cost_per_mtr: row.final_cost_per_mtr,
-      // Never pass internal diary/OCR image to program/sales view
+      // Never pass internal diary/DIN sheet image to program/sales view
       diary_image_url: null,
       status: row.status,
       is_locked: row.is_locked,
@@ -2123,7 +1920,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         <div>
           <h1>DIN Costing</h1>
           <p className="text-muted">
-            Upload DIN → OCR Confirm → Auto Costing (Base+10 denier, 110 Mtr internal / 100 Mtr customer)
+            Upload DIN sheet (reference) → Enter details manually → Auto Costing (Base+10 denier, 110 Mtr internal / 100 Mtr customer)
           </p>
         </div>
         {savedId ? (
@@ -2136,16 +1933,8 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
       {!isReadOnly ? (
         <DinDesignImportSection
           disabled={isReadOnly}
-          designLength={designLength || String(DEFAULT_LENGTH_MTR)}
-          costingDate={costingDate}
-          masterRates={masterRates}
-          existingWarps={warps}
-          onApply={handleOcrApply}
-          onLiveSync={handleOcrLiveSync}
-          onOpenExisting={(din) => {
-            setDinNumber(din)
-            skipDinAutoloadRef.current = false
-          }}
+          designImageUrl={designImageUrl}
+          onAttach={handleDesignImageAttach}
           onOpenRateMaster={
             onNavigate ? () => onNavigate({ screen: 'rate-master', module: 'masters' }) : undefined
           }
@@ -2290,7 +2079,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
               onChange={(e) => setLoomPick(e.target.value)}
               placeholder="Type manually"
             />
-            <span className="dwc-hint">From OCR / feeder PIC — verify before finalize</span>
+            <span className="dwc-hint">Enter manually from DIN sheet — verify before finalize</span>
           </label>
         </div>
         {loomPickWeftPicWarning(loomPick, buildup.totalPic) ? (
@@ -2322,7 +2111,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         <h2 className="section-title">Sample Image</h2>
         <p className="text-muted2">
           Upload the physical fabric sample photo later (after cutting from the DIN sheet). Separate from
-          Design Import OCR image.
+          DIN sheet reference image (not shown to sales).
         </p>
         <p className="dwc-hint">
           Salesman sees Final Sample Photo + Matching Collage only — never DIN sheet.
@@ -2443,7 +2232,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
               onChange={(e) => void handleDiaryFile(e.target.files?.[0] ?? null)}
             />
             <span className="text-muted">
-              {uploading ? 'Uploading / OCR…' : 'Drag & drop, click, or Take Photo'}
+              {uploading ? 'Uploading…' : 'Drag & drop, click, or Take Photo'}
             </span>
           </label>
           {diaryUrl ? (
@@ -2452,7 +2241,6 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
             <div className="dwc-diary-preview empty">Preview</div>
           )}
         </div>
-        {ocrNote ? <p className="form-ok text-sage">{ocrNote}</p> : null}
       </details>
 
       <section className="dwc-panel dwc-compact-block">

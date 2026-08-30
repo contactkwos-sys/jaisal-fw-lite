@@ -21,8 +21,6 @@
     "audit:phase2-final": "node scripts/phase2-final-verification.mjs",
     "smoke:daily-costing": "node scripts/daily-costing-smoke.mjs",
     "test:design-wise-costing": "node scripts/test-design-wise-costing.mjs",
-    "test:design-ocr-parser": "node scripts/test-design-ocr-parser.mjs",
-    "test:design-ocr-tesseract": "node scripts/test-design-ocr-tesseract-accuracy.mjs",
     "test:rate-master": "node scripts/test-rate-master.mjs",
     "test:rate-master-costing": "node scripts/test-rate-master-costing-integration.mjs",
     "start": "node scripts/serve-app.mjs",
@@ -32,8 +30,7 @@
     "@supabase/supabase-js": "^2.112.3",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "react-easy-crop": "^6.2.3",
-    "tesseract.js": "^7.0.0"
+    "react-easy-crop": "^6.2.3"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",

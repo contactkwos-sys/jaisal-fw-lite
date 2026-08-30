@@ -39,14 +39,14 @@ Redeploy / deploy these from the Supabase Dashboard (Edge Functions → Deploy f
 | `roles-gate` | https://raw.githubusercontent.com/contactkwos-sys/jaisal-fw-lite/main/supabase/functions/roles-gate/index.ts | Redeployed (update/delete actions) |
 | `pin-reset` | https://raw.githubusercontent.com/contactkwos-sys/jaisal-fw-lite/main/supabase/functions/pin-reset/index.ts | Deployed |
 | `gmail-intake` | https://raw.githubusercontent.com/contactkwos-sys/jaisal-fw-lite/main/supabase/functions/gmail-intake/index.ts | Deployed (Gmail OAuth + import) |
-| `design-ocr` | ~~legacy Edge Vision~~ | **Unused** — DIN Costing Design Import uses **browser Tesseract.js only** (no API key, no Edge call) |
+| `design-ocr` | ~~legacy Edge Vision~~ | **Retired** — DIN Costing has no OCR; DIN sheet image is reference-only |
 | `invoice-ocr` | https://raw.githubusercontent.com/contactkwos-sys/jaisal-fw-lite/main/supabase/functions/invoice-ocr/index.ts | Optional — purchase invoice OCR (separate from DIN) |
 
 Also mirrored under `public/functions/` for copy/paste deploy.
 
 **Manual deploy needed (if CLI deploy unavailable):** `pin-login`, `roles-gate`, `pin-reset`, `gmail-intake`
 
-**DIN Costing Design Import** reads sheets in the browser with **Tesseract.js** only — **no Anthropic key, no `design-ocr` Edge Function, no Supabase secret**. Fields stay editable when auto-read is incomplete.
+**DIN Costing** accepts a DIN sheet image as a **reference attachment only**. All Design No., Quality, Loom Pick, Warp and Feeder values are entered manually. Yarn rates come from Rate Master. **No OCR.**
 
 **Gmail edge function secrets** (Supabase Dashboard → Edge Functions → gmail-intake → Secrets):
 

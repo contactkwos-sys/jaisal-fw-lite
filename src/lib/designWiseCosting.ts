@@ -269,7 +269,7 @@ export type WeftDraft = {
   /** Feeder/Colour position label e.g. "Colour 1" / "Feeder 1" */
   feeder_label: string
   feeder_no: number | null
-  /** Colour name from Colour Master / OCR (White, Black, …) */
+  /** Colour name from Colour Master (White, Black, …) */
   colour: string
   weft_name: string
   /** User / Rate Master entered denier (base). Costing uses base + 10. */
@@ -281,7 +281,7 @@ export type WeftDraft = {
   length_mtr: string
   rate_per_kg: string
   /**
-   * OCR Strings reference only — NEVER used in pick / weight / costing formulas.
+   * Strings reference only (unused) — NEVER used in pick / weight / costing formulas.
    */
   strings_ref?: string
 } & RateRowMeta
@@ -443,7 +443,7 @@ export function syncCostingDenierFromBase<T extends { base_denier: string; denie
 }
 
 /**
- * Fill base denier from Rate Master / catalogue / OCR only when empty.
+ * Fill base denier from Rate Master / catalogue only when empty.
  * Coerces mistaken costing values (RM seed 310 for "300 Tex" → base 300).
  * Never overwrites an existing base (prevents stacking on Recalculate).
  */
@@ -790,7 +790,7 @@ export function finalSaleRate(
   return calc > 0 ? round2(calc) : null
 }
 
-/** Best-effort parse of OCR / diary text into field hints. */
+/** Best-effort parse of diary text into field hints. */
 export function parseDiaryNumbers(text: string): {
   denier?: string
   tar?: string
