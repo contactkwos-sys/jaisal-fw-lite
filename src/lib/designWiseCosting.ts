@@ -16,9 +16,13 @@ export const DEFAULT_WASTAGE_MTR = 10
 
 /**
  * Customer selling-rate basis (meters).
- * Customer Rate / 100 Mtr = Final Internal Cost (110 Mtr) ÷ 100 — never applied twice.
+ * Yarn Cost / 100 Mtr = Total Yarn Cost (110 Mtr) ÷ 100.
+ * Then ADD Weaving / Conversion (₹/Mtr) — never divide a per-meter conversion charge by 100.
  */
 export const DEFAULT_CUSTOMER_USABLE_MTR = 100
+
+/** Default MU % on base customer cost (auto-applied; editable). */
+export const DEFAULT_MU_PERCENT = 5
 
 /**
  * Costing denier offset: Working/Costing Denier = Base (Entered) Denier + 10.
@@ -313,7 +317,7 @@ export type CostingBuildup = {
   totalWeightKg: number
   totalWarpAmount: number
   totalWeftAmount: number
-  /** Total Warp + Total Weft Amount — 110 Mtr yarn cost */
+  /** Total Warp + Total Weft Amount — 110 Mtr yarn cost (internal basis) */
   totalYarnAmount: number
   enteredLengthMtr: number
   wastageMtr: number
@@ -325,23 +329,26 @@ export type CostingBuildup = {
   designLengthMtr: number
   /**
    * Yarn portion of customer rate: Total Yarn (110) ÷ 100.
-   * Not the full customer rate — see customerRatePerMtr / finalCostPerMtr.
+   * Full precision — round only when displaying.
    */
   yarnCostPerMtr: number
   totalPic: number
   picConversionRate: number
-  /** Weaving / conversion on 110 Mtr basis = TOTAL WEFT PIC × PIC Conversion Rate */
+  /**
+   * Weaving / Conversion Charge ₹/Mtr = TOTAL WEFT PIC × PIC Conversion Rate.
+   * Already per-meter — do NOT divide by 100.
+   */
   conversionCharge: number
-  /** MU + GST amounts on 110 Mtr internal basis (other applicable internal charges) */
+  /** MU + GST amounts on customer per-meter basis */
   otherCharges: number
-  /** Total Yarn + Weaving + Other — FINAL INTERNAL COST / 110 MTR */
+  /** Yarn-only internal cost for 110 Mtr (does not include per-meter conversion) */
   finalInternalCost110: number
   /**
-   * Customer Rate per 100 Mtr basis = Final Internal Cost (110) ÷ 100.
-   * Alias of finalCostPerMtr for UI labelling.
+   * Final customer cost / Mtr after MU (+ GST when applied).
+   * Alias of finalCostPerMtr.
    */
   customerRatePerMtr: number
-  /** (Total Yarn + Weaving) ÷ 100 — before MU/GST on customer basis */
+  /** Base customer cost / Mtr = yarnCostPerMtr + conversionCharge (before MU/GST) */
   subtotalPerMtr: number
   muPercent: number
   muAmount: number
@@ -503,13 +510,19 @@ export function computeWeftRow(row: WeftDraft) {
  * Full costing chain — FIXED business rules:
  *
  * INTERNAL (110 Mtr basis):
- *   Total Warp + Total Weft = Total Yarn Cost
- *   + Weaving / Conversion (TOTAL WEFT PIC × PIC Rate)
- *   + Other (MU, GST on the 110 Mtr total)
- *   = FINAL INTERNAL COST / 110 MTR
+ *   Total Warp + Total Weft = Total Yarn Cost (110 Mtr)
  *
- * CUSTOMER (100 Mtr basis) — divide ONCE, never twice:
- *   Customer Rate = Final Internal Cost (110) ÷ 100
+ * CUSTOMER (100 Mtr selling basis):
+ *   Yarn Cost / 100 Mtr = Total Yarn Cost (110) ÷ 100
+ *   + Weaving / Conversion Charge / Mtr  (= TOTAL WEFT PIC × PIC Rate)
+ *   = Base Customer Cost / Mtr
+ *   + MU % → After MU / Mtr
+ *   + GST % (when set) → Final Customer Cost / Mtr
+ *
+ * NEVER: (yarn + per-meter conversion) ÷ 100
+ * NEVER: use Total Loom Pick as a customer-rate divisor
+ *
+ * Precision: keep full precision through the chain; round only for display (fmtMoney).
  */
 export function computeBuildup(
   warps: WarpDraft[],
@@ -539,6 +552,7 @@ export function computeBuildup(
     totalPic += c.pic
   }
 
+  // Row amounts are already round2'd (Weight × Rate auditability); sum for yarn total
   totalWarpWeightKg = round2(totalWarpWeightKg)
   totalWeftWeightKg = round2(totalWeftWeightKg)
   totalWarpAmount = round2(totalWarpAmount)
@@ -548,33 +562,26 @@ export function computeBuildup(
   const totalYarnAmount = round2(totalWarpAmount + totalWeftAmount)
   const wastage = computeWastageParams(enteredLengthMtr, wastageMtr, wastagePercent)
   const length = wastage.enteredLengthMtr
-  // Customer basis is always 100 Mtr by default (not derived from wastage for the ÷100 rule)
   const customerBasis =
     wastage.usableLengthMtr > 0 ? wastage.usableLengthMtr : DEFAULT_CUSTOMER_USABLE_MTR
 
   const rate = n(picConversionRate)
-  // Weaving charge is on the 110 Mtr piece (TOTAL WEFT PIC × rate) — not per meter
-  const conversionCharge = round2(totalPic * rate)
-  const yarnAndWeave110 = round2(totalYarnAmount + conversionCharge)
+  // Yarn only: convert 110m yarn cost → 100m commercial basis (full precision)
+  const yarnCostPerMtr = customerBasis > 0 ? totalYarnAmount / customerBasis : 0
+  // Conversion is already ₹/Mtr — add as-is (do NOT ÷ 100)
+  const conversionCharge = totalPic * rate
+  const subtotalPerMtr = yarnCostPerMtr + conversionCharge
 
   const mu = n(muPercent)
   const gst = n(gstPercent)
-  // Apply MU / GST once on the 110 Mtr internal total, then ÷ 100 for customer rate
-  const muAmount110 = round2(yarnAndWeave110 * (mu / 100))
-  const afterMu110 = round2(yarnAndWeave110 + muAmount110)
-  const gstAmount110 = gst > 0 ? round2(afterMu110 * (gst / 100)) : 0
-  const otherCharges = round2(muAmount110 + gstAmount110)
-  const finalInternalCost110 =
-    gst > 0 ? round2(afterMu110 + gstAmount110) : afterMu110
-
-  const customerRatePerMtr =
-    customerBasis > 0 ? round2(finalInternalCost110 / customerBasis) : 0
-  const yarnCostPerMtr = customerBasis > 0 ? round2(totalYarnAmount / customerBasis) : 0
-  const subtotalPerMtr = customerBasis > 0 ? round2(yarnAndWeave110 / customerBasis) : 0
-  const muAmount = customerBasis > 0 ? round2(muAmount110 / customerBasis) : 0
-  const afterMuPerMtr = customerBasis > 0 ? round2(afterMu110 / customerBasis) : 0
-  const gstAmount = customerBasis > 0 ? round2(gstAmount110 / customerBasis) : 0
-  const finalCostPerMtr = customerRatePerMtr
+  const muAmount = subtotalPerMtr * (mu / 100)
+  const afterMuPerMtr = subtotalPerMtr + muAmount
+  const gstAmount = gst > 0 ? afterMuPerMtr * (gst / 100) : 0
+  const finalCostPerMtr = gst > 0 ? afterMuPerMtr + gstAmount : afterMuPerMtr
+  const otherCharges = muAmount + gstAmount
+  // Internal 110m figure is yarn-only (conversion is a per-meter charge)
+  const finalInternalCost110 = totalYarnAmount
+  const customerRatePerMtr = finalCostPerMtr
 
   return {
     totalWarpWeightKg,
@@ -640,15 +647,21 @@ export function computeProfitProjection(
   }
 }
 
-/** Default Jacquard Repair machine speed (RPM). */
-export const DEFAULT_MACHINE_SPEED_RPM = 450
+/** Default Jacquard Repair machine speed (RPM) — editable. */
+export const DEFAULT_MACHINE_SPEED_RPM = 280
 
 /** Default weaving efficiency %. */
 export const DEFAULT_EFFICIENCY_PCT = 100
 
 /**
+ * Double-width machine factor. Production meters already include this factor;
+ * do NOT multiply billing by 2 again.
+ */
+export const DEFAULT_DOUBLE_WIDTH_FACTOR = 2
+
+/**
  * Inches-per-meter constant used in loom production formula.
- * Meters/Hour = (RPM × 60 × Efficiency%) / (TOTAL LOOM PICK × 39.37)
+ * Meters/Hour = (RPM × 60 × Efficiency% × DoubleWidthFactor) / (TOTAL LOOM PICK × 39.37)
  */
 export const LOOM_INCHES_PER_METER = 39.37
 
@@ -657,21 +670,28 @@ export type ProductionSpeedResult = {
   loomPick: number
   widthInch: number
   efficiencyPct: number
+  doubleWidthFactor: number
   metersPerHour: number
   metersPer12Hours: number
   metersPer24Hours: number
+  metersPer28Days: number
   billingPerHour: number
   billingPer12Hours: number
   billingPer24Hours: number
+  billingPer28Days: number
   profitPerHour: number
   profitPer12Hours: number
   profitPer24Hours: number
+  profitPer28Days: number
 }
 
 /**
  * Jacquard Repair production / weaving speed.
  *
- * Meters/Hour = (RPM × 60 × Efficiency/100) / (TOTAL LOOM PICK × 39.37)
+ * Meters/Hour = (RPM × 60 × Efficiency/100 × DoubleWidthFactor) / (TOTAL LOOM PICK × 39.37)
+ *
+ * Billing = Production Meters × Final Customer Sale Rate.
+ * Double Width Factor is applied once in production — never again on billing.
  *
  * Billing uses FINAL CUSTOMER SALE RATE (100 Mtr commercial basis) — never internal 110m cost.
  * Profit/period = Profit per meter × meters for that period.
@@ -681,6 +701,7 @@ export function computeProductionSpeed(opts: {
   loomPick: number | string | null | undefined
   widthInch?: number | string | null | undefined
   efficiencyPct?: number | string | null | undefined
+  doubleWidthFactor?: number | string | null | undefined
   /** Final customer sale rate ₹/m (100 Mtr basis) */
   customerSaleRatePerMtr: number | string | null | undefined
   /** Profit ₹/m after cost + fixed */
@@ -690,29 +711,38 @@ export function computeProductionSpeed(opts: {
   const loomPick = n(opts.loomPick)
   const widthInch = n(opts.widthInch) || DEFAULT_WIDTH
   const efficiencyPct = n(opts.efficiencyPct) > 0 ? n(opts.efficiencyPct) : DEFAULT_EFFICIENCY_PCT
+  const doubleWidthFactor =
+    n(opts.doubleWidthFactor) > 0 ? n(opts.doubleWidthFactor) : DEFAULT_DOUBLE_WIDTH_FACTOR
   const saleRate = n(opts.customerSaleRatePerMtr)
   const profitPerMtr = n(opts.profitPerMtr)
 
   const denom = loomPick * LOOM_INCHES_PER_METER
   const metersPerHour =
-    rpm > 0 && denom > 0 ? round2((rpm * 60 * (efficiencyPct / 100)) / denom) : 0
+    rpm > 0 && denom > 0
+      ? round2((rpm * 60 * (efficiencyPct / 100) * doubleWidthFactor) / denom)
+      : 0
   const metersPer12Hours = round2(metersPerHour * 12)
   const metersPer24Hours = round2(metersPerHour * 24)
+  const metersPer28Days = round2(metersPer24Hours * 28)
 
   return {
     rpm,
     loomPick,
     widthInch,
     efficiencyPct,
+    doubleWidthFactor,
     metersPerHour,
     metersPer12Hours,
     metersPer24Hours,
+    metersPer28Days,
     billingPerHour: round2(metersPerHour * saleRate),
     billingPer12Hours: round2(metersPer12Hours * saleRate),
     billingPer24Hours: round2(metersPer24Hours * saleRate),
+    billingPer28Days: round2(metersPer28Days * saleRate),
     profitPerHour: round2(metersPerHour * profitPerMtr),
     profitPer12Hours: round2(metersPer12Hours * profitPerMtr),
     profitPer24Hours: round2(metersPer24Hours * profitPerMtr),
+    profitPer28Days: round2(metersPer28Days * profitPerMtr),
   }
 }
 
@@ -720,21 +750,22 @@ export function computeProductionSpeed(opts: {
 export const CALC_HINTS = {
   yarnCostPerMtr:
     'Total Yarn Amount (110 Mtr) ÷ 100 — yarn portion only of customer rate',
-  conversionCharge: 'TOTAL WEFT PIC × PIC Conversion Rate (₹) — 110 Mtr weaving charge',
-  subtotalPerMtr: '(Total Yarn + Weaving on 110 Mtr) ÷ 100',
-  muAmount: 'MU applied once on 110 Mtr internal total, then ÷ 100 for display',
-  afterMuPerMtr: 'After MU on customer 100 Mtr basis',
-  gstAmount: 'GST applied once on 110 Mtr after-MU total, then ÷ 100 for display',
+  conversionCharge:
+    'TOTAL WEFT PIC × PIC Conversion Rate (₹/Mtr) — already per meter; do NOT ÷ 100',
+  subtotalPerMtr: 'Yarn Cost / 100 Mtr + Weaving / Conversion / Mtr = Base Customer Cost / Mtr',
+  muAmount: 'Base Customer Cost × MU % / 100',
+  afterMuPerMtr: 'Base Customer Cost + MU Amount',
+  gstAmount: 'GST applied on After MU / Mtr when GST % > 0',
   finalCostPerMtr:
-    'Customer Rate / 100 Mtr = Final Internal Cost (110 Mtr) ÷ 100 — never convert twice',
+    'Final Customer Cost / Mtr = After MU (+ GST when applied). Never (yarn+conversion)÷100 when conversion is ₹/Mtr',
   conversionMultiplier: 'Production Length ÷ Customer Usable Length (110 ÷ 100 = 1.10) — display only',
   totalProfit: '(CEO Final Selling Rate − Cost/Mtr − Fixed Cost/Mtr) × Production Meters',
   costingDenier: 'Costing Denier = Base Denier + 10 (derived each time from base — never stacked)',
-  finalInternalCost110:
-    'Total Yarn Cost + Weaving / Conversion + Other Charges (MU/GST) on 110 Mtr basis',
-  customerRatePerMtr: 'Final Internal Cost for 110 Mtr ÷ 100',
+  finalInternalCost110: 'Total Yarn Cost for 110 Mtr (warp + weft) — internal yarn basis only',
+  customerRatePerMtr:
+    '(Total Yarn 110 ÷ 100) + Weaving/Conversion ₹/Mtr + MU (+ GST) — yarn converted once; conversion added as ₹/Mtr',
   productionSpeed:
-    'Meters/Hour = (RPM × 60 × Efficiency%) / (TOTAL LOOM PICK × 39.37). Billing uses Final Customer Sale Rate.',
+    'Meters/Hour = (RPM × 60 × Efficiency% × Double Width Factor) / (TOTAL LOOM PICK × 39.37). Billing = meters × Final Customer Sale Rate (factor not applied twice).',
 } as const
 
 /** Role helpers for DIN Costing access */
