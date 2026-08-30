@@ -51,6 +51,7 @@ import { DtoSamplePromotionScreen } from './screens/DtoSamplePromotionScreen'
 import { DtoFollowupScreen } from './screens/DtoFollowupScreen'
 import { DtoReportsScreen } from './screens/DtoReportsScreen'
 import { RateMasterScreen, parseRateMasterPreset } from './screens/RateMasterScreen'
+import { QualityMasterScreen } from './screens/QualityMasterScreen'
 import { HrPayrollScreen } from './screens/HrPayrollScreen'
 import { ProgramDispatchScreen } from './screens/ProgramDispatchScreen'
 import { MachineWiseProductionScreen } from './screens/MachineWiseProductionScreen'
@@ -424,6 +425,7 @@ function AuthenticatedApp() {
       {tab === 'dto-followup' ? <DtoFollowupScreen /> : null}
       {tab === 'dto-reports' ? <DtoReportsScreen onNavigate={go} /> : null}
       {tab === 'rate-master' ? <RateMasterScreen preset={parseRateMasterPreset(filter)} /> : null}
+      {tab === 'quality-master' ? <QualityMasterScreen /> : null}
       {tab === 'formula-master' ? <FormulaMasterScreen /> : null}
     </AppShell>
   )

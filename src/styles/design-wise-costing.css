@@ -1140,3 +1140,63 @@
   color: var(--muted);
   font-size: 0.85rem;
 }
+
+
+/* Production / weaving speed basis toggle */
+.dwc-basis-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.75rem 0 1rem;
+}
+.dwc-basis-btn {
+  min-height: 36px;
+  padding: 0.35rem 0.85rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--surface2);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.dwc-basis-btn.active {
+  border-color: var(--teal);
+  background: var(--teal-soft);
+}
+.dwc-production-table tr.dwc-basis-selected td {
+  background: color-mix(in srgb, var(--teal) 12%, var(--surface));
+  font-weight: 600;
+}
+.dwc-production-panel .dwc-hint {
+  margin-top: 0.5rem;
+}
+
+
+@media (max-width: 768px) {
+  .dwc-table {
+    min-width: 0;
+  }
+  .dwc-table thead {
+    display: none;
+  }
+  .dwc-table tr {
+    display: block;
+    border-bottom: 1px solid var(--line);
+    padding: 0.5rem 0;
+    margin-bottom: 0.5rem;
+  }
+  .dwc-table td {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    border: none;
+    padding: 0.35rem 0.5rem;
+  }
+  .dwc-table td[data-label]::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-weight: 600;
+    flex: 0 0 40%;
+  }
+}

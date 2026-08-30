@@ -465,7 +465,7 @@ export function DinDesignImportSection({
               <label className="field">
                 <span>
                   TOTAL LOOM PICK {confidenceLabel(ocrDraft.loomPick.confidence)}
-                  <em className="dwc-auto-tag"> from DIN sheet (not Σ Colour Picks)</em>
+                  <em className="dwc-auto-tag"> printed on sheet · or Σ feeder PIC (verify)</em>
                   {busy ? <em className="dwc-auto-tag"> Reading…</em> : null}
                   {!busy &&
                   (ocrDraft.loomPick.confidence === 'missing' ||

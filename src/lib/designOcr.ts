@@ -1,8 +1,10 @@
 /**
  * DIN / Design reference OCR — source-fidelity first.
  * Colour/Feeder rows: capture Pick only. Strings ignored (never used for costing).
- * TOTAL LOOM PICK is read ONLY from the sheet label/field — NEVER from Σ Colour Picks,
- * NEVER from Strings, NEVER invented or equal-split.
+ * TOTAL LOOM PICK: prefer labeled/printed value on the sheet.
+ * When no printed total is found, suggest Σ feeder PIC with low confidence
+ * ("Needs Manual Verification") — never silently invent or equal-split.
+ * If printed total ≠ Σ feeder PIC → warning + user confirmation required.
  * Low confidence → leave field for manual verify (do not guess).
  */
 
@@ -114,7 +116,7 @@ const YARN_PICK_LINE_RE =
   /\b([A-Za-z]{2,8})\b\s*[=:]?\s*(\d+(?:\.\d+)?|[-–—])(?:\s*[|/]?\s*\d{2,5}(?:\.\d+)?)?/
 
 /** User-facing copy when OCR cannot confidently read a field. */
-export const OCR_VERIFY_HINT = 'Could not confidently read this field — please verify.'
+export const OCR_VERIFY_HINT = 'Needs Manual Verification'
 
 /**
  * Normalize OCR design tokens to business DIN (letters+digits only).
@@ -180,17 +182,58 @@ export function clearOcrStrings(ocr: DesignOcrResult): DesignOcrResult {
 }
 
 /**
- * Source fidelity: NEVER fill TOTAL LOOM PICK from Σ Colour/Feeder Picks.
- * Alias kept for callers — now identical to clearOcrStrings.
+ * Resolve TOTAL LOOM PICK after feeder/colour PIC extraction.
+ * - Printed/labeled loom pick wins when present.
+ * - If missing, suggest Σ feeder PIC at low confidence (Needs Manual Verification).
+ * - If printed ≠ Σ, keep printed value and attach a mismatch warning.
+ * Strings are never used.
  */
 export function ensureLoomPickFromFeederSum(ocr: DesignOcrResult): DesignOcrResult {
-  return clearOcrStrings(ocr)
+  const cleared = clearOcrStrings(ocr)
+  const weftSum = sumWeftPics(cleared.weftRows)
+  const printed = (cleared.loomPick.value || '').trim()
+  const sumNum = nSafe(weftSum)
+  const printedNum = nSafe(printed)
+
+  let loomPick = cleared.loomPick
+  let readWarning = cleared.readWarning
+
+  if (printed && sumNum > 0 && printedNum > 0 && Math.abs(printedNum - sumNum) >= 0.01) {
+    loomPick = {
+      value: printed,
+      confidence: printedNum > 0 ? (cleared.loomPick.confidence === 'high' ? 'high' : 'low') : 'low',
+      source: cleared.loomPick.source || 'loom_pick_label',
+    }
+    readWarning =
+      `TOTAL LOOM PICK (${printed}) differs from Σ feeder PIC (${weftSum}) — please verify and confirm.`
+  } else if (!printed && weftSum) {
+    loomPick = {
+      value: weftSum,
+      confidence: 'low',
+      source: 'sum_feeder_pic_suggest',
+    }
+    readWarning =
+      readWarning ||
+      `${OCR_VERIFY_HINT} TOTAL LOOM PICK suggested from feeder PIC sum (${weftSum}) — confirm against the sheet.`
+  }
+
+  const totalPick = weftSum
+    ? { value: weftSum, confidence: 'high' as const, source: 'sum_colour_picks' }
+    : cleared.totalPick
+
+  return { ...cleared, loomPick, totalPick, readWarning }
+}
+
+function nSafe(v: string | number | null | undefined): number {
+  if (v === '' || v == null) return 0
+  const x = typeof v === 'number' ? v : Number(v)
+  return Number.isFinite(x) ? x : 0
 }
 
 /**
  * Read TOTAL LOOM PICK directly from the DIN sheet text.
- * Only labeled / header sources. Never Σ Colour Picks. Never Strings.
- * If uncertain → empty + missing (UI asks user to verify).
+ * Only labeled / header sources. Never invent from Strings.
+ * If uncertain → empty + missing (caller may suggest Σ feeder PIC at low confidence).
  */
 export function extractLoomPick(text: string, _unusedFallback?: string): OcrField {
   void _unusedFallback
@@ -211,8 +254,7 @@ export function extractLoomPick(text: string, _unusedFallback?: string): OcrFiel
     }
   }
 
-  // Do NOT use colour-table "Total X Y" as TOTAL LOOM PICK (that is Σ picks / Strings).
-  // Do NOT sum Colour Picks. Leave missing for manual entry.
+  // Do NOT use colour-table "Total X Y" as printed TOTAL LOOM PICK (that is Σ picks / Strings).
   return emptyField()
 }
 
@@ -833,9 +875,9 @@ export function parseDesignReferenceText(
   }
 
   result.rawText = normalized
-  // TOTAL LOOM PICK from sheet label only — never Σ picks
+  // Printed TOTAL LOOM PICK from sheet label; ensureLoomPickFromFeederSum may suggest Σ if missing
   result.loomPick = extractLoomPick(normalized)
-  return clearOcrStrings(result)
+  return ensureLoomPickFromFeederSum(result)
 }
 
 /** Merge vision API JSON with regex parser (vision wins when confident). */
@@ -1264,11 +1306,11 @@ async function ocrViaTesseract(
       }
     }
 
-    bestParsed = ensureReviewFeederRows(clearOcrStrings(bestParsed))
-    // Re-extract loom pick from combined text so header pass wins over noise
+    bestParsed = ensureLoomPickFromFeederSum(ensureReviewFeederRows(clearOcrStrings(bestParsed)))
+    // Re-extract printed loom pick from combined text so header pass wins over noise
     const loomFromAll = extractLoomPick(bestText)
     if (loomFromAll.value) {
-      bestParsed = { ...bestParsed, loomPick: loomFromAll }
+      bestParsed = ensureLoomPickFromFeederSum({ ...bestParsed, loomPick: loomFromAll })
     } else if (!bestParsed.loomPick.value) {
       bestParsed = {
         ...bestParsed,
@@ -1277,6 +1319,7 @@ async function ocrViaTesseract(
           bestParsed.readWarning ||
           `${OCR_VERIFY_HINT} TOTAL LOOM PICK was not found on the sheet.`,
       }
+      bestParsed = ensureLoomPickFromFeederSum(bestParsed)
     }
 
     return { text: bestText, parsed: bestParsed }
@@ -1319,7 +1362,7 @@ export async function readDesignReference(
     subject: hints?.subject,
     filename: hints?.filename || file.name,
   })
-  let result = ensureReviewFeederRows(clearOcrStrings(parsed))
+  let result = ensureLoomPickFromFeederSum(ensureReviewFeederRows(clearOcrStrings(parsed)))
 
   // Filename / subject may carry Design No. when image OCR missed it (not a guess — source hint)
   if (!result.designNumber.value.trim()) {
@@ -1339,10 +1382,8 @@ export async function readDesignReference(
     }
   }
 
-  // Never invent loom pick from weft sum
-  if (!result.loomPick.value.trim()) {
-    result = { ...result, loomPick: emptyField() }
-  }
+  // Suggest Σ feeder PIC only at low confidence when printed loom pick missing
+  result = ensureLoomPickFromFeederSum(result)
 
   const needsVerify =
     result.designNumber.confidence !== 'high' ||

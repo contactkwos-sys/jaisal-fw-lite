@@ -147,6 +147,7 @@ const DESIGN_TEAM_SUBS: string[] = [
   'din-costing',
   'formula-master',
   'rate-master',
+  'quality-master',
   'sample-job',
   'sample-tracking',
   'sample-promotion',
@@ -415,7 +416,11 @@ export function canAccessSub(roleName: string, moduleId: MainModuleId, subId: st
   if (isSalesmanRole(n) && moduleId === 'design-to-order') return false
   // DIN Costing full edit — CEO / MD / Owner / Manager / Design only
   if (
-    (subId === 'din-costing' || subId === 'design-costing' || subId === 'rate-master' || subId === 'formula-master') &&
+    (subId === 'din-costing' ||
+      subId === 'design-costing' ||
+      subId === 'rate-master' ||
+      subId === 'quality-master' ||
+      subId === 'formula-master') &&
     !(
       n === 'manager' ||
       n.includes('ceo') ||
@@ -506,6 +511,7 @@ export const DESIGN_MASTER_SCREENS = new Set([
   'dto-promotion',
   'dto-reports',
   'rate-master',
+  'quality-master',
   'formula-master',
   'design-wise-costing',
 ])
