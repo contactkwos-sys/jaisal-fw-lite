@@ -11,9 +11,11 @@ import {
 import { DesignNoCombobox } from '../components/dinCosting/DesignNoCombobox'
 import {
   CALC_HINTS,
+  DEFAULT_DOUBLE_WIDTH_FACTOR,
   DEFAULT_EFFICIENCY_PCT,
   DEFAULT_LENGTH_MTR,
   DEFAULT_MACHINE_SPEED_RPM,
+  DEFAULT_MU_PERCENT,
   DEFAULT_TAR_ENDS,
   DEFAULT_WIDTH,
   canEditDinCosting,
@@ -59,8 +61,6 @@ import { ensureDinMasterForCosting, findSharedDesign, normalizeDesignNumber } fr
 import { handleUserError } from '../lib/userError'
 import {
   fetchAllRates,
-  formatDisplayDate as formatRateDate,
-  gstLabel,
   lookupRateForCosting,
   rememberYarnBaseDenier,
   type RateMasterRow,
@@ -72,6 +72,14 @@ import {
   type MissingRateItem,
 } from '../components/dinCosting/DinDesignImportSection'
 import { RateMasterYarnSelect } from '../components/dinCosting/RateMasterYarnSelect'
+import { CompactRateCell } from '../components/dinCosting/CompactRateCell'
+import {
+  clearDinCostingDraft,
+  dinCostingDraftHasContent,
+  loadDinCostingDraft,
+  saveDinCostingDraft,
+  type DinCostingWorkingDraft,
+} from '../lib/dinCostingDraftPersist'
 import {
   detectMissingRates,
   uploadSampleImage,
@@ -169,28 +177,48 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
   const canEdit = canEditDinCosting(roleName || '', isCeo, isManager)
   const canView = canViewDinCosting(roleName || '', isCeo, isManager)
 
-  const [dinNumber, setDinNumber] = useState(initialDin)
-  const [costingDate, setCostingDate] = useState(todayISO())
-  const [qualityName, setQualityName] = useState('')
-  const [designLength, setDesignLength] = useState('')
-  const [loomPick, setLoomPick] = useState('')
+  // Sync-restore working draft before first paint (survives Quality/Rate Master navigation)
+  const bootDraftRef = useRef<DinCostingWorkingDraft | null | undefined>(undefined)
+  if (bootDraftRef.current === undefined) {
+    if (viewOnly || (initialDin && String(initialDin).trim())) {
+      bootDraftRef.current = null
+    } else {
+      const d = loadDinCostingDraft()
+      bootDraftRef.current = dinCostingDraftHasContent(d) ? d : null
+    }
+  }
+  const boot = bootDraftRef.current
+
+  const [dinNumber, setDinNumber] = useState(() => boot?.dinNumber || initialDin || '')
+  const [costingDate, setCostingDate] = useState(() => boot?.costingDate || todayISO())
+  const [qualityName, setQualityName] = useState(() => boot?.qualityName || '')
+  const [designLength, setDesignLength] = useState(() => boot?.designLength || '')
+  const [loomPick, setLoomPick] = useState(() => boot?.loomPick || '')
   const [designNoSeries, setDesignNoSeries] = useState<DesignNoSeriesRow[]>([])
-  const [diaryUrl, setDiaryUrl] = useState<string | null>(null)
-  const [warps, setWarps] = useState<WarpDraft[]>([emptyWarp(1)])
-  const [wefts, setWefts] = useState<WeftDraft[]>([emptyWeft(1)])
-  const [picConversionRate, setPicConversionRate] = useState('0.45')
-  const [muPercent, setMuPercent] = useState('0')
-  const [gstPercent, setGstPercent] = useState('0')
-  const [wastageMtr, setWastageMtr] = useState('10')
-  const [wastagePercent, setWastagePercent] = useState('10')
-  const [ceoFinalSellingRate, setCeoFinalSellingRate] = useState('')
-  const [fixedCostPerMtr, setFixedCostPerMtr] = useState('')
-  const [desiredProfitPerMtr, setDesiredProfitPerMtr] = useState('')
-  const [productionMeters, setProductionMeters] = useState('')
-  const [isLocked, setIsLocked] = useState(false)
+  const [diaryUrl, setDiaryUrl] = useState<string | null>(() => boot?.diaryUrl || null)
+  const [warps, setWarps] = useState<WarpDraft[]>(() =>
+    boot?.warps?.length ? boot.warps : [emptyWarp(1)],
+  )
+  const [wefts, setWefts] = useState<WeftDraft[]>(() =>
+    boot?.wefts?.length ? boot.wefts : [emptyWeft(1)],
+  )
+  const [picConversionRate, setPicConversionRate] = useState(() => boot?.picConversionRate || '0.45')
+  const [muPercent, setMuPercent] = useState(
+    () => boot?.muPercent || String(DEFAULT_MU_PERCENT),
+  )
+  const [gstPercent, setGstPercent] = useState(() => boot?.gstPercent || '0')
+  const [wastageMtr, setWastageMtr] = useState(() => boot?.wastageMtr || '10')
+  const [wastagePercent, setWastagePercent] = useState(() => boot?.wastagePercent || '10')
+  const [ceoFinalSellingRate, setCeoFinalSellingRate] = useState(() => boot?.ceoFinalSellingRate || '')
+  const [fixedCostPerMtr, setFixedCostPerMtr] = useState(() => boot?.fixedCostPerMtr || '')
+  const [desiredProfitPerMtr, setDesiredProfitPerMtr] = useState(() => boot?.desiredProfitPerMtr || '')
+  const [productionMeters, setProductionMeters] = useState(() => boot?.productionMeters || '')
+  const [isLocked, setIsLocked] = useState(() => Boolean(boot?.isLocked))
   const [formulaDefaults, setFormulaDefaults] = useState(FORMULA_DEFAULTS)
-  const [savedId, setSavedId] = useState<string | null>(null)
-  const [status, setStatus] = useState<'draft' | 'final'>('draft')
+  const [savedId, setSavedId] = useState<string | null>(() => boot?.savedId || null)
+  const [status, setStatus] = useState<'draft' | 'final'>(() =>
+    boot?.status === 'final' ? 'final' : 'draft',
+  )
   const [history, setHistory] = useState<CostingHistoryRow[]>([])
   const [historyHasMore, setHistoryHasMore] = useState(false)
   const [historyLoading, setHistoryLoading] = useState(false)
@@ -204,25 +232,41 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
   const [busy, setBusy] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [message, setMessage] = useState<string | null>(null)
+  const [message, setMessage] = useState<string | null>(() =>
+    boot ? 'Restored unsaved DIN Costing draft' : null,
+  )
   const [dragOver, setDragOver] = useState(false)
   const [lengthError, setLengthError] = useState<string | null>(null)
   const [historyError, setHistoryError] = useState<string | null>(null)
   const skipDinAutoloadRef = useRef(false)
+  const draftHydratedRef = useRef(Boolean(boot))
+  const skipDraftSaveRef = useRef(false)
+  const restoredFromDraftRef = useRef(Boolean(boot))
   const [masterRates, setMasterRates] = useState<RateMasterRow[]>([])
-  const [designImageUrl, setDesignImageUrl] = useState<string | null>(null)
-  const [sampleImageUrl, setSampleImageUrl] = useState<string | null>(null)
+  const [designImageUrl, setDesignImageUrl] = useState<string | null>(() => boot?.designImageUrl || null)
+  const [sampleImageUrl, setSampleImageUrl] = useState<string | null>(() => boot?.sampleImageUrl || null)
   const [sampleUploading, setSampleUploading] = useState(false)
   const [qualities, setQualities] = useState<QualityMasterRow[]>([])
   const [colourOptions, setColourOptions] = useState<string[]>([...FALLBACK_COLOURS])
-  const [qualityMasterId, setQualityMasterId] = useState('')
-  const [machineType, setMachineType] = useState('Jacquard')
-  const [machineSpeedRpm, setMachineSpeedRpm] = useState(String(DEFAULT_MACHINE_SPEED_RPM))
-  const [efficiencyPct, setEfficiencyPct] = useState(String(DEFAULT_EFFICIENCY_PCT))
-  const [productionBasis, setProductionBasis] = useState<'hour' | '12h' | '24h'>('12h')
-  const [importSource, setImportSource] = useState<DesignImportSource | null>(null)
+  const [qualityMasterId, setQualityMasterId] = useState(() => boot?.qualityMasterId || '')
+  const [machineType, setMachineType] = useState(() => boot?.machineType || 'Jacquard')
+  const [machineSpeedRpm, setMachineSpeedRpm] = useState(
+    () => boot?.machineSpeedRpm || String(DEFAULT_MACHINE_SPEED_RPM),
+  )
+  const [efficiencyPct, setEfficiencyPct] = useState(
+    () => boot?.efficiencyPct || String(DEFAULT_EFFICIENCY_PCT),
+  )
+  const [doubleWidthFactor, setDoubleWidthFactor] = useState(
+    () => boot?.doubleWidthFactor || String(DEFAULT_DOUBLE_WIDTH_FACTOR),
+  )
+  const [productionBasis, setProductionBasis] = useState<'hour' | '12h' | '24h' | '28d'>(
+    () => boot?.productionBasis || '12h',
+  )
+  const [importSource, setImportSource] = useState<DesignImportSource | null>(
+    () => boot?.importSource || null,
+  )
   const [missingRates, setMissingRates] = useState<MissingRateItem[]>([])
-  const [savedCreatedAt, setSavedCreatedAt] = useState<string | null>(null)
+  const [savedCreatedAt, setSavedCreatedAt] = useState<string | null>(() => boot?.savedCreatedAt || null)
 
   const warpYarnOptions = useMemo(() => rateMasterItemNames(masterRates, 'warp'), [masterRates])
   const weftYarnOptions = useMemo(() => rateMasterItemNames(masterRates, 'weft'), [masterRates])
@@ -237,9 +281,13 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
           default_wastage_percent: cfg.default_wastage_percent,
           default_usable_length_mtr: cfg.default_usable_length_mtr,
         })
-        if (!designLength) setDesignLength(String(cfg.default_base_length_mtr))
-        setWastageMtr(String(cfg.default_wastage_mtr))
-        setWastagePercent(String(cfg.default_wastage_percent))
+        if (!restoredFromDraftRef.current) {
+          setDesignLength((prev) => prev || String(cfg.default_base_length_mtr))
+          setWastageMtr(String(cfg.default_wastage_mtr))
+          setWastagePercent(String(cfg.default_wastage_percent))
+        } else {
+          setDesignLength((prev) => prev || String(cfg.default_base_length_mtr))
+        }
       })
       .catch(() => setFormulaDefaults(FORMULA_DEFAULTS))
   }, [])
@@ -269,6 +317,89 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
       }
     })()
   }, [])
+
+  // Auto-save working draft so Quality Master / Rate Master navigation does not lose data
+  useEffect(() => {
+    if (skipDraftSaveRef.current || viewOnly || isLocked) return
+    draftHydratedRef.current = true
+    const buildPayload = (): DinCostingWorkingDraft => ({
+      version: 1,
+      updatedAt: Date.now(),
+      dinNumber,
+      costingDate,
+      qualityName,
+      qualityMasterId,
+      designLength,
+      loomPick,
+      warps,
+      wefts,
+      picConversionRate,
+      muPercent,
+      gstPercent,
+      wastageMtr,
+      wastagePercent,
+      ceoFinalSellingRate,
+      fixedCostPerMtr,
+      desiredProfitPerMtr,
+      productionMeters,
+      machineType,
+      machineSpeedRpm,
+      efficiencyPct,
+      doubleWidthFactor,
+      productionBasis,
+      designImageUrl,
+      sampleImageUrl,
+      diaryUrl,
+      importSource,
+      savedId,
+      savedCreatedAt,
+      status,
+      isLocked,
+    })
+    const t = window.setTimeout(() => {
+      const payload = buildPayload()
+      if (dinCostingDraftHasContent(payload)) saveDinCostingDraft(payload)
+    }, 250)
+    return () => {
+      window.clearTimeout(t)
+      // Flush on unmount / navigation so nothing is lost mid-debounce
+      if (skipDraftSaveRef.current || viewOnly || isLocked) return
+      const payload = buildPayload()
+      if (dinCostingDraftHasContent(payload)) saveDinCostingDraft(payload)
+    }
+  }, [
+    viewOnly,
+    isLocked,
+    dinNumber,
+    costingDate,
+    qualityName,
+    qualityMasterId,
+    designLength,
+    loomPick,
+    warps,
+    wefts,
+    picConversionRate,
+    muPercent,
+    gstPercent,
+    wastageMtr,
+    wastagePercent,
+    ceoFinalSellingRate,
+    fixedCostPerMtr,
+    desiredProfitPerMtr,
+    productionMeters,
+    machineType,
+    machineSpeedRpm,
+    efficiencyPct,
+    doubleWidthFactor,
+    productionBasis,
+    designImageUrl,
+    sampleImageUrl,
+    diaryUrl,
+    importSource,
+    savedId,
+    savedCreatedAt,
+    status,
+  ])
 
   const applyWarpRateFromMaster = useCallback(
     (row: WarpDraft): WarpDraft => {
@@ -494,6 +625,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         loomPick: loomPick || buildup.totalPic,
         widthInch: warps[0]?.width || wefts[0]?.width || DEFAULT_WIDTH,
         efficiencyPct,
+        doubleWidthFactor,
         customerSaleRatePerMtr: saleRateForBilling,
         profitPerMtr: profit.profitPerMtr,
       }),
@@ -504,6 +636,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
       warps,
       wefts,
       efficiencyPct,
+      doubleWidthFactor,
       saleRateForBilling,
       profit.profitPerMtr,
     ],
@@ -515,17 +648,21 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         ? production.metersPerHour
         : productionBasis === '24h'
           ? production.metersPer24Hours
-          : production.metersPer12Hours
+          : productionBasis === '28d'
+            ? production.metersPer28Days
+            : production.metersPer12Hours
     if (m > 0) setProductionMeters(String(m))
   }, [
     efficiencyPct,
     machineSpeedRpm,
+    doubleWidthFactor,
     loomPick,
     productionBasis,
     buildup.totalPic,
     production.metersPerHour,
     production.metersPer12Hours,
     production.metersPer24Hours,
+    production.metersPer28Days,
   ])
 
   const isReadOnly = !canEdit || isLocked
@@ -689,8 +826,13 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
           ? header.conversion_charge
           : 0.45
     setPicConversionRate(String(rate ?? 0.45))
-    setMuPercent(String(header.mu_percent ?? 0))
+    setMuPercent(
+      header.mu_percent != null && header.mu_percent !== ''
+        ? String(header.mu_percent)
+        : String(DEFAULT_MU_PERCENT),
+    )
     setGstPercent(String(header.gst_percent ?? 0))
+    setDoubleWidthFactor(String(DEFAULT_DOUBLE_WIDTH_FACTOR))
   }, [formulaDefaults.default_wastage_mtr, formulaDefaults.default_wastage_percent])
 
   const loadById = useCallback(
@@ -875,6 +1017,8 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
   }, [history, debouncedHistoryFilters, userNames, yarnByCosting])
 
   function resetForm(keepDin = false) {
+    skipDraftSaveRef.current = true
+    clearDinCostingDraft()
     if (!keepDin) setDinNumber('')
     setCostingDate(todayISO())
     setQualityName('')
@@ -884,6 +1028,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     setMachineType('Jacquard')
     setMachineSpeedRpm(String(DEFAULT_MACHINE_SPEED_RPM))
     setEfficiencyPct(String(DEFAULT_EFFICIENCY_PCT))
+    setDoubleWidthFactor(String(DEFAULT_DOUBLE_WIDTH_FACTOR))
     setProductionBasis('12h')
     setDiaryUrl(null)
     setDesignImageUrl(null)
@@ -893,7 +1038,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     setWarps([emptyWarp(1)])
     setWefts([emptyWeft(1)])
     setPicConversionRate('0.45')
-    setMuPercent('0')
+    setMuPercent(String(DEFAULT_MU_PERCENT))
     setGstPercent('0')
     setWastageMtr(String(formulaDefaults.default_wastage_mtr))
     setWastagePercent(String(formulaDefaults.default_wastage_percent))
@@ -908,6 +1053,10 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     setLengthError(null)
     setError(null)
     setMessage(null)
+    restoredFromDraftRef.current = false
+    window.setTimeout(() => {
+      skipDraftSaveRef.current = false
+    }, 0)
   }
 
   async function handleDiaryFile(file: File | null) {
@@ -1566,6 +1715,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
           })
           .eq('dno', din)
         if (designErr) {
+          clearDinCostingDraft()
           setMessage(
             `Costing saved to DIN ${din} · Final ${fmtInr(totals.finalCostPerMtr)}/mtr (design register sync: ${designErr.message})`,
           )
@@ -1577,6 +1727,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
 
       await refreshHistory()
       await refreshDesignNoSeries()
+      clearDinCostingDraft()
       const idHint = costingId ? ` · ID ${String(costingId).slice(0, 8)}` : ''
       setMessage(
         finalize
@@ -1757,7 +1908,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         return applyWarpRateFromMaster(cleared)
       }),
     )
-    setMessage('Rate Source: Rate Master — row recalculated')
+    setMessage('Rate Master rate applied — row recalculated')
   }
 
   function resetWeftToRateMaster(rowKey: string) {
@@ -1768,7 +1919,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         return applyWeftRateFromMaster(cleared)
       }),
     )
-    setMessage('Rate Source: Rate Master — row recalculated')
+    setMessage('Rate Master rate applied — row recalculated')
   }
 
   async function recalculateFromUi() {
@@ -2402,45 +2553,19 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
                           )
                         }
                       />
-                      {row.rate_source === 'rate_master' && row.rate_basic != null ? (
-                        <small className="dwc-rate-meta text-muted">
-                          Rate Source: Rate Master · {fmtInr(row.rate_basic)}/kg · {gstLabel(row.rate_gst_percent ?? 0)}{' '}
-                          {fmtInr(row.rate_gst_amount ?? 0)} · Freight {fmtInr(row.rate_freight ?? 0)} ·{' '}
-                          {formatRateDate(row.rate_effective_from || '')}
-                        </small>
-                      ) : row.rate_source === 'manual' ? (
-                        <small className="dwc-rate-meta text-muted">
-                          Rate Source: Manual Override
-                          {!isReadOnly ? (
-                            <>
-                              {' '}
-                              <button
-                                type="button"
-                                className="btn-link"
-                                onClick={() => resetWarpToRateMaster(row.key)}
-                              >
-                                Use Rate Master Rate
-                              </button>
-                            </>
-                          ) : null}
-                        </small>
-                      ) : isWarpRateMissing(row) ? (
-                        <small className="dwc-rate-missing">
-                          Rate not found in Rate Master
-                          {onNavigate ? (
-                            <>
-                              {' '}
-                              <button
-                                type="button"
-                                className="btn-link"
-                                onClick={() => openRateMasterForItem('warp', row.yarn_name)}
-                              >
-                                Add Rate
-                              </button>
-                            </>
-                          ) : null}
-                        </small>
-                      ) : null}
+                      <CompactRateCell
+                        yarnLabel={row.yarn_name}
+                        ratePerKg={row.rate_per_kg}
+                        meta={row}
+                        disabled={isReadOnly}
+                        onUseRateMaster={() => resetWarpToRateMaster(row.key)}
+                        isMissing={isWarpRateMissing(row)}
+                        onAddRate={
+                          onNavigate
+                            ? () => openRateMasterForItem('warp', row.yarn_name)
+                            : undefined
+                        }
+                      />
                     </td>
                     <td data-label="Amount (₹)">
                       <input className="num dwc-auto" value={fmtMoney(calc.amount)} readOnly />
@@ -2669,45 +2794,19 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
                           )
                         }
                       />
-                      {row.rate_source === 'rate_master' && row.rate_basic != null ? (
-                        <small className="dwc-rate-meta text-muted">
-                          Rate Source: Rate Master · {fmtInr(row.rate_basic)}/kg ·{' '}
-                          {gstLabel(row.rate_gst_percent ?? 0)} {fmtInr(row.rate_gst_amount ?? 0)} · Freight{' '}
-                          {fmtInr(row.rate_freight ?? 0)} · {formatRateDate(row.rate_effective_from || '')}
-                        </small>
-                      ) : row.rate_source === 'manual' ? (
-                        <small className="dwc-rate-meta text-muted">
-                          Rate Source: Manual Override
-                          {!isReadOnly ? (
-                            <>
-                              {' '}
-                              <button
-                                type="button"
-                                className="btn-link"
-                                onClick={() => resetWeftToRateMaster(row.key)}
-                              >
-                                Use Rate Master Rate
-                              </button>
-                            </>
-                          ) : null}
-                        </small>
-                      ) : isWeftRateMissing(row) ? (
-                        <small className="dwc-rate-missing">
-                          Rate not found in Rate Master
-                          {onNavigate ? (
-                            <>
-                              {' '}
-                              <button
-                                type="button"
-                                className="btn-link"
-                                onClick={() => openRateMasterForItem('weft', row.weft_name)}
-                              >
-                                Open Rate Master
-                              </button>
-                            </>
-                          ) : null}
-                        </small>
-                      ) : null}
+                      <CompactRateCell
+                        yarnLabel={row.weft_name}
+                        ratePerKg={row.rate_per_kg}
+                        meta={row}
+                        disabled={isReadOnly}
+                        onUseRateMaster={() => resetWeftToRateMaster(row.key)}
+                        isMissing={isWeftRateMissing(row)}
+                        onAddRate={
+                          onNavigate
+                            ? () => openRateMasterForItem('weft', row.weft_name)
+                            : undefined
+                        }
+                      />
                     </td>
                     <td data-label="Amount (₹)">
                       <input className="num dwc-auto" value={fmtMoney(calc.amount)} readOnly />
@@ -2752,7 +2851,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
       <section className="dwc-panel dwc-summary-panel dwc-compact-block">
         <h2 className="section-title">5 · INTERNAL COST SUMMARY</h2>
         <p className="dwc-hint" style={{ marginTop: 0 }}>
-          Internal Costing Basis: 110 Mtr
+          INTERNAL COSTING BASIS · 110 Mtr (yarn consumption)
         </p>
         <div className="dwc-totals-grid">
           <div>
@@ -2764,43 +2863,33 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
             <strong className="num">{fmtMoney(buildup.totalWeftAmount)}</strong>
           </div>
           <div>
-            <span className="text-muted">Total Yarn Cost</span>
+            <span className="text-muted">TOTAL YARN COST / 110 Mtr</span>
             <strong className="num dwc-emphasis">{fmtMoney(buildup.totalYarnAmount)}</strong>
-          </div>
-          <div>
-            <span className="text-muted">Weaving / Conversion</span>
-            <strong className="num">{fmtMoney(buildup.conversionCharge)}</strong>
-          </div>
-          <div>
-            <span className="text-muted">Other Charges (MU + GST on 110 Mtr)</span>
-            <strong className="num">{fmtMoney(buildup.otherCharges)}</strong>
-          </div>
-          <div>
-            <span className="text-muted">FINAL INTERNAL COST / 110 MTR</span>
-            <strong className="num dwc-emphasis">{fmtMoney(buildup.finalInternalCost110)}</strong>
           </div>
         </div>
       </section>
 
       <section className="dwc-panel dwc-buildup dwc-compact-block" id="dwc-customer-rate">
-        <h2 className="section-title">6 · CUSTOMER PRICING</h2>
-        <p className="dwc-hint" style={{ marginTop: 0 }}>
-          Customer Selling Rate Basis: 100 Mtr — Internal Cost (110) ÷ 100 (never convert twice)
-        </p>
+        <h2 className="section-title">6 · CUSTOMER RATE CARD</h2>
         <div className="dwc-totals-grid" style={{ marginBottom: '0.75rem' }}>
           <div>
-            <span className="text-muted">Internal Cost for 110 Mtr</span>
-            <strong className="num">{fmtMoney(buildup.finalInternalCost110)}</strong>
+            <span className="text-muted">INTERNAL COSTING BASIS</span>
+            <strong className="num">110 Mtr</strong>
           </div>
           <div>
-            <span className="text-muted">Customer Rate / 100 Mtr</span>
-            <strong className="num dwc-emphasis">{fmtInr(buildup.customerRatePerMtr)}</strong>
+            <span className="text-muted">CUSTOMER SELLING BASIS</span>
+            <strong className="num">100 Mtr</strong>
           </div>
         </div>
         <div className="dwc-buildup-grid">
           <label className="field">
+            <span className="text-muted">TOTAL YARN COST</span>
+            <input className="num dwc-auto" value={fmtMoney(buildup.totalYarnAmount)} readOnly />
+            <span className="dwc-hint">₹ / 110 Mtr</span>
+          </label>
+          <label className="field">
             <span className="text-muted">
-              Yarn Cost / Mtr <CalcInfo hint={CALC_HINTS.yarnCostPerMtr} />
+              YARN COST / 100 Mtr <CalcInfo hint={CALC_HINTS.yarnCostPerMtr} />
             </span>
             <input className="num dwc-auto" value={fmtMoney(buildup.yarnCostPerMtr)} readOnly />
             <span className="dwc-hint">Total Yarn (110) ÷ 100</span>
@@ -2808,7 +2897,6 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
           <label className="field">
             <span className="text-muted">TOTAL WEFT PIC</span>
             <input className="num dwc-auto" value={fmtQty(buildup.totalPic, 0)} readOnly />
-            <span className="dwc-hint">Sum of weft PIC rows (not Total Loom Pick / not Strings)</span>
           </label>
           <label className="field">
             <span className="text-muted">PIC Conversion Rate (₹ / PIC)</span>
@@ -2824,17 +2912,17 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
           </label>
           <label className="field">
             <span className="text-muted">
-              Conversion / Weaving Charge (₹ · 110 Mtr) <CalcInfo hint={CALC_HINTS.conversionCharge} />
+              WEAVING / CONVERSION <CalcInfo hint={CALC_HINTS.conversionCharge} />
             </span>
             <input className="num dwc-auto" value={fmtMoney(buildup.conversionCharge)} readOnly />
-            <span className="dwc-hint">TOTAL WEFT PIC × PIC Conversion Rate</span>
+            <span className="dwc-hint">₹ / Mtr · TOTAL WEFT PIC × PIC Rate</span>
           </label>
           <label className="field">
             <span className="text-muted">
-              Subtotal / Mtr <CalcInfo hint={CALC_HINTS.subtotalPerMtr} />
+              BASE CUSTOMER COST <CalcInfo hint={CALC_HINTS.subtotalPerMtr} />
             </span>
-            <input className="num dwc-auto" value={fmtMoney(buildup.subtotalPerMtr)} readOnly />
-            <span className="dwc-hint">(Yarn + Weaving on 110) ÷ 100</span>
+            <input className="num dwc-auto dwc-emphasis" value={fmtMoney(buildup.subtotalPerMtr)} readOnly />
+            <span className="dwc-hint">Yarn / 100 Mtr + Weaving / Mtr</span>
           </label>
           <label className="field">
             <span className="text-muted">MU %</span>
@@ -2847,15 +2935,19 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
               disabled={isReadOnly}
               onChange={(e) => setMuPercent(e.target.value)}
             />
+            <span className="dwc-hint">Default 5%</span>
+          </label>
+          <label className="field">
+            <span className="text-muted">
+              MU AMOUNT / Mtr <CalcInfo hint={CALC_HINTS.muAmount} />
+            </span>
+            <input className="num dwc-auto" value={fmtMoney(buildup.muAmount)} readOnly />
           </label>
           <label className="field">
             <span className="text-muted">
               After MU / Mtr <CalcInfo hint={CALC_HINTS.afterMuPerMtr} />
             </span>
             <input className="num dwc-auto" value={fmtMoney(buildup.afterMuPerMtr)} readOnly />
-            <span className="dwc-hint">
-              MU amount {fmtInr(buildup.muAmount)} <CalcInfo hint={CALC_HINTS.muAmount} />
-            </span>
           </label>
           <label className="field">
             <span className="text-muted">GST %</span>
@@ -2879,21 +2971,28 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
 
         <div className="dwc-gst-split" aria-label="Customer rate summary">
           <div className="dwc-gst-card">
-            <span className="text-muted">Internal Costing Basis</span>
-            <strong className="num">110 Mtr</strong>
-            <span className="dwc-hint">{fmtInr(buildup.finalInternalCost110)} total</span>
+            <span className="text-muted">BASE CUSTOMER COST</span>
+            <strong className="num">{fmtInr(buildup.subtotalPerMtr)}</strong>
+            <span className="dwc-hint">/ Mtr</span>
           </div>
           <div className="dwc-gst-card">
-            <span className="text-muted">Customer Selling Rate Basis</span>
-            <strong className="num">100 Mtr</strong>
-            <span className="dwc-hint">÷ 100 once</span>
+            <span className="text-muted">MU</span>
+            <strong className="num">{fmtQty(buildup.muPercent, 0)}%</strong>
+            <span className="dwc-hint">{fmtInr(buildup.muAmount)} / Mtr</span>
+          </div>
+          <div className="dwc-gst-card">
+            <span className="text-muted">FINAL CUSTOMER COST</span>
+            <strong className="num">{fmtInr(buildup.finalCostPerMtr)}</strong>
+            <span className="dwc-hint">{finalCostHint(buildup.gstPercent)} · / Mtr</span>
           </div>
           <div className="dwc-gst-card dwc-gst-final">
             <span className="text-muted">
-              Customer Rate / 100 Mtr <CalcInfo hint={CALC_HINTS.customerRatePerMtr} />
+              FINAL CUSTOMER SALE RATE <CalcInfo hint={CALC_HINTS.customerRatePerMtr} />
             </span>
-            <strong className="num">{fmtInr(buildup.customerRatePerMtr)}</strong>
-            <span className="dwc-hint">{finalCostHint(buildup.gstPercent)}</span>
+            <strong className="num">
+              {fmtInr(finalSaleRate(ceoFinalSellingRate, buildup.finalCostPerMtr) ?? buildup.finalCostPerMtr)}
+            </strong>
+            <span className="dwc-hint">/ Mtr</span>
           </div>
         </div>
 
@@ -2915,9 +3014,9 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
       </section>
 
 
-      <section className="dwc-panel dwc-production-panel">
+      <section className="dwc-panel dwc-production-panel dwc-compact-block">
         <h2 className="section-title">
-          7 · Production / Weaving Speed <CalcInfo hint={CALC_HINTS.productionSpeed} />
+          7 · Production / Billing <CalcInfo hint={CALC_HINTS.productionSpeed} />
         </h2>
         <div className="dwc-buildup-grid">
           <label className="field">
@@ -2940,13 +3039,32 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
               disabled={isReadOnly}
               onChange={(e) => setMachineSpeedRpm(e.target.value)}
             />
+            <span className="dwc-hint">Default 280 · editable</span>
+          </label>
+          <label className="field">
+            <span className="text-muted">Double Width Factor</span>
+            <input
+              className="num"
+              type="number"
+              min="0"
+              step="any"
+              value={doubleWidthFactor}
+              disabled={isReadOnly}
+              onChange={(e) => setDoubleWidthFactor(e.target.value)}
+            />
+            <span className="dwc-hint">Default 2.00 · applied once in production</span>
           </label>
           <label className="field">
             <span className="text-muted">TOTAL LOOM PICK</span>
             <input
-              className="num dwc-auto"
-              value={loomPick || String(buildup.totalPic || '')}
-              readOnly
+              className="num"
+              type="number"
+              min="0"
+              step="any"
+              value={loomPick}
+              disabled={isReadOnly}
+              onChange={(e) => setLoomPick(e.target.value)}
+              placeholder="Manual entry"
             />
           </label>
           <label className="field">
@@ -2987,61 +3105,106 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
             />
           </label>
         </div>
-        <div className="dwc-basis-toggle" role="group" aria-label="Production basis">
-          <button
-            type="button"
-            className={productionBasis === 'hour' ? 'dwc-basis-btn active' : 'dwc-basis-btn'}
-            disabled={isReadOnly}
-            onClick={() => setProductionBasis('hour')}
-          >
-            Per Hour
-          </button>
-          <button
-            type="button"
-            className={productionBasis === '12h' ? 'dwc-basis-btn active' : 'dwc-basis-btn'}
-            disabled={isReadOnly}
-            onClick={() => setProductionBasis('12h')}
-          >
-            12 Hours
-          </button>
-          <button
-            type="button"
-            className={productionBasis === '24h' ? 'dwc-basis-btn active' : 'dwc-basis-btn'}
-            disabled={isReadOnly}
-            onClick={() => setProductionBasis('24h')}
-          >
-            24 Hours
-          </button>
-        </div>
         <div className="dwc-table-wrap">
           <table className="dwc-table dwc-production-table">
             <thead>
               <tr>
-                <th>Basis</th>
-                <th>Meters</th>
-                <th>Billing</th>
+                <th>Period</th>
+                <th>Production (Mtr)</th>
+                <th>Billing (₹)</th>
+                <th>Profit (₹)</th>
               </tr>
             </thead>
             <tbody>
-              <tr className={productionBasis === 'hour' ? 'dwc-basis-selected' : undefined}>
-                <td data-label="Basis">Per Hour</td>
-                <td data-label="Meters" className="num">{fmtQty(production.metersPerHour)}</td>
-                <td data-label="Billing" className="num">{fmtMoney(production.billingPerHour)}</td>
+              <tr
+                className={productionBasis === 'hour' ? 'dwc-basis-selected' : undefined}
+                onClick={() => !isReadOnly && setProductionBasis('hour')}
+              >
+                <td data-label="Period">Per Hour</td>
+                <td data-label="Production" className="num">
+                  {fmtQty(production.metersPerHour)}
+                </td>
+                <td data-label="Billing" className="num">
+                  {fmtMoney(production.billingPerHour)}
+                </td>
+                <td data-label="Profit" className="num">
+                  {fmtMoney(production.profitPerHour)}
+                </td>
               </tr>
-              <tr className={productionBasis === '12h' ? 'dwc-basis-selected' : undefined}>
-                <td data-label="Basis">12 Hours</td>
-                <td data-label="Meters" className="num">{fmtQty(production.metersPer12Hours)}</td>
-                <td data-label="Billing" className="num">{fmtMoney(production.billingPer12Hours)}</td>
+              <tr
+                className={productionBasis === '12h' ? 'dwc-basis-selected' : undefined}
+                onClick={() => !isReadOnly && setProductionBasis('12h')}
+              >
+                <td data-label="Period">12 Hours</td>
+                <td data-label="Production" className="num">
+                  {fmtQty(production.metersPer12Hours)}
+                </td>
+                <td data-label="Billing" className="num">
+                  {fmtMoney(production.billingPer12Hours)}
+                </td>
+                <td data-label="Profit" className="num">
+                  {fmtMoney(production.profitPer12Hours)}
+                </td>
               </tr>
-              <tr className={productionBasis === '24h' ? 'dwc-basis-selected' : undefined}>
-                <td data-label="Basis">24 Hours</td>
-                <td data-label="Meters" className="num">{fmtQty(production.metersPer24Hours)}</td>
-                <td data-label="Billing" className="num">{fmtMoney(production.billingPer24Hours)}</td>
+              <tr
+                className={productionBasis === '24h' ? 'dwc-basis-selected' : undefined}
+                onClick={() => !isReadOnly && setProductionBasis('24h')}
+              >
+                <td data-label="Period">24 Hours</td>
+                <td data-label="Production" className="num">
+                  {fmtQty(production.metersPer24Hours)}
+                </td>
+                <td data-label="Billing" className="num">
+                  {fmtMoney(production.billingPer24Hours)}
+                </td>
+                <td data-label="Profit" className="num">
+                  {fmtMoney(production.profitPer24Hours)}
+                </td>
+              </tr>
+              <tr
+                className={productionBasis === '28d' ? 'dwc-basis-selected' : undefined}
+                onClick={() => !isReadOnly && setProductionBasis('28d')}
+              >
+                <td data-label="Period">28 Days</td>
+                <td data-label="Production" className="num">
+                  {fmtQty(production.metersPer28Days)}
+                </td>
+                <td data-label="Billing" className="num">
+                  {fmtMoney(production.billingPer28Days)}
+                </td>
+                <td data-label="Profit" className="num">
+                  {fmtMoney(production.profitPer28Days)}
+                </td>
               </tr>
             </tbody>
           </table>
         </div>
-        <p className="dwc-hint">Billing uses Final Customer Sale Rate (100 Mtr basis)</p>
+        <div className="dwc-totals-grid" style={{ marginTop: '0.75rem' }}>
+          <div>
+            <span className="text-muted">Theoretical Production</span>
+            <strong className="num">
+              {fmtQty(
+                productionBasis === 'hour'
+                  ? production.metersPerHour
+                  : productionBasis === '24h'
+                    ? production.metersPer24Hours
+                    : productionBasis === '28d'
+                      ? production.metersPer28Days
+                      : production.metersPer12Hours,
+              )}{' '}
+              Mtr
+            </strong>
+          </div>
+          <div>
+            <span className="text-muted">ACTUAL PRODUCTION</span>
+            <strong className="text-muted">Waiting for Production Data</strong>
+            <span className="dwc-hint">Future machine / production module integration</span>
+          </div>
+        </div>
+        <p className="dwc-hint">
+          Billing = Production × Final Customer Sale Rate · Double Width Factor already in production
+          (not applied twice)
+        </p>
       </section>
 
 
@@ -3149,6 +3312,10 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
           <label className="field">
             <span className="text-muted">Profit / 24 Hours</span>
             <input className="num dwc-auto" value={fmtMoney(production.profitPer24Hours)} readOnly />
+          </label>
+          <label className="field">
+            <span className="text-muted">Profit / 28 Days</span>
+            <input className="num dwc-auto" value={fmtMoney(production.profitPer28Days)} readOnly />
           </label>
         </div>
         {n(ceoFinalSellingRate) > 0 ? (

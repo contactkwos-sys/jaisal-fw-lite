@@ -120,18 +120,7 @@
   margin-top: 0.5rem;
 }
 
-.dwc-ocr-source-details {
-  margin-top: 0.75rem;
-  padding: 0.5rem 0.75rem;
-  border: 1px dashed var(--line);
-  border-radius: var(--radius-sm);
-  font-size: 0.9rem;
-}
 
-.dwc-ocr-source-details summary {
-  cursor: pointer;
-  color: var(--muted);
-}
 
 .dwc-table-wrap {
   overflow: auto;
@@ -753,105 +742,6 @@
   min-height: 72px;
 }
 
-.dwc-ocr-review {
-  margin-top: 0.5rem;
-}
-
-.dwc-ocr-layout {
-  display: grid;
-  grid-template-columns: minmax(140px, 200px) minmax(0, 1fr);
-  gap: 1rem;
-}
-
-.dwc-ocr-subtitle {
-  margin: 0 0 0.5rem;
-  font-size: 0.92rem;
-  font-weight: 650;
-}
-
-.dwc-ocr-review-banner {
-  margin: 0 0 0.75rem;
-  padding: 0.45rem 0.65rem;
-  font-size: 0.82rem;
-  line-height: 1.35;
-  color: #7a4a00;
-  background: #fff6e5;
-  border: 1px solid #f0d9a8;
-  border-radius: 6px;
-}
-
-.dwc-design-preview {
-  width: 100%;
-  min-height: 180px;
-  border-radius: var(--radius);
-  border: 1px solid var(--line);
-  background-size: contain;
-  background-repeat: no-repeat;
-  background-position: center;
-  background-color: var(--surface2);
-}
-
-.dwc-design-preview.empty {
-  display: grid;
-  place-items: center;
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
-.dwc-source-tag {
-  display: inline-block;
-  margin-top: 0.35rem;
-  font-size: 0.78rem;
-  color: var(--muted);
-  text-transform: capitalize;
-}
-
-.dwc-ocr-feeders,
-.dwc-ocr-weft {
-  display: grid;
-  gap: 0.5rem;
-  margin: 0.75rem 0;
-}
-
-.dwc-ocr-block-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-weight: 600;
-  font-size: 0.88rem;
-}
-
-.dwc-ocr-feeder-row,
-.dwc-ocr-weft-row {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 0.5rem;
-  align-items: center;
-}
-
-.dwc-ocr-weft-row {
-  grid-template-columns: auto 1fr auto;
-}
-
-.dwc-ocr-weft-row label {
-  display: grid;
-  gap: 0.2rem;
-  font-size: 0.78rem;
-  color: var(--muted);
-}
-
-.dwc-low-conf {
-  color: var(--danger, #c0392b);
-  font-style: normal;
-  font-weight: 400;
-}
-
-.dwc-confirm-ocr {
-  margin-top: 0.75rem;
-  min-height: 48px;
-  width: 100%;
-  max-width: 320px;
-}
 
 .dwc-duplicate-banner {
   padding: 0.75rem 1rem;
@@ -985,14 +875,6 @@
 @media (max-width: 768px) {
   .dwc-import-btn {
     flex: 1 1 100%;
-  }
-
-  .dwc-ocr-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .dwc-ocr-weft-row {
-    grid-template-columns: auto 1fr;
   }
 
   .dwc-yarn-ac {
@@ -1199,4 +1081,78 @@
     font-weight: 600;
     flex: 0 0 40%;
   }
+}
+
+/* Compact Rate Master details (ⓘ View popover) */
+.dwc-rate-compact {
+  position: relative;
+  margin-top: 0.2rem;
+}
+.dwc-rate-compact-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+.dwc-rate-view-btn {
+  border: none;
+  background: transparent;
+  color: var(--teal, #0f766e);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.1rem 0.25rem;
+  min-height: 28px;
+}
+.dwc-rate-view-btn:hover {
+  text-decoration: underline;
+}
+.dwc-rate-popover {
+  position: absolute;
+  z-index: 40;
+  left: 0;
+  top: calc(100% + 4px);
+  min-width: min(280px, 85vw);
+  max-width: 320px;
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+}
+.dwc-rate-popover-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+.dwc-rate-popover-dl {
+  margin: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+.dwc-rate-popover-dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.82rem;
+}
+.dwc-rate-popover-dl dt {
+  color: var(--muted);
+  font-weight: 500;
+}
+.dwc-rate-popover-dl dd {
+  margin: 0;
+  text-align: right;
+  font-weight: 600;
+}
+.dwc-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+  word-break: break-all;
+}
+.dwc-production-table tbody tr {
+  cursor: pointer;
 }

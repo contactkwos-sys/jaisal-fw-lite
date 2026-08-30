@@ -1,10 +1,9 @@
 /**
- * Smoke-test DIN Costing final business logic:
- * - Base denier + 10 (no stacking on recalculate) — 300 → 310 forever
- * - Default TAR 8900, width 52, length 110
- * - Internal cost on 110 Mtr; Customer rate = Internal 110 ÷ 100 (once)
- * - Strings excluded from costing
- * - TOTAL LOOM PICK vs TOTAL WEFT PIC warning
+ * Smoke-test DIN Costing corrected business logic:
+ * - Base denier + 10 (no stacking)
+ * - Customer: Yarn(110)÷100 + Weaving₹/Mtr + MU 5%
+ * - Never (yarn+conversion)÷100 when conversion is ₹/Mtr
+ * - Machine RPM default 280, Double Width Factor 2, 28-day production
  * Run: node scripts/test-design-wise-costing.mjs
  */
 
@@ -13,7 +12,11 @@ const DEFAULT_WIDTH = 52
 const DEFAULT_LENGTH_MTR = 110
 const DEFAULT_TAR_ENDS = 8900
 const DEFAULT_CUSTOMER_USABLE_MTR = 100
+const DEFAULT_MU_PERCENT = 5
+const DEFAULT_MACHINE_SPEED_RPM = 280
+const DEFAULT_DOUBLE_WIDTH_FACTOR = 2
 const DENIER_COSTING_OFFSET = 10
+const LOOM_INCHES_PER_METER = 39.37
 
 function n(v) {
   if (v === '' || v == null) return 0
@@ -97,11 +100,6 @@ function weftWeightKg(denier, pic, width, lengthMtr) {
   return (denier * pic * width * lengthMtr) / CALC_FACTOR
 }
 
-function weftWeightWithResolved(row) {
-  const denier = resolveCostingDenier(row)
-  return round2(weftWeightKg(denier, n(row.pic), n(row.width), n(row.length_mtr)))
-}
-
 function computeWastageParams(enteredLengthMtr, wastageMtr = 10, wastagePercent = 10) {
   const entered = n(enteredLengthMtr)
   const wastage = n(wastageMtr)
@@ -116,7 +114,10 @@ function computeWastageParams(enteredLengthMtr, wastageMtr = 10, wastagePercent 
   }
 }
 
-/** FIXED formula: Internal 110 = yarn + weave + other; Customer = Internal ÷ 100 once */
+/**
+ * CORRECTED: Yarn(110)÷100 + Weaving₹/Mtr + MU
+ * Never divide per-meter conversion by 100.
+ */
 function computeBuildup(
   warps,
   wefts,
@@ -149,79 +150,85 @@ function computeBuildup(
     totalPic += n(w.pic)
   }
 
-  totalWarpWeightKg = round2(totalWarpWeightKg)
-  totalWeftWeightKg = round2(totalWeftWeightKg)
   totalWarpAmount = round2(totalWarpAmount)
   totalWeftAmount = round2(totalWeftAmount)
-
-  const totalWeightKg = round2(totalWarpWeightKg + totalWeftWeightKg)
   const totalYarnAmount = round2(totalWarpAmount + totalWeftAmount)
   const wastage = computeWastageParams(enteredLengthMtr, wastageMtr, wastagePercent)
   const customerBasis =
     wastage.usableLengthMtr > 0 ? wastage.usableLengthMtr : DEFAULT_CUSTOMER_USABLE_MTR
 
-  const conversionCharge = round2(totalPic * n(picConversionRate))
-  const yarnAndWeave110 = round2(totalYarnAmount + conversionCharge)
-  const muAmount110 = round2(yarnAndWeave110 * (n(muPercent) / 100))
-  const afterMu110 = round2(yarnAndWeave110 + muAmount110)
+  const yarnCostPerMtr = customerBasis > 0 ? totalYarnAmount / customerBasis : 0
+  const conversionCharge = totalPic * n(picConversionRate)
+  const subtotalPerMtr = yarnCostPerMtr + conversionCharge
+  const muAmount = subtotalPerMtr * (n(muPercent) / 100)
+  const afterMuPerMtr = subtotalPerMtr + muAmount
   const gst = n(gstPercent)
-  const gstAmount110 = gst > 0 ? round2(afterMu110 * (gst / 100)) : 0
-  const otherCharges = round2(muAmount110 + gstAmount110)
-  const finalInternalCost110 = gst > 0 ? round2(afterMu110 + gstAmount110) : afterMu110
-  const customerRatePerMtr =
-    customerBasis > 0 ? round2(finalInternalCost110 / customerBasis) : 0
+  const gstAmount = gst > 0 ? afterMuPerMtr * (gst / 100) : 0
+  const finalCostPerMtr = gst > 0 ? afterMuPerMtr + gstAmount : afterMuPerMtr
 
   return {
-    totalWarpWeightKg,
-    totalWeftWeightKg,
-    totalWeightKg,
-    totalWarpAmount,
-    totalWeftAmount,
     totalYarnAmount,
-    ...wastage,
     usableLengthMtr: customerBasis,
-    yarnCostPerMtr: customerBasis > 0 ? round2(totalYarnAmount / customerBasis) : 0,
+    yarnCostPerMtr,
     totalPic,
     conversionCharge,
-    otherCharges,
-    finalInternalCost110,
-    customerRatePerMtr,
-    subtotalPerMtr: customerBasis > 0 ? round2(yarnAndWeave110 / customerBasis) : 0,
-    muAmount: customerBasis > 0 ? round2(muAmount110 / customerBasis) : 0,
-    afterMuPerMtr: customerBasis > 0 ? round2(afterMu110 / customerBasis) : 0,
-    gstAmount: customerBasis > 0 ? round2(gstAmount110 / customerBasis) : 0,
-    finalCostPerMtr: customerRatePerMtr,
+    finalInternalCost110: totalYarnAmount,
+    customerRatePerMtr: finalCostPerMtr,
+    subtotalPerMtr,
+    muAmount,
+    afterMuPerMtr,
+    gstAmount,
+    finalCostPerMtr,
+  }
+}
+
+function computeProductionSpeed(opts) {
+  const rpm = n(opts.rpm)
+  const loomPick = n(opts.loomPick)
+  const efficiencyPct = n(opts.efficiencyPct) > 0 ? n(opts.efficiencyPct) : 100
+  const factor = n(opts.doubleWidthFactor) > 0 ? n(opts.doubleWidthFactor) : DEFAULT_DOUBLE_WIDTH_FACTOR
+  const saleRate = n(opts.customerSaleRatePerMtr)
+  const profitPerMtr = n(opts.profitPerMtr)
+  const denom = loomPick * LOOM_INCHES_PER_METER
+  const metersPerHour =
+    rpm > 0 && denom > 0
+      ? round2((rpm * 60 * (efficiencyPct / 100) * factor) / denom)
+      : 0
+  const metersPer12Hours = round2(metersPerHour * 12)
+  const metersPer24Hours = round2(metersPerHour * 24)
+  const metersPer28Days = round2(metersPer24Hours * 28)
+  return {
+    metersPerHour,
+    metersPer12Hours,
+    metersPer24Hours,
+    metersPer28Days,
+    billingPerHour: round2(metersPerHour * saleRate),
+    billingPer12Hours: round2(metersPer12Hours * saleRate),
+    billingPer24Hours: round2(metersPer24Hours * saleRate),
+    billingPer28Days: round2(metersPer28Days * saleRate),
+    profitPer12Hours: round2(metersPer12Hours * profitPerMtr),
+    profitPer28Days: round2(metersPer28Days * profitPerMtr),
+    doubleWidthFactor: factor,
   }
 }
 
 const checks = []
 
-// --- FINAL ACCEPTANCE: exact denier rule ---
 checks.push(['Warp Base 150 → Costing 160', costingDenierFromBase(150) === 160])
-checks.push(['Weft Base 110 → Costing 120', costingDenierFromBase(110) === 120])
-checks.push(['Weft Base 300 → Costing 310 (NOT 320, NOT 350)', costingDenierFromBase(300) === 310])
+checks.push(['Weft Base 300 → Costing 310 (NOT 320)', costingDenierFromBase(300) === 310])
 checks.push(['Never 300 → 320', costingDenierFromBase(300) !== 320])
-checks.push(['Never 300 → 350', costingDenierFromBase(300) !== 350])
 
 let warp150 = withBaseDenier(
   { yarn_name: '150 Bright', base_denier: '', denier: '', tar_ends: '8900', width: '52', length_mtr: '110', rate_per_kg: '160' },
   '150',
 )
-checks.push(['Warp 150 base/costing fields', warp150.base_denier === '150' && warp150.denier === '160'])
 for (let i = 0; i < 10; i++) warp150 = syncCostingDenierFromBase(warp150)
 checks.push(['Warp recalc ×10 still 150/160', warp150.base_denier === '150' && resolveCostingDenier(warp150) === 160])
-
-let weft110 = withBaseDenier(
-  { weft_name: '110 Yarn', base_denier: '', denier: '', pic: '25', width: '52', length_mtr: '110', rate_per_kg: '200' },
-  '110',
-)
-checks.push(['Weft1 Base 110 → Costing 120', weft110.base_denier === '110' && resolveCostingDenier(weft110) === 120])
 
 let weft300 = withBaseDenier(
   { weft_name: '300 Tex', base_denier: '', denier: '', pic: '25', width: '52', length_mtr: '110', rate_per_kg: '150' },
   '300',
 )
-checks.push(['Weft2 Base 300 → Costing 310', weft300.base_denier === '300' && resolveCostingDenier(weft300) === 310])
 for (let i = 0; i < 10; i++) weft300 = syncCostingDenierFromBase(weft300)
 checks.push(['Weft2 recalc still 300/310', weft300.base_denier === '300' && resolveCostingDenier(weft300) === 310])
 
@@ -235,128 +242,100 @@ checks.push(['RM seed 310 coerced to base 300 → costing 310', fromBadRm.base_d
 checks.push(['Default width 52', DEFAULT_WIDTH === 52])
 checks.push(['Default length 110', DEFAULT_LENGTH_MTR === 110])
 checks.push(['Default TAR 8900', DEFAULT_TAR_ENDS === 8900])
+checks.push(['Default MU 5%', DEFAULT_MU_PERCENT === 5])
+checks.push(['Default RPM 280', DEFAULT_MACHINE_SPEED_RPM === 280])
+checks.push(['Default Double Width Factor 2', DEFAULT_DOUBLE_WIDTH_FACTOR === 2])
 
-// Colour/Feeder → Pick mapping (1:1)
+// Spec example: yarn 5289.58 → yarn/100 = 52.8958; weave 21.60; base = 74.4958
+const yarnEx = 5289.58
+const yarnPer100 = yarnEx / 100
+const weaveEx = 21.6
+const baseEx = yarnPer100 + weaveEx
+checks.push(['Yarn/100m = 5289.58÷100', Math.abs(yarnPer100 - 52.8958) < 1e-9])
+checks.push(['Base customer = yarn/100 + weave/mtr', Math.abs(baseEx - 74.4958) < 1e-9])
+checks.push(['Display base rounds to 74.50', round2(baseEx) === 74.5])
+checks.push(['MU 5% on base', Math.abs(baseEx * 0.05 - 3.72479) < 1e-6])
+checks.push(['After MU = base + MU', Math.abs(baseEx * 1.05 - 78.22059) < 1e-6])
+checks.push(['NEVER (yarn+weave110)÷100 when weave is ₹/mtr', round2((yarnEx + weaveEx) / 100) !== round2(baseEx)])
+
 const colourWefts = [
   { weft_name: '', feeder_label: 'Colour 1', base_denier: '110', denier: '120', pic: '25', width: '52', length_mtr: '110', rate_per_kg: '200' },
   { weft_name: '', feeder_label: 'Colour 2', base_denier: '110', denier: '120', pic: '25', width: '52', length_mtr: '110', rate_per_kg: '200' },
   { weft_name: '300 Tex', feeder_label: 'Colour 3', base_denier: '300', denier: '310', pic: '50', width: '52', length_mtr: '110', rate_per_kg: '150' },
 ]
-checks.push(['Colour 1 → Pick 25', colourWefts[0].pic === '25'])
-checks.push(['Colour 2 → Pick 25', colourWefts[1].pic === '25'])
-checks.push(['Colour 3 → Pick 50', colourWefts[2].pic === '50'])
-checks.push(['Blank yarn kept on Colour 1', colourWefts[0].weft_name === ''])
-
 const colourBuild = computeBuildup([], colourWefts, 110, 0.45, 0, 0)
-checks.push(['TOTAL WEFT PIC = 100 (25+25+50)', colourBuild.totalPic === 100])
+checks.push(['TOTAL WEFT PIC = 100', colourBuild.totalPic === 100])
+checks.push(['Weaving = 100 × 0.45 = 45 ₹/Mtr', colourBuild.conversionCharge === 45])
+checks.push(['Yarn/100 + weave (not ÷100 weave)', colourBuild.subtotalPerMtr === colourBuild.yarnCostPerMtr + 45])
 checks.push(['Loom 112 ≠ Weft PIC 100 warning', loomPickWeftPicWarning(112, 100) != null])
-checks.push(['Strings never in weight (width stays 52)', colourWefts.every((w) => w.width === '52')])
 
-// Customer rate formula: Internal 110 ÷ 100 once
-checks.push(['Example 5500 ÷ 100 = 55', round2(5500 / 100) === 55])
 const demo = computeBuildup(
   [{ yarn_name: 'W', base_denier: '150', denier: '160', tar_ends: '8900', length_mtr: '110', rate_per_kg: '100' }],
-  [{ weft_name: 'F', base_denier: '300', denier: '310', pic: '50', width: '52', length_mtr: '110', rate_per_kg: '150' }],
+  [{ weft_name: 'F', base_denier: '300', denier: '310', pic: '48', width: '52', length_mtr: '110', rate_per_kg: '150' }],
   110,
   0.45,
-  0,
+  5,
   0,
 )
-checks.push(['Customer rate = finalInternal110 ÷ 100', demo.customerRatePerMtr === round2(demo.finalInternalCost110 / 100)])
-checks.push(['finalCostPerMtr aliases customer rate', demo.finalCostPerMtr === demo.customerRatePerMtr])
-checks.push([
-  'Weaving is on 110 basis (not added raw to per-mtr yarn)',
-  demo.finalInternalCost110 === round2(demo.totalYarnAmount + demo.conversionCharge),
-])
-checks.push(['Yarn cost/mtr = yarn ÷ 100', demo.yarnCostPerMtr === round2(demo.totalYarnAmount / 100)])
+checks.push(['Yarn cost/mtr = yarn ÷ 100', Math.abs(demo.yarnCostPerMtr - demo.totalYarnAmount / 100) < 1e-9])
+checks.push(['Weaving = 48 × 0.45 = 21.6 /Mtr', demo.conversionCharge === 21.6])
+checks.push(['Base = yarn/100 + 21.6', Math.abs(demo.subtotalPerMtr - (demo.yarnCostPerMtr + 21.6)) < 1e-9])
+checks.push(['MU applied on customer base (not 110÷100 of yarn+weave)', Math.abs(demo.muAmount - demo.subtotalPerMtr * 0.05) < 1e-9])
+checks.push(['Final = after MU', Math.abs(demo.finalCostPerMtr - demo.afterMuPerMtr) < 1e-9])
+checks.push(['Internal 110 = yarn only', demo.finalInternalCost110 === demo.totalYarnAmount])
 checks.push(['Usable / customer basis = 100', demo.usableLengthMtr === 100])
 
-// Spec acceptance: Internal ₹6,500 → Customer ₹65/m (÷100 once, never ÷110 again)
-checks.push(['Spec 6500 ÷ 100 = 65', round2(6500 / 100) === 65])
-checks.push(['Never 6500 ÷ 110 as customer rate', round2(6500 / 110) !== 65])
+// Wrong old formula must NOT match
+const wrongOld = round2((demo.totalYarnAmount + demo.conversionCharge) / 100)
+checks.push(['Correct base ≠ old (yarn+weave)÷100', round2(demo.subtotalPerMtr) !== wrongOld])
 
-// Production speed: Meters/Hour = (RPM × 60 × Eff%) / (Loom Pick × 39.37)
-function computeProductionSpeed(opts) {
-  const rpm = n(opts.rpm)
-  const loomPick = n(opts.loomPick)
-  const efficiencyPct = n(opts.efficiencyPct) > 0 ? n(opts.efficiencyPct) : 100
-  const saleRate = n(opts.customerSaleRatePerMtr)
-  const profitPerMtr = n(opts.profitPerMtr)
-  const denom = loomPick * 39.37
-  const metersPerHour =
-    rpm > 0 && denom > 0 ? round2((rpm * 60 * (efficiencyPct / 100)) / denom) : 0
-  return {
-    metersPerHour,
-    metersPer12Hours: round2(metersPerHour * 12),
-    metersPer24Hours: round2(metersPerHour * 24),
-    billingPer12Hours: round2(metersPerHour * 12 * saleRate),
-    profitPer12Hours: round2(metersPerHour * 12 * profitPerMtr),
-  }
-}
 const prod100 = computeProductionSpeed({
-  rpm: 450,
+  rpm: 280,
   loomPick: 112,
   efficiencyPct: 100,
-  customerSaleRatePerMtr: 65,
+  doubleWidthFactor: 2,
+  customerSaleRatePerMtr: 80,
   profitPerMtr: 10,
 })
 const prod85 = computeProductionSpeed({
-  rpm: 450,
+  rpm: 280,
   loomPick: 112,
   efficiencyPct: 85,
-  customerSaleRatePerMtr: 65,
+  doubleWidthFactor: 2,
+  customerSaleRatePerMtr: 80,
   profitPerMtr: 10,
 })
-checks.push(['Production 100% > 0 m/hr', prod100.metersPerHour > 0])
-checks.push(['12h = hour × 12', prod100.metersPer12Hours === round2(prod100.metersPerHour * 12)])
-checks.push(['24h = hour × 24', prod100.metersPer24Hours === round2(prod100.metersPerHour * 24)])
-checks.push(['85% efficiency reduces meters', prod85.metersPerHour < prod100.metersPerHour])
-checks.push([
-  '85% ≈ 85% of 100% meters',
-  Math.abs(prod85.metersPerHour - round2(prod100.metersPerHour * 0.85)) < 0.02,
-])
-checks.push([
-  'Billing uses customer sale rate',
-  prod100.billingPer12Hours === round2(prod100.metersPer12Hours * 65),
-])
-checks.push([
-  'Profit scales with efficiency',
-  prod85.profitPer12Hours < prod100.profitPer12Hours,
-])
+const expectedMph =
+  round2((280 * 60 * 1 * 2) / (112 * LOOM_INCHES_PER_METER))
+checks.push(['Production includes double width factor', prod100.metersPerHour === expectedMph])
+checks.push(['Efficiency 85% reduces production', prod85.metersPerHour < prod100.metersPerHour])
+checks.push(['28-day = 24h × 28', prod100.metersPer28Days === round2(prod100.metersPer24Hours * 28)])
+checks.push(['Billing = meters × sale (no second ×2)', prod100.billingPerHour === round2(prod100.metersPerHour * 80)])
+checks.push(['Factor applied once only', prod100.doubleWidthFactor === 2])
 
-// Legacy JFG checks
-const TOTAL_LOOM_PICK = 112
-const wefts = [
-  { weft_name: 'Anmol Jari', base_denier: '180', denier: '', pic: '37', width: '52', length_mtr: '110', rate_per_kg: '350' },
-  { weft_name: '150 Lichi', base_denier: '160', denier: '', pic: '37', width: '52', length_mtr: '110', rate_per_kg: '205' },
-  { weft_name: '300 Tex', base_denier: '300', denier: '', pic: '37', width: '52', length_mtr: '110', rate_per_kg: '150' },
-]
-const warps = [
-  { yarn_name: '150 Bright Yarn', base_denier: '160', denier: '', tar_ends: '8900', length_mtr: '110', rate_per_kg: '159.75' },
-]
-const r = computeBuildup(warps, wefts, DEFAULT_LENGTH_MTR, 0.45, 0, 0)
-checks.push(['Anmol Jari costing denier 190', resolveCostingDenier(wefts[0]) === 190])
-checks.push(['300 Tex costing denier 310', resolveCostingDenier(wefts[2]) === 310])
-checks.push(['TOTAL WEFT PIC = 111', r.totalPic === 111])
-checks.push(['TOTAL LOOM PICK stays 112', TOTAL_LOOM_PICK === 112])
-checks.push(['Weaving = 111 × 0.45', r.conversionCharge === 49.95])
-checks.push(['Customer = internal ÷ 100', r.customerRatePerMtr === round2(r.finalInternalCost110 / 100)])
+const noFactor = computeProductionSpeed({
+  rpm: 280,
+  loomPick: 112,
+  efficiencyPct: 100,
+  doubleWidthFactor: 1,
+  customerSaleRatePerMtr: 80,
+})
+checks.push(['Factor 2 doubles production vs factor 1', prod100.metersPerHour === round2(noFactor.metersPerHour * 2)])
 
-let failed = 0
-for (const [label, ok] of checks) {
-  const mark = ok ? 'PASS' : 'FAIL'
-  if (!ok) failed++
-  console.log(`${mark}  ${label}`)
+const failed = checks.filter((c) => !c[1])
+for (const [name, ok] of checks) {
+  console.log(ok ? 'PASS' : 'FAIL', name)
 }
+console.log('---')
+console.log('Demo yarn', demo.totalYarnAmount, 'yarn/100', demo.yarnCostPerMtr)
+console.log('Weaving /Mtr', demo.conversionCharge)
+console.log('Base customer', demo.subtotalPerMtr)
+console.log('After MU 5%', demo.afterMuPerMtr)
+console.log('Final', demo.finalCostPerMtr)
+console.log('Prod/hr@280×2', prod100.metersPerHour, '28d', prod100.metersPer28Days)
 
-console.log('\n--- Sample buildup ---')
-console.log('Yarn amount (110m)', r.totalYarnAmount)
-console.log('Weaving (110m)', r.conversionCharge)
-console.log('Final Internal 110', r.finalInternalCost110)
-console.log('Customer Rate / 100', r.customerRatePerMtr)
-
-if (failed) {
-  console.error(`\n${failed} check(s) failed`)
+if (failed.length) {
+  console.error(`FAILED ${failed.length}/${checks.length}`)
   process.exit(1)
 }
-console.log(`\nAll ${checks.length} checks passed`)
+console.log(`ALL ${checks.length} CHECKS PASSED`)

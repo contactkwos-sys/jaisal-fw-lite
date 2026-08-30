@@ -57,7 +57,7 @@ export function emptyIntakeCostingDraft(): IntakeCostingDraft {
     warps: [emptyWarp(1)],
     wefts: [emptyWeft(1)],
     picConversionRate: '0.45',
-    muPercent: '0',
+    muPercent: String(5),
     gstPercent: '0',
     wastageMtr: String(FORMULA_DEFAULTS.default_wastage_mtr),
     wastagePercent: String(FORMULA_DEFAULTS.default_wastage_percent),
@@ -340,7 +340,7 @@ async function loadDraftFromHeader(
     warps,
     wefts,
     picConversionRate: header.pic_conversion_rate != null ? String(header.pic_conversion_rate) : '0.45',
-    muPercent: header.mu_percent != null ? String(header.mu_percent) : '0',
+    muPercent: header.mu_percent != null ? String(header.mu_percent) : '5',
     gstPercent: header.gst_percent != null ? String(header.gst_percent) : '0',
     wastageMtr:
       header.wastage_mtr != null ? String(header.wastage_mtr) : String(FORMULA_DEFAULTS.default_wastage_mtr),
