@@ -75,7 +75,7 @@ export function DtoSamplePromotionScreen({ initialDinId }: Props) {
   }, [matchings, matchingId])
 
   const matching: DinMatching | null = matchings.find((m) => m.id === matchingId) || null
-  // Sales sees only final sample assets — never internal DIN/OCR/costing images
+  // Sales sees only final sample assets — never internal DIN sheet/costing images
   const mainPhoto = din?.main_sample_photo_url || matching?.approved_photo_url || null
   const combinedPhoto = din?.combined_matching_photo_url || null
   const photo = mainPhoto

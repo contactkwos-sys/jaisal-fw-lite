@@ -179,7 +179,7 @@ export function isUsableCostingRate(row: RateMasterRow): boolean {
 
 /**
  * Strict rate lookup for DIN Costing — no "Others" fallback, no ₹0 placeholder rates.
- * Supports partial name match (e.g. OCR "HSY" → "440 HSY") when basic_rate > 0.
+ * Supports partial name match (e.g. short name "HSY" → "440 HSY") when basic_rate > 0.
  */
 export function lookupRateForCosting(
   rates: RateMasterRow[],

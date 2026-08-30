@@ -704,7 +704,7 @@
   }
 }
 
-/* Design import + OCR review */
+/* Design import — DIN sheet reference upload */
 .dwc-import-panel {
   border-color: color-mix(in srgb, var(--teal) 25%, var(--line));
 }

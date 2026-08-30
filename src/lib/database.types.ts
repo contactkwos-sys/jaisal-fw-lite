@@ -887,7 +887,7 @@ export type DesignCosting = {
   quality_name: string | null
   costing_date: string
   diary_image_url: string | null
-  /** DIN sheet image used for OCR Design Import */
+  /** DIN sheet reference image (manual entry; not OCR) */
   design_image_url?: string | null
   /** Physical fabric sample photo — separate from design_image_url */
   sample_image_url?: string | null
@@ -955,7 +955,7 @@ export type DesignCostingWeft = {
   rate_master_id: string | null
   feeder_no: number | null
   feeder_label: string | null
-  /** OCR strings reference — never used in costing */
+  /** Legacy strings reference — never used in costing */
   strings_ref: string | null
 }
 

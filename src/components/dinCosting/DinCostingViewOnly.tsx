@@ -72,7 +72,7 @@ export function DinCostingViewOnly({ rows, onRefresh }: Props) {
 
       <section className="dwc-panel dwc-view-note">
         <p className="text-muted2">
-          Program team sees design reference and CEO-approved final sale rate only. Internal DIN/OCR images,
+          Program team sees design reference and CEO-approved final sale rate only. Internal DIN sheet images,
           warp/weft, yarn rates, formulas and margins are CEO-only.
         </p>
       </section>
