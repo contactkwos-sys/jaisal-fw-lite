@@ -1,24 +1,52 @@
 /**
  * Quality Master — recipe templates that auto-fill Warp/Weft in DIN Costing.
  * Everything remains editable after apply.
+ *
+ * Recipe rows are stored as jsonb arrays (existing architecture). Optional fields
+ * (rate_master_id, costing_denier, sr, width, length) are additive and backward-compatible.
  */
 
 import { supabase } from './supabase'
 import { assertDesignMasterWrite } from './permissions'
-import { DEFAULT_LENGTH_MTR, DEFAULT_TAR_ENDS, DEFAULT_WIDTH, n } from './designWiseCosting'
+import {
+  costingDenierFromBase,
+  DEFAULT_LENGTH_MTR,
+  DEFAULT_TAR_ENDS,
+  DEFAULT_WIDTH,
+  n,
+} from './designWiseCosting'
+import {
+  lookupRateForCosting,
+  normalizeItemName,
+  type RateMasterRow,
+} from './rateMaster'
+import { todayISO } from './mutate'
 
 export type QualityWarpRecipeRow = {
+  /** Serial / row no. (display) */
+  sr?: number
   yarn_name: string
   base_denier: string
+  /** Derived: base + 10 — stored for template clarity; recalculated on apply */
+  costing_denier?: string
   tar_ends?: string
+  width?: string
+  length_mtr?: string
+  /** Optional FK-style reference to Rate Master row (not duplicated rates) */
+  rate_master_id?: string | null
 }
 
 export type QualityWeftRecipeRow = {
+  sr?: number
   feeder_no?: number
   colour?: string
   weft_name: string
   base_denier: string
+  costing_denier?: string
   pic?: string
+  width?: string
+  length_mtr?: string
+  rate_master_id?: string | null
 }
 
 export type QualityMasterRow = {
@@ -115,20 +143,21 @@ export async function saveQualityMaster(
   existingId?: string | null,
 ): Promise<QualityMasterRow> {
   await assertDesignMasterWrite()
-  const name = input.quality_name.trim()
+  const normalized = normalizeQualityRecipes(input)
+  const name = normalized.quality_name.trim()
   if (!name) throw new Error('Quality Name is required')
 
   const payload = {
     quality_name: name,
-    is_active: input.is_active !== false,
-    warp_base_denier: input.warp_base_denier ?? null,
-    weft_base_denier: input.weft_base_denier ?? null,
-    default_width: input.default_width ?? DEFAULT_WIDTH,
-    default_length_mtr: input.default_length_mtr ?? DEFAULT_LENGTH_MTR,
-    default_tar_ends: input.default_tar_ends ?? DEFAULT_TAR_ENDS,
-    warp_recipe: input.warp_recipe ?? [],
-    weft_recipe: input.weft_recipe ?? [],
-    notes: input.notes ?? null,
+    is_active: normalized.is_active !== false,
+    warp_base_denier: normalized.warp_base_denier ?? null,
+    weft_base_denier: normalized.weft_base_denier ?? null,
+    default_width: normalized.default_width ?? DEFAULT_WIDTH,
+    default_length_mtr: normalized.default_length_mtr ?? DEFAULT_LENGTH_MTR,
+    default_tar_ends: normalized.default_tar_ends ?? DEFAULT_TAR_ENDS,
+    warp_recipe: normalized.warp_recipe ?? [],
+    weft_recipe: normalized.weft_recipe ?? [],
+    notes: normalized.notes ?? null,
     updated_by: userId,
     updated_at: new Date().toISOString(),
   }
@@ -174,4 +203,80 @@ export async function deleteQualityMaster(id: string): Promise<void> {
   await assertDesignMasterWrite()
   const { error } = await supabase.from('quality_master').delete().eq('id', id)
   if (error) throw error
+}
+
+/** Resolve base denier + costing denier (+ rate_master_id) from Rate Master for a yarn pick. */
+export function fillRecipeDenierFromRateMaster(
+  category: 'warp' | 'weft',
+  yarnName: string,
+  rates: RateMasterRow[],
+  asOfDate = todayISO(),
+): { base_denier: string; costing_denier: string; rate_master_id: string | null } {
+  const name = yarnName.trim()
+  if (!name) return { base_denier: '', costing_denier: '', rate_master_id: null }
+
+  const found = lookupRateForCosting(rates, category, name, asOfDate)
+  let base = ''
+  if (found?.row.denier != null && String(found.row.denier).trim() !== '') {
+    const raw = String(found.row.denier).trim()
+    if (/^same$/i.test(raw)) {
+      const m = name.match(/^(\d+(?:\.\d+)?)/)
+      base = m ? m[1] : ''
+    } else {
+      const num = n(raw)
+      // Recover base when RM accidentally stored costing (e.g. 310 for 300 Tex)
+      const fromName = name.match(/^(\d+(?:\.\d+)?)/)
+      const nameBase = fromName ? n(fromName[1]) : 0
+      if (nameBase > 0 && num === nameBase + 10) base = String(nameBase)
+      else if (num > 0) base = String(num)
+    }
+  }
+  if (!base) {
+    const m = name.match(/^(\d+(?:\.\d+)?)/)
+    if (m) base = m[1]
+  }
+  const costing = base ? String(costingDenierFromBase(base) || '') : ''
+  return {
+    base_denier: base,
+    costing_denier: costing,
+    rate_master_id: found?.row.id || null,
+  }
+}
+
+/** Ensure costing_denier = base + 10 on recipe rows before save. */
+export function normalizeQualityRecipes(input: QualityMasterInput): QualityMasterInput {
+  const warp_recipe = (input.warp_recipe || []).map((r, i) => {
+    const base = String(r.base_denier || '').trim()
+    const costing = base ? String(costingDenierFromBase(base) || '') : String(r.costing_denier || '')
+    return {
+      ...r,
+      sr: r.sr ?? i + 1,
+      yarn_name: r.yarn_name.trim(),
+      base_denier: base,
+      costing_denier: costing,
+      rate_master_id: r.rate_master_id || null,
+    }
+  })
+  const weft_recipe = (input.weft_recipe || []).map((r, i) => {
+    const base = String(r.base_denier || '').trim()
+    const costing = base ? String(costingDenierFromBase(base) || '') : String(r.costing_denier || '')
+    return {
+      ...r,
+      sr: r.sr ?? i + 1,
+      weft_name: r.weft_name.trim(),
+      colour: r.colour?.trim() || '',
+      base_denier: base,
+      costing_denier: costing,
+      rate_master_id: r.rate_master_id || null,
+    }
+  })
+  return { ...input, warp_recipe, weft_recipe }
+}
+
+export function qualityNameExists(rows: QualityMasterRow[], name: string, excludeId?: string | null): boolean {
+  const norm = normalizeItemName(name)
+  if (!norm) return false
+  return rows.some(
+    (r) => normalizeItemName(r.quality_name) === norm && (!excludeId || r.id !== excludeId),
+  )
 }
