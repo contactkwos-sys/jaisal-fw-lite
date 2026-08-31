@@ -469,12 +469,14 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
       const nextWarps =
         q.warp_recipe.length > 0
           ? q.warp_recipe.map((wr, i) => {
-              let row = emptyWarp(i + 1, q.default_length_mtr)
-              if (q.default_width) row = { ...row, width: String(q.default_width) }
+              let row = emptyWarp(i + 1, wr.length_mtr ? Number(wr.length_mtr) : q.default_length_mtr)
+              const width = wr.width || (q.default_width ? String(q.default_width) : '')
+              if (width) row = { ...row, width: String(width) }
               if (wr.yarn_name) row = { ...row, yarn_name: wr.yarn_name }
               if (wr.base_denier) row = withBaseDenier(row, String(wr.base_denier))
               if (wr.tar_ends) row = { ...row, tar_ends: String(wr.tar_ends) }
               else if (q.default_tar_ends) row = { ...row, tar_ends: String(q.default_tar_ends) }
+              if (wr.rate_master_id) row = { ...row, rate_master_id: wr.rate_master_id }
               return applyWarpRateFromMaster(row)
             })
           : [
@@ -493,14 +495,17 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         }
         return q.weft_recipe.map((wr, i) => {
           const feederNo = wr.feeder_no != null ? Number(wr.feeder_no) : i + 1
+          const lengthMtr = wr.length_mtr ? Number(wr.length_mtr) : q.default_length_mtr
+          const width = wr.width ? Number(wr.width) : q.default_width
           let row = emptyWeft(i + 1, {
             feederNo,
             colour: wr.colour ?? '',
-            lengthMtr: q.default_length_mtr,
-            width: q.default_width,
+            lengthMtr,
+            width,
           })
           if (wr.weft_name) row = { ...row, weft_name: wr.weft_name }
           if (wr.base_denier) row = withBaseDenier(row, String(wr.base_denier))
+          if (wr.rate_master_id) row = { ...row, rate_master_id: wr.rate_master_id }
           const recipePic = wr.pic != null && String(wr.pic).trim() !== '' ? String(wr.pic) : ''
           if (recipePic) {
             row = { ...row, pic: recipePic }
@@ -2179,7 +2184,12 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
               list="dwc-quality-master"
               value={qualityName}
               disabled={isReadOnly}
-              onChange={(e) => setQualityName(e.target.value)}
+              onChange={(e) => {
+                const next = e.target.value
+                setQualityName(next)
+                const q = findQualityByName(qualities, next)
+                if (q) applyQualityRecipe(q)
+              }}
               onBlur={() => {
                 const q = findQualityByName(qualities, qualityName)
                 if (q) applyQualityRecipe(q)
