@@ -46,6 +46,7 @@ export function GlobalSearch({ onNavigate }: Props) {
       const like = `%${t}%`
       const [
         orders,
+        ordersByDin,
         parties,
         dins,
         yarns,
@@ -55,6 +56,11 @@ export function GlobalSearch({ onNavigate }: Props) {
         designs,
       ] = await Promise.all([
         supabase.from('order_book').select('id, order_no, party_name, status').or(`order_no.ilike.${like},party_name.ilike.${like}`).limit(8),
+        supabase
+          .from('order_book_items')
+          .select('order_id, design_no, order_book(id, order_no, party_name, status)')
+          .ilike('design_no', like)
+          .limit(8),
         supabase.from('party_master').select('id, party_name, marka').ilike('party_name', like).limit(6),
         supabase.from('dins').select('id, din_number, design_name, status').or(`din_number.ilike.${like},design_name.ilike.${like}`).limit(8),
         supabase.from('weft_yarn_stock').select('id, colour_no, colour_name, quality, supplier, stock_kg').or(`colour_no.ilike.${like},colour_name.ilike.${like},quality.ilike.${like}`).limit(8),
@@ -65,13 +71,29 @@ export function GlobalSearch({ onNavigate }: Props) {
       ])
 
       const out: Hit[] = []
+      const seenOrders = new Set<string>()
       for (const o of orders.data ?? []) {
+        seenOrders.add(o.id)
         out.push({
           id: `ord-${o.id}`,
           type: 'Order',
           number: o.order_no || '—',
           name: o.party_name || '—',
           status: friendlyFactoryStatus(o.status),
+          nav: { screen: 'order-to-program', filter: 'order-status', module: 'order-to-program' },
+        })
+      }
+      for (const row of ordersByDin.data ?? []) {
+        const ob = row.order_book as { id?: string; order_no?: string; party_name?: string; status?: string } | null
+        const oid = ob?.id || row.order_id
+        if (!oid || seenOrders.has(oid)) continue
+        seenOrders.add(oid)
+        out.push({
+          id: `ord-din-${oid}`,
+          type: 'Order',
+          number: ob?.order_no || '—',
+          name: `${ob?.party_name || '—'} · ${row.design_no || ''}`,
+          status: friendlyFactoryStatus(ob?.status),
           nav: { screen: 'order-to-program', filter: 'order-status', module: 'order-to-program' },
         })
       }

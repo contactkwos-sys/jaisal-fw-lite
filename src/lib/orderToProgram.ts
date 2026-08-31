@@ -30,6 +30,40 @@ export const DEFAULT_ADD_WEIGHT_PCT = 2
 
 export const ITEM_NAME_OPTIONS = ['Curtain Fabric', 'Fabric', 'Others'] as const
 
+/** Sentinel dropdown value for manual DIN / Design No. entry — never persisted. */
+export const DIN_OTHERS_VALUE = '__OTHERS__'
+
+/** Blank design shell for a manually typed DIN that has no master/costing record. */
+export function blankDesignForOrder(dinNumber: string): DesignForOrder {
+  const trimmed = dinNumber.trim()
+  return {
+    dinId: '',
+    dinNumber: trimmed,
+    designName: '',
+    previewUrl: null,
+    qualityName: '',
+    widthLabel: '',
+    salesRate: 0,
+    costingId: null,
+    partyName: null,
+    commonWarp: null,
+    matchings: [],
+    wefts: [],
+    designLengthMtr: 100,
+  }
+}
+
+/** True when saved design_no is not present in the DIN master list (manual / Others entry). */
+export function isManualDinSelection(dinNumber: string, masterDinNumbers: Iterable<string>): boolean {
+  const trimmed = dinNumber.trim()
+  if (!trimmed || trimmed === DIN_OTHERS_VALUE) return true
+  const lower = trimmed.toLowerCase()
+  for (const n of masterDinNumbers) {
+    if (String(n || '').trim().toLowerCase() === lower) return false
+  }
+  return true
+}
+
 export const OTP_STEPS = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'order-entry', label: 'Customer Order' },
@@ -430,8 +464,7 @@ export type SaveCustomerOrderInput = {
   lines: MatchingOrderLine[]
 }
 
-export async function saveCustomerOrder(input: SaveCustomerOrderInput): Promise<{ orderId: string; orderNo: string }> {
-  const orderNo = await nextOrderNo()
+function buildCustomerOrderTotals(input: SaveCustomerOrderInput) {
   const totalMeter = round2(input.lines.reduce((s, l) => s + (Number(l.orderedMeter) || 0), 0))
   const totalAmount = round2(totalMeter * (Number(input.salesRate) || 0))
   const discAmt =
@@ -439,6 +472,50 @@ export async function saveCustomerOrder(input: SaveCustomerOrderInput): Promise<
       ? round2(input.discountAmount)
       : round2((totalAmount * (Number(input.discountPct) || 0)) / 100)
   const netAmount = round2(totalAmount - discAmt)
+  return { totalMeter, totalAmount, discAmt, netAmount }
+}
+
+function customerOrderItemRows(
+  orderId: string,
+  input: SaveCustomerOrderInput,
+  status = 'ORDER RECEIVED',
+) {
+  // Persist the actual typed / selected DIN text — never the "Others" sentinel.
+  const designNo = input.dinNumber.trim()
+  return input.lines
+    .filter((l) => Number(l.orderedMeter) > 0)
+    .map((l) => ({
+      order_id: orderId,
+      design_no: designNo,
+      colour: l.mainColour.trim() || `Matching ${l.matchingNo}`,
+      matching_name: l.matchingName || `M-${String(l.matchingNo).padStart(2, '0')}`,
+      matching_no: l.matchingNo,
+      matching_id: l.matchingId,
+      other_info: l.otherInfo || null,
+      qty_meter: Number(l.orderedMeter) || 0,
+      rate: Number(input.salesRate) || 0,
+      din_id: input.dinId || null,
+      quality: input.qualityName || null,
+      status,
+    }))
+}
+
+async function markDinBookedIfPresent(dinId: string | null) {
+  if (!dinId) return
+  const { error: dinErr } = await supabase.rpc('mark_din_order_booked', { p_din_id: dinId })
+  if (dinErr) {
+    // Fallback when RPC not yet migrated — ignore RLS denial for salesman
+    await supabase.from('dins').update({ status: 'Order Booked' }).eq('id', dinId)
+  }
+}
+
+export async function saveCustomerOrder(input: SaveCustomerOrderInput): Promise<{ orderId: string; orderNo: string }> {
+  if (!input.dinNumber.trim() || input.dinNumber.trim() === DIN_OTHERS_VALUE) {
+    throw new Error('Enter a valid DIN / Design No.')
+  }
+
+  const orderNo = await nextOrderNo()
+  const { totalMeter, totalAmount, discAmt, netAmount } = buildCustomerOrderTotals(input)
 
   const header = {
     order_no: orderNo,
@@ -464,22 +541,7 @@ export async function saveCustomerOrder(input: SaveCustomerOrderInput): Promise<
   const { data, error } = await supabase.from('order_book').insert(header).select('id, order_no').single()
   if (error) throw error
 
-  const items = input.lines
-    .filter((l) => Number(l.orderedMeter) > 0)
-    .map((l) => ({
-      order_id: data.id,
-      design_no: input.dinNumber,
-      colour: l.mainColour.trim() || `Matching ${l.matchingNo}`,
-      matching_name: l.matchingName || `M-${String(l.matchingNo).padStart(2, '0')}`,
-      matching_no: l.matchingNo,
-      matching_id: l.matchingId,
-      other_info: l.otherInfo || null,
-      qty_meter: Number(l.orderedMeter) || 0,
-      rate: Number(input.salesRate) || 0,
-      din_id: input.dinId,
-      quality: input.qualityName || null,
-      status: 'ORDER RECEIVED',
-    }))
+  const items = customerOrderItemRows(data.id, input)
 
   if (!items.length) {
     await supabase.from('order_book').delete().eq('id', data.id)
@@ -489,17 +551,133 @@ export async function saveCustomerOrder(input: SaveCustomerOrderInput): Promise<
   const { error: iErr } = await supabase.from('order_book_items').insert(items)
   if (iErr) throw iErr
 
-  if (input.dinId) {
-    const { error: dinErr } = await supabase.rpc('mark_din_order_booked', { p_din_id: input.dinId })
-    if (dinErr) {
-      // Fallback when RPC not yet migrated — ignore RLS denial for salesman
-      await supabase.from('dins').update({ status: 'Order Booked' }).eq('id', input.dinId)
-    }
-  }
-
+  await markDinBookedIfPresent(input.dinId)
   await ensurePartyMarka(input.partyName)
 
   return { orderId: data.id, orderNo: data.order_no || orderNo }
+}
+
+export type CustomerOrderDetail = {
+  orderId: string
+  orderNo: string
+  partyName: string
+  orderDate: string
+  itemName: string
+  dinId: string | null
+  dinNumber: string
+  qualityName: string
+  salesRate: number
+  previewUrl: string | null
+  deliveryWithinDays: number | null
+  paymentTerms: string
+  remarks: string
+  discountPct: number
+  lines: Array<{
+    itemId: string
+    matchingNo: number
+    matchingId: string | null
+    matchingName: string
+    mainColour: string
+    otherInfo: string
+    orderedMeter: number
+    rate: number
+  }>
+}
+
+export async function loadCustomerOrderDetail(orderId: string): Promise<CustomerOrderDetail | null> {
+  const { data, error } = await supabase
+    .from('order_book')
+    .select(
+      'id, order_no, party_name, order_date, item_name, din_id, quality_name, sales_rate, design_preview_url, delivery_within_days, payment_terms, remarks, discount_pct, order_book_items(id, design_no, colour, matching_no, matching_id, matching_name, other_info, qty_meter, rate, din_id)',
+    )
+    .eq('id', orderId)
+    .maybeSingle()
+  if (error) throw error
+  if (!data) return null
+
+  const items = (data.order_book_items || []) as Array<Record<string, unknown>>
+  const dinNumber = String(items[0]?.design_no || '').trim()
+
+  return {
+    orderId: data.id,
+    orderNo: data.order_no || '',
+    partyName: data.party_name || '',
+    orderDate: data.order_date || todayISO(),
+    itemName: data.item_name || ITEM_NAME_OPTIONS[0],
+    dinId: data.din_id || (items[0]?.din_id as string | null) || null,
+    dinNumber,
+    qualityName: data.quality_name || '',
+    salesRate: Number(data.sales_rate) || 0,
+    previewUrl: data.design_preview_url || null,
+    deliveryWithinDays: data.delivery_within_days == null ? null : Number(data.delivery_within_days),
+    paymentTerms: data.payment_terms || '30 Days',
+    remarks: data.remarks || '',
+    discountPct: Number(data.discount_pct) || 0,
+    lines: items.map((it) => ({
+      itemId: String(it.id),
+      matchingNo: Number(it.matching_no) || 1,
+      matchingId: (it.matching_id as string | null) || null,
+      matchingName: String(it.matching_name || `M-${String(it.matching_no || 1).padStart(2, '0')}`),
+      mainColour: String(it.colour || ''),
+      otherInfo: String(it.other_info || ''),
+      orderedMeter: Number(it.qty_meter) || 0,
+      rate: Number(it.rate) || 0,
+    })),
+  }
+}
+
+export async function updateCustomerOrder(
+  orderId: string,
+  input: SaveCustomerOrderInput,
+): Promise<{ orderId: string; orderNo: string }> {
+  if (!input.dinNumber.trim() || input.dinNumber.trim() === DIN_OTHERS_VALUE) {
+    throw new Error('Enter a valid DIN / Design No.')
+  }
+
+  const { totalMeter, totalAmount, discAmt, netAmount } = buildCustomerOrderTotals(input)
+
+  const { data: existing, error: exErr } = await supabase
+    .from('order_book')
+    .select('id, order_no')
+    .eq('id', orderId)
+    .single()
+  if (exErr) throw exErr
+
+  const { error } = await supabase
+    .from('order_book')
+    .update({
+      party_name: input.partyName.trim(),
+      order_date: input.orderDate || todayISO(),
+      item_name: input.itemName || null,
+      din_id: input.dinId || null,
+      quality_name: input.qualityName || null,
+      sales_rate: input.salesRate,
+      design_preview_url: input.previewUrl,
+      delivery_within_days: input.deliveryWithinDays,
+      payment_terms: input.paymentTerms || null,
+      remarks: input.remarks || null,
+      discount_pct: input.discountPct || null,
+      discount_amount: discAmt,
+      total_order_meter: totalMeter,
+      total_amount: totalAmount,
+      net_amount: netAmount,
+    })
+    .eq('id', orderId)
+  if (error) throw error
+
+  const { error: delErr } = await supabase.from('order_book_items').delete().eq('order_id', orderId)
+  if (delErr) throw delErr
+
+  const items = customerOrderItemRows(orderId, input)
+  if (!items.length) throw new Error('Add at least one matching with ordered meter')
+
+  const { error: iErr } = await supabase.from('order_book_items').insert(items)
+  if (iErr) throw iErr
+
+  await markDinBookedIfPresent(input.dinId)
+  await ensurePartyMarka(input.partyName)
+
+  return { orderId, orderNo: existing.order_no || '' }
 }
 
 export type BookedOrderOption = {
