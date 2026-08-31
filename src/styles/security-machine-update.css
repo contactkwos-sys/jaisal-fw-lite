@@ -1,0 +1,545 @@
+/* Security Machine & Production Update — mobile-first, large tap targets */
+
+.smu-screen {
+  --smu-blue: #1769c2;
+  --smu-blue-deep: #1254a0;
+  --smu-green: #16a34a;
+  --smu-green-soft: #ecfdf3;
+  --smu-red: #dc2626;
+  --smu-red-soft: #fef2f2;
+  --smu-wa: #25a366;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 0 0 7.5rem;
+  background: #f5f7fa;
+  min-height: 100%;
+  font-family: 'DM Sans', system-ui, sans-serif;
+  color: #1e293b;
+}
+
+.smu-header {
+  background: linear-gradient(160deg, var(--smu-blue) 0%, var(--smu-blue-deep) 100%);
+  color: #fff;
+  padding: 1rem 1rem 1.15rem;
+  border-radius: 0 0 1rem 1rem;
+  box-shadow: 0 4px 14px rgba(18, 84, 160, 0.28);
+}
+
+.smu-header h1 {
+  margin: 0 0 0.85rem;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  font-family: Outfit, 'DM Sans', sans-serif;
+  line-height: 1.25;
+}
+
+.smu-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.smu-meta-card {
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 0.65rem;
+  padding: 0.55rem 0.65rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.smu-meta-label {
+  font-size: 0.7rem;
+  opacity: 0.85;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.smu-meta-card strong {
+  font-size: 0.95rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.smu-shift-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.3rem;
+  margin-top: 0.1rem;
+}
+
+.smu-shift-toggle button {
+  border: 0;
+  border-radius: 0.4rem;
+  padding: 0.4rem 0.25rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  background: rgba(0, 0, 0, 0.18);
+  color: #fff;
+  cursor: pointer;
+}
+
+.smu-shift-toggle button.is-active {
+  background: #fff;
+  color: var(--smu-blue-deep);
+}
+
+.smu-banner {
+  margin: 0.75rem 1rem 0;
+  padding: 0.75rem 0.9rem;
+  border-radius: 0.65rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.smu-banner-error {
+  background: var(--smu-red-soft);
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.smu-banner-ok {
+  background: var(--smu-green-soft);
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.smu-section {
+  margin: 0.85rem 1rem 0;
+  background: #fff;
+  border: 1px solid #d9e1ea;
+  border-radius: 0.85rem;
+  padding: 0.95rem;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+.smu-section h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  font-family: Outfit, 'DM Sans', sans-serif;
+  color: #0f172a;
+}
+
+.smu-hint {
+  margin: 0.25rem 0 0.75rem;
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.smu-machine-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.65rem;
+}
+
+.smu-machine-btn {
+  aspect-ratio: 1;
+  border-radius: 0.85rem;
+  border: 2.5px solid #cbd5e1;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  cursor: pointer;
+  padding: 0.5rem;
+  min-height: 5.25rem;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.12s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.smu-machine-btn:active {
+  transform: scale(0.97);
+}
+
+.smu-machine-btn.is-running {
+  border-color: var(--smu-green);
+  background: var(--smu-green-soft);
+}
+
+.smu-machine-btn.is-stopped {
+  border-color: var(--smu-red);
+  background: var(--smu-red-soft);
+}
+
+.smu-machine-no {
+  font-size: 1.45rem;
+  font-weight: 800;
+  font-family: Outfit, 'DM Sans', sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.smu-machine-mark {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #fff;
+}
+
+.smu-machine-btn.is-running .smu-machine-mark {
+  background: var(--smu-green);
+}
+
+.smu-machine-btn.is-stopped .smu-machine-mark {
+  background: var(--smu-red);
+}
+
+.smu-stop-box {
+  margin-top: 0.75rem;
+  background: var(--smu-red-soft);
+  border: 1px solid #fecaca;
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+}
+
+.smu-stop-title {
+  margin: 0 0 0.5rem;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #991b1b;
+}
+
+.smu-reason-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.smu-reason {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.7rem 0.75rem;
+  border-radius: 0.6rem;
+  background: #fff;
+  border: 2px solid #e2e8f0;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 3rem;
+}
+
+.smu-reason.is-selected {
+  border-color: var(--smu-red);
+  background: #fff5f5;
+}
+
+.smu-reason input {
+  width: 1.2rem;
+  height: 1.2rem;
+  accent-color: var(--smu-red);
+}
+
+.smu-operator-bar {
+  margin-bottom: 0.75rem;
+}
+
+.smu-add-op {
+  width: 100%;
+  min-height: 3rem;
+  border-radius: 0.65rem;
+  border: 2px dashed var(--smu-blue);
+  background: #e8f1fb;
+  color: var(--smu-blue-deep);
+  font-size: 1.05rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.smu-add-op-form {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 0.4rem;
+}
+
+.smu-add-op-form input {
+  min-height: 3rem;
+  border: 2px solid #cbd5e1;
+  border-radius: 0.6rem;
+  padding: 0 0.75rem;
+  font-size: 1.05rem;
+}
+
+.smu-btn-solid,
+.smu-btn-ghost {
+  min-height: 3rem;
+  padding: 0 0.9rem;
+  border-radius: 0.6rem;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.smu-btn-solid {
+  background: var(--smu-blue);
+  color: #fff;
+  border: 0;
+}
+
+.smu-btn-ghost {
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+}
+
+.smu-empty {
+  margin: 0;
+  padding: 0.85rem;
+  text-align: center;
+  color: #64748b;
+  background: #f8fafc;
+  border-radius: 0.6rem;
+}
+
+.smu-prod-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.smu-prod-row {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+  background: #fafbfc;
+}
+
+.smu-prod-machine {
+  font-size: 1.2rem;
+  font-weight: 800;
+  font-family: Outfit, 'DM Sans', sans-serif;
+  color: var(--smu-blue-deep);
+  margin-bottom: 0.55rem;
+}
+
+.smu-prod-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.smu-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.smu-field > span {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.smu-op-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.smu-op-chip {
+  min-height: 2.6rem;
+  padding: 0.4rem 0.85rem;
+  border-radius: 0.55rem;
+  border: 2px solid #cbd5e1;
+  background: #fff;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.smu-op-chip.is-selected {
+  border-color: var(--smu-blue);
+  background: #e8f1fb;
+  color: var(--smu-blue-deep);
+}
+
+.smu-meter-input {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: stretch;
+  border: 2px solid #cbd5e1;
+  border-radius: 0.65rem;
+  overflow: hidden;
+  background: #fff;
+}
+
+.smu-meter-input input {
+  border: 0;
+  min-height: 3.25rem;
+  padding: 0 0.85rem;
+  font-size: 1.35rem;
+  font-weight: 700;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  width: 100%;
+}
+
+.smu-meter-input input:focus {
+  outline: none;
+}
+
+.smu-meter-input:focus-within {
+  border-color: var(--smu-blue);
+}
+
+.smu-unit {
+  display: grid;
+  place-items: center;
+  padding: 0 0.85rem;
+  background: #eef2f6;
+  font-weight: 700;
+  color: #475569;
+  font-size: 0.95rem;
+}
+
+.smu-total {
+  margin-top: 0.85rem;
+  background: #e8f1fb;
+  border: 1px solid #bfdbfe;
+  border-radius: 0.75rem;
+  padding: 0.85rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.smu-total span {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #1e3a5f;
+}
+
+.smu-total strong {
+  font-size: 1.35rem;
+  font-weight: 800;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  color: var(--smu-blue-deep);
+}
+
+.smu-bottom-spacer {
+  height: 1rem;
+}
+
+.smu-actions {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  background: rgba(255, 255, 255, 0.96);
+  border-top: 1px solid #d9e1ea;
+  backdrop-filter: blur(8px);
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.smu-send {
+  grid-column: span 1;
+  min-height: 3.4rem;
+  border: 0;
+  border-radius: 0.75rem;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #fff;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.smu-send:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.smu-send-wa {
+  background: var(--smu-wa);
+}
+
+.smu-send-wab {
+  background: #128c7e;
+}
+
+.smu-fresh {
+  grid-column: 1 / -1;
+  min-height: 2.6rem;
+  border-radius: 0.65rem;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #475569;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+/* When AppShell bottom nav is present, lift the action bar */
+.app-shell.has-mobile-nav .smu-actions {
+  bottom: 3.75rem;
+}
+
+@media (min-width: 481px) {
+  .smu-screen {
+    margin-top: 0.5rem;
+    border-radius: 1rem;
+    overflow: hidden;
+    border: 1px solid #d9e1ea;
+  }
+
+  .smu-actions {
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100%;
+    border-radius: 0 0 1rem 1rem;
+  }
+}
+
+@media (max-width: 360px) {
+  .smu-machine-no {
+    font-size: 1.2rem;
+  }
+
+  .smu-add-op-form {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Security-only shell: no ERP chrome */
+.app-shell.security-simple .mobile-topbar {
+  background: #1769c2;
+  color: #fff;
+  border-bottom: 0;
+}
+
+.app-shell.security-simple .mobile-brand-name,
+.app-shell.security-simple .mobile-topbar-title,
+.app-shell.security-simple .mobile-role-chip {
+  color: #fff;
+}
+
+.app-shell.security-simple .app-main.smu-main {
+  padding: 0;
+  max-width: none;
+}
+
+.app-shell.security-simple .smu-actions {
+  bottom: 0;
+}

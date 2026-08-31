@@ -56,6 +56,7 @@ import { HrPayrollScreen } from './screens/HrPayrollScreen'
 import { ProgramDispatchScreen } from './screens/ProgramDispatchScreen'
 import { MachineWiseProductionScreen } from './screens/MachineWiseProductionScreen'
 import { SecurityInventoryScreen, type SiSub } from './screens/SecurityInventoryScreen'
+import { SecurityMachineUpdateScreen } from './screens/SecurityMachineUpdateScreen'
 import { ItemMasterScreen } from './screens/ItemMasterScreen'
 import { CeoPinManagementScreen } from './screens/CeoPinManagementScreen'
 import { CeoDataReviewScreen } from './screens/CeoDataReviewScreen'
@@ -116,6 +117,20 @@ function AuthenticatedApp() {
     }
   }, [session, roleName, tab, activeModule])
 
+  // Hard-block Security from all ERP screens except Machine & Production Update
+  useEffect(() => {
+    if (!session || loading) return
+    const n = (roleName || '').trim().toLowerCase()
+    const isSecurity = n === 'security' || (n.includes('security') && !n.includes('supervisor'))
+    if (!isSecurity || isCeo) return
+    if (tab !== 'security-machine-update') {
+      setTab('security-machine-update')
+      setSub(undefined)
+      setFilter(undefined)
+      setActiveModule('security')
+    }
+  }, [session, loading, roleName, isCeo, tab])
+
   if (loading) {
     return (
       <div className="app-loading">
@@ -160,6 +175,15 @@ function AuthenticatedApp() {
         DESIGN_MASTER_SCREENS.has(t.screen))
     ) {
       return
+    }
+    // Security may only open Machine & Production Update
+    {
+      const n = (roleName || '').trim().toLowerCase()
+      const isSecurity = n === 'security' || (n.includes('security') && !n.includes('supervisor'))
+      if (isSecurity && !isCeo && t.screen !== 'security-machine-update') {
+        applyNav({ screen: 'security-machine-update', module: 'security' })
+        return
+      }
     }
     const nextScreen = t.screen
     const nextSub = t.hub || t.sub
@@ -291,6 +315,7 @@ function AuthenticatedApp() {
       {tab === 'machine-wise-production' ? (
         <MachineWiseProductionScreen initialTab={sub || 'weft'} />
       ) : null}
+      {tab === 'security-machine-update' ? <SecurityMachineUpdateScreen /> : null}
       {tab === 'security-inventory' ? (
         <SecurityInventoryScreen
           initialSub={

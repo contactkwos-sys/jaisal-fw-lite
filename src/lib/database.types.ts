@@ -449,6 +449,7 @@ export type ProductionEntry = {
   efficiency_pct: number
   created_at: string
   program_id: string | null
+  source?: string | null
 }
 
 export type OrderBook = {

@@ -14,6 +14,10 @@ import { NotebookDashboardWidget } from './NotebookScreen'
 import { inr, loadDashboardPnLCards } from '../lib/dailyCosting'
 import { loadOtpDashboardStats, type OtpDashboardStats } from '../lib/orderToProgram'
 import { loadTodayKpis, type TodayKpis } from '../lib/programDispatch'
+import {
+  loadDashboardSecuritySummary,
+  type DashboardSecuritySummary,
+} from '../lib/securityMachineUpdate'
 
 type Props = {
   onNavigate: (t: NavTarget) => void
@@ -132,6 +136,7 @@ export function DashboardScreen({ onNavigate }: Props) {
     pendingChecking: 0,
     pendingDispatch: 0,
   })
+  const [securitySummary, setSecuritySummary] = useState<DashboardSecuritySummary | null>(null)
 
   const today = todayISO()
 
@@ -338,6 +343,12 @@ export function DashboardScreen({ onNavigate }: Props) {
     setTopMachines(
       [...machineMap.values()].sort((a, b) => b.meters - a.meters).slice(0, 6),
     )
+
+    try {
+      setSecuritySummary(await loadDashboardSecuritySummary(today))
+    } catch {
+      setSecuritySummary(null)
+    }
 
     try {
       const pnl = await loadDashboardPnLCards(today)
@@ -695,6 +706,100 @@ export function DashboardScreen({ onNavigate }: Props) {
         </div>
       </section>
 
+      {securitySummary && securitySummary.dailyTotal > 0 ? (
+        <section className="dash-panel dash-panel-wide" style={{ marginTop: '1rem' }}>
+          <h2 className="section-title">Security Shift Update (Auto)</h2>
+          <div className="kpi-grid kpi-grid-5" style={{ marginBottom: '0.85rem' }}>
+            <div className="kpi-card surface">
+              <span className="text-muted">Day Shift</span>
+              <strong className="num">{securitySummary.dayTotal.toLocaleString('en-IN')} Mtr</strong>
+            </div>
+            <div className="kpi-card surface">
+              <span className="text-muted">Night Shift</span>
+              <strong className="num">{securitySummary.nightTotal.toLocaleString('en-IN')} Mtr</strong>
+            </div>
+            <div className="kpi-card surface">
+              <span className="text-muted">Daily Total</span>
+              <strong className="num">{securitySummary.dailyTotal.toLocaleString('en-IN')} Mtr</strong>
+            </div>
+            <div className="kpi-card surface">
+              <span className="text-muted">Running</span>
+              <strong className="num">{securitySummary.runningMachines}/6</strong>
+            </div>
+            <div className="kpi-card surface">
+              <span className="text-muted">Stopped</span>
+              <strong className="num" style={{ color: securitySummary.stoppedMachines ? 'var(--danger)' : undefined }}>
+                {securitySummary.stoppedMachines}
+              </strong>
+            </div>
+          </div>
+          <div className="dash-split dash-split-tables">
+            <div className="dash-table-wrap surface">
+              <table className="dash-table">
+                <thead>
+                  <tr>
+                    <th>Machine</th>
+                    <th>Status</th>
+                    <th className="num">Day</th>
+                    <th className="num">Night</th>
+                    <th className="num">Total</th>
+                    <th>Reason</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {securitySummary.machineRows.map((row) => (
+                    <tr key={row.machine}>
+                      <td>{row.machine}</td>
+                      <td>
+                        <span className={`machine-status ${row.status === 'Stopped' ? 'stopped' : row.status === 'Running' ? 'running' : ''}`}>
+                          {row.status}
+                        </span>
+                      </td>
+                      <td className="num">{row.dayMeters.toLocaleString('en-IN')}</td>
+                      <td className="num">{row.nightMeters.toLocaleString('en-IN')}</td>
+                      <td className="num">{row.totalMeters.toLocaleString('en-IN')}</td>
+                      <td>{row.stopReason || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="dash-table-wrap surface">
+              <table className="dash-table">
+                <thead>
+                  <tr>
+                    <th>Operator</th>
+                    <th>Machines</th>
+                    <th className="num">Day</th>
+                    <th className="num">Night</th>
+                    <th className="num">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {securitySummary.operatorRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="text-muted">
+                        No operator production today
+                      </td>
+                    </tr>
+                  ) : (
+                    securitySummary.operatorRows.map((row) => (
+                      <tr key={row.operator}>
+                        <td>{row.operator}</td>
+                        <td>{row.machines.join(', ')}</td>
+                        <td className="num">{row.dayMeters.toLocaleString('en-IN')}</td>
+                        <td className="num">{row.nightMeters.toLocaleString('en-IN')}</td>
+                        <td className="num">{row.totalMeters.toLocaleString('en-IN')}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       <details className="dash-panel dash-more-details">
         <summary className="section-title dash-more-summary">More Details</summary>
 
@@ -769,20 +874,25 @@ export function DashboardScreen({ onNavigate }: Props) {
                     </td>
                   </tr>
                 ) : (
-                  topMachines.map((row) => (
-                    <tr key={row.machine}>
-                      <td>
-                        {row.machine} — Airjet Loom
-                      </td>
-                      <td className="num">{row.meters.toFixed(1)}</td>
-                      <td>
-                        <span className="machine-status running">
-                          <span className="status-dot" aria-hidden="true" />
-                          Running
-                        </span>
-                      </td>
-                    </tr>
-                  ))
+                  topMachines.map((row) => {
+                    const sec = securitySummary?.machineRows.find((m) => m.machine === row.machine)
+                    const status = sec?.status && sec.status !== '—' ? sec.status : 'Running'
+                    const stopped = status === 'Stopped'
+                    return (
+                      <tr key={row.machine}>
+                        <td>
+                          {row.machine} — Airjet Loom
+                        </td>
+                        <td className="num">{row.meters.toFixed(1)}</td>
+                        <td>
+                          <span className={`machine-status ${stopped ? 'stopped' : 'running'}`}>
+                            <span className="status-dot" aria-hidden="true" />
+                            {stopped ? `Stopped${sec?.stopReason ? ` · ${sec.stopReason}` : ''}` : 'Running'}
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  })
                 )}
               </tbody>
             </table>

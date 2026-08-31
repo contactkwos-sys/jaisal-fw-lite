@@ -16,6 +16,7 @@
     "smoke:mwm": "node scripts/machine-maintenance-smoke.mjs",
     "smoke:mwm-ui": "node scripts/mwm-ui-smoke.mjs",
     "smoke:mwp": "node scripts/machine-wise-production-smoke.mjs",
+    "smoke:security-mobile": "node scripts/security-machine-update-smoke.mjs",
     "smoke:otp": "node scripts/order-to-program-smoke.mjs",
     "audit:phase2": "node scripts/phase2-data-audit.mjs",
     "audit:phase2-final": "node scripts/phase2-final-verification.mjs",

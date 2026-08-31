@@ -87,7 +87,8 @@ const ROLE_DEFAULTS: Record<string, MainModuleId[]> = {
     'design-to-order',
     'utilities',
   ],
-  security: ['security', 'inventory', 'warp-yarn', 'hr-payroll'],
+  /** Security — only simple Machine & Production Update mobile screen */
+  security: ['security'],
   account: ['cash-book', 'hr-payroll', 'reports', 'masters', 'security'],
   admin: ['cash-book', 'hr-payroll', 'reports', 'masters', 'security', 'settings'],
   accounts: ['cash-book', 'hr-payroll', 'reports', 'masters'],
@@ -104,27 +105,9 @@ const OPERATOR_SUBS: Partial<Record<MainModuleId, string[]>> = {
   'program-dispatch': ['prod-entry', 'folding', 'tracking'],
 }
 
-/** Security role — Security Inventory entry + gate + yarn OCR + GEB + attendance */
+/** Security role — only Machine & Production Update (no costing / inventory / admin) */
 const SECURITY_SUBS: Partial<Record<MainModuleId, string[]>> = {
-  security: [
-    'security-inventory',
-    'si-warp',
-    'si-weft',
-    'si-maint-in',
-    'si-maint-out',
-    'si-general',
-    'si-others',
-    'si-pending',
-    'si-documents',
-    'si-reports',
-    'security-gate',
-    'yarn-inward-sec',
-    'geb-sec',
-    'login-activity',
-  ],
-  inventory: ['yarn-stock', 'warp-yarn-link', 'stock-reports'],
-  'warp-yarn': ['wy-overview', 'wy-machines', 'wy-godown', 'wy-empty', 'wy-warper', 'wy-reports'],
-  'hr-payroll': ['hr-attendance', 'hr-dash'],
+  security: ['machine-production-update'],
 }
 
 /** Program / Production — Program to Machine + production workflow (no customer order entry) */
@@ -482,7 +465,7 @@ export function firstAllowedLanding(roleName: string): {
   const n = normalizeRole(roleName)
   const isSecurity = n === 'security' || (n.includes('security') && !n.includes('supervisor'))
   if (isSecurity) {
-    return { module: 'security', screen: 'security-inventory', sub: 'dashboard' }
+    return { module: 'security', screen: 'security-machine-update' }
   }
   // Salesman opens Order to Program dashboard (not Design Master)
   if (isSalesmanRole(n)) {
