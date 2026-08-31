@@ -520,6 +520,19 @@
   cursor: pointer;
 }
 
+/* Security simple chrome — avoid duplicate titles / bottom nav clash */
+.app-shell[data-security-simple='1'] .content-topbar {
+  display: none;
+}
+
+.app-shell[data-security-simple='1'] .app-main {
+  padding-top: 0.25rem;
+}
+
+.app-shell[data-security-simple='1'] .mobile-topbar-title {
+  font-size: 0.82rem;
+}
+
 /* Dashboard Security Daily Summary panel */
 .smu-dash {
   margin-top: 1rem;

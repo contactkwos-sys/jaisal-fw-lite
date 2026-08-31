@@ -21,6 +21,7 @@ import {
   saveSecurityDraft,
   submitSecurityUpdate,
   totalProduction,
+  validateDraft,
   type MachineLineState,
   type SecurityUpdateDraft,
   type ShiftKind,
@@ -104,54 +105,35 @@ export function SecurityMachineUpdateScreen() {
     setError(null)
     setMessage(null)
     try {
+      // Validate + open WhatsApp first (Security must not wait on DB)
       const text = buildWhatsAppMessage(draft, now)
-      const result = await submitSecurityUpdate({
-        draft,
-        created_by: profile?.id || null,
-        created_by_name: profile?.full_name || roleName || 'Security',
-        markWhatsAppSent: true,
-      })
-      setLastUpdateId(result.update_id)
+      const localErr = validateDraft(draft)
+      if (localErr) {
+        setError(localErr)
+        return
+      }
       if (kind === 'wa') shareWhatsApp(text)
       else shareWhatsAppBusiness(text)
-      void markWhatsAppSent(result.update_id)
-      clearSecurityDraft()
-      setDraft(createEmptyDraft(detectShift()))
-      setMessage(`Sent · Total ${fmtMtr(result.total_production_mtr)} Mtr · Saved to ERP`)
-    } catch (e) {
-      // Still allow WhatsApp even if remote DB save fails (e.g. migration pending)
-      const msg = e instanceof Error ? e.message : 'Send failed'
-      const looksLikeValidation =
-        /select|enter|at least|reason|operator|production/i.test(msg) && !/permission|relation|schema/i.test(msg)
-      if (looksLikeValidation) {
-        setError(handleUserError('securitySend', e, msg))
-      } else {
-        try {
-          const text = buildWhatsAppMessage(draft, now)
-          // Validate locally before opening WhatsApp without DB
-          const localErr = (() => {
-            for (const m of draft.machines) {
-              if (m.status === 'stopped' && !m.stop_reason) return `Select stop reason for ${m.machine_no}`
-            }
-            for (const m of runningMachines(draft.machines)) {
-              if (!m.operator_name.trim()) return `Select operator for ${m.machine_no}`
-              const n = Number(m.production_mtr)
-              if (!Number.isFinite(n) || n < 0) return `Enter production meters for ${m.machine_no}`
-            }
-            return null
-          })()
-          if (localErr) {
-            setError(localErr)
-            return
-          }
-          if (kind === 'wa') shareWhatsApp(text)
-          else shareWhatsAppBusiness(text)
-          // Keep draft until DB works, but mark message opened
-          setError(`WhatsApp opened. Database save pending: ${msg}`)
-        } catch (inner) {
-          setError(handleUserError('securitySendFallback', inner, msg))
-        }
+
+      try {
+        const result = await submitSecurityUpdate({
+          draft,
+          created_by: profile?.id || null,
+          created_by_name: profile?.full_name || roleName || 'Security',
+          markWhatsAppSent: true,
+        })
+        setLastUpdateId(result.update_id)
+        void markWhatsAppSent(result.update_id)
+        clearSecurityDraft()
+        setDraft(createEmptyDraft(detectShift()))
+        setMessage(`Sent · Total ${fmtMtr(result.total_production_mtr)} Mtr · Saved to ERP`)
+      } catch (dbErr) {
+        // WhatsApp already opened — keep draft so Security can retry save later
+        const msg = dbErr instanceof Error ? dbErr.message : 'Database save failed'
+        setError(`WhatsApp opened. Database save pending: ${msg}`)
       }
+    } catch (e) {
+      setError(handleUserError('securitySend', e, e instanceof Error ? e.message : 'Send failed'))
     } finally {
       setBusy(false)
     }

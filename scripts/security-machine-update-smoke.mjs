@@ -72,6 +72,76 @@ assert(buildWhatsAppMessage(night).includes('NIGHT SHIFT'), 'night shift label')
 const rameshMachines = draft.machines.filter((m) => m.operator_name === 'Ramesh').map((m) => m.machine_no)
 assert(rameshMachines.join(',') === 'M1,M2', 'Ramesh operates M1 and M2')
 
+// Dashboard aggregation (cases 10–11)
+function summarize(entries) {
+  const machines = {}
+  for (const m of ['M1', 'M2', 'M3', 'M4', 'M5', 'M6']) {
+    machines[m] = { machine_no: m, status: 'running', day_mtr: 0, night_mtr: 0, stop_reason: null }
+  }
+  let day = 0
+  let night = 0
+  const ops = {}
+  for (const u of entries) {
+    for (const line of u.lines) {
+      const row = machines[line.machine_no]
+      const mtr = line.production_mtr || 0
+      if (u.shift === 'Day') {
+        row.day_mtr += mtr
+        day += mtr
+      } else {
+        row.night_mtr += mtr
+        night += mtr
+      }
+      if (!line.is_running) {
+        row.status = 'stopped'
+        row.stop_reason = line.stop_reason
+      }
+      if (line.operator_name && mtr > 0) {
+        ops[line.operator_name] = ops[line.operator_name] || { machines: new Set(), total: 0 }
+        ops[line.operator_name].machines.add(line.machine_no)
+        ops[line.operator_name].total += mtr
+      }
+    }
+  }
+  return { day, night, daily: day + night, machines, ops }
+}
+
+const dash = summarize([
+  {
+    shift: 'Day',
+    lines: draft.machines.map((m) => ({
+      machine_no: m.machine_no,
+      is_running: m.status === 'running',
+      stop_reason: m.stop_reason,
+      operator_name: m.operator_name || null,
+      production_mtr: Number(m.production_mtr) || 0,
+    })),
+  },
+])
+assert(dash.day === 4850, 'dashboard day total')
+assert(dash.night === 0, 'dashboard night total')
+assert(dash.daily === 4850, 'dashboard daily total')
+assert(dash.machines.M3.status === 'stopped', 'M3 stopped on dashboard')
+assert(dash.machines.M3.stop_reason === 'Mechanical Fault', 'M3 reason')
+assert(dash.ops.Ramesh.total === 2430, 'Ramesh operator performance')
+assert([...dash.ops.Ramesh.machines].sort().join(',') === 'M1,M2', 'Ramesh machines')
+
+const nightDash = summarize([
+  {
+    shift: 'Night',
+    lines: [
+      { machine_no: 'M1', is_running: true, stop_reason: null, operator_name: 'Ramesh', production_mtr: 900 },
+      { machine_no: 'M2', is_running: true, stop_reason: null, operator_name: 'Amit', production_mtr: 800 },
+      { machine_no: 'M3', is_running: true, stop_reason: null, operator_name: 'Suresh', production_mtr: 700 },
+      { machine_no: 'M4', is_running: true, stop_reason: null, operator_name: 'Ramesh', production_mtr: 600 },
+      { machine_no: 'M5', is_running: true, stop_reason: null, operator_name: 'Amit', production_mtr: 500 },
+      { machine_no: 'M6', is_running: false, stop_reason: 'Operator Problem', operator_name: null, production_mtr: 0 },
+    ],
+  },
+])
+assert(nightDash.night === 3500, 'night shift total')
+assert(nightDash.machines.M6.status === 'stopped', 'night M6 stopped')
+
 console.log('security-machine-update-smoke: OK')
 console.log('--- sample WhatsApp message ---')
 console.log(msg)

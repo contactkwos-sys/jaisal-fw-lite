@@ -28,6 +28,39 @@ type AuthState = {
 
 const AuthContext = createContext<AuthState | null>(null)
 
+const SMOKE_SESSION_KEY = 'jaisal_fw_smoke_session_v1'
+
+function readSmokeSession(): { session: Session; profile: Profile } | null {
+  if (import.meta.env.VITE_SMOKE_BYPASS !== '1') return null
+  try {
+    if (typeof sessionStorage === 'undefined') return null
+    const raw = sessionStorage.getItem(SMOKE_SESSION_KEY)
+    if (!raw) return null
+    return JSON.parse(raw) as { session: Session; profile: Profile }
+  } catch {
+    return null
+  }
+}
+
+function writeSmokeSession(session: Session, profile: Profile): void {
+  if (import.meta.env.VITE_SMOKE_BYPASS !== '1') return
+  try {
+    if (typeof sessionStorage === 'undefined') return
+    sessionStorage.setItem(SMOKE_SESSION_KEY, JSON.stringify({ session, profile }))
+  } catch {
+    /* ignore */
+  }
+}
+
+function clearSmokeSession(): void {
+  try {
+    if (typeof sessionStorage === 'undefined') return
+    sessionStorage.removeItem(SMOKE_SESSION_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
 function profileFromAuthUser(user: User): Profile {
   const meta = (user.user_metadata || {}) as Record<string, string>
   const roleName = meta.role_name || meta.full_name || 'User'
@@ -92,12 +125,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let mounted = true
     ;(async () => {
       try {
+        const smoke = readSmokeSession()
+        if (smoke) {
+          setSession(smoke.session)
+          setProfile(smoke.profile)
+          return
+        }
         await refreshProfile()
       } finally {
         if (mounted) setLoading(false)
       }
     })()
     const { data: sub } = supabase.auth.onAuthStateChange(async (_event, next) => {
+      if (import.meta.env.VITE_SMOKE_BYPASS === '1' && readSmokeSession()) return
       setSession(next)
       if (next?.user) {
         try {
@@ -129,8 +169,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           created_at: new Date().toISOString(),
           roles: role,
         }
-        setProfile(mockUser)
-        setSession({
+        const mockSession = {
           access_token: 'smoke',
           refresh_token: 'smoke',
           expires_in: 3600,
@@ -146,7 +185,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             aud: 'authenticated',
             created_at: mockUser.created_at,
           },
-        } as Session)
+        } as Session
+        setProfile(mockUser)
+        setSession(mockSession)
+        writeSmokeSession(mockSession, mockUser)
         return
       }
       const { data, error } = await supabase.functions.invoke('pin-login', {
@@ -183,6 +225,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     clearModuleUnlocks()
+    clearSmokeSession()
     await supabase.auth.signOut()
     setSession(null)
     setProfile(null)

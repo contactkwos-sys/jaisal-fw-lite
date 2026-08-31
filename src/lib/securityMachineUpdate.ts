@@ -235,16 +235,22 @@ export function buildWhatsAppMessage(draft: SecurityUpdateDraft, now = new Date(
   lines.push('', '*Production:*')
   for (const m of runningMachines(draft.machines)) {
     const mtr = Number(m.production_mtr) || 0
-    lines.push(`${m.machine_no} - ${fmtMtr(mtr)} Mtr - ${m.operator_name.trim() || '—'}`)
+    lines.push(`${m.machine_no} - ${fmtMtrPlain(mtr)} Mtr - ${m.operator_name.trim() || '—'}`)
   }
 
-  lines.push('', `*Total Production: ${fmtMtr(totalProduction(draft.machines))} Mtr*`)
+  lines.push('', `*Total Production: ${fmtMtrPlain(totalProduction(draft.machines))} Mtr*`)
   return lines.join('\n')
 }
 
 export function fmtMtr(n: number): string {
   if (!Number.isFinite(n)) return '0'
   return Math.round(n).toLocaleString('en-IN')
+}
+
+/** Plain meters for WhatsApp (no thousand separators). */
+export function fmtMtrPlain(n: number): string {
+  if (!Number.isFinite(n)) return '0'
+  return String(Math.round(n))
 }
 
 export async function loadSecurityOperators(): Promise<string[]> {
@@ -389,6 +395,103 @@ export async function submitSecurityUpdate(args: {
     update_id: updateId,
     total_production_mtr: total,
     message: buildWhatsAppMessage(draft),
+  }
+}
+
+/**
+ * Pure helpers for dashboard aggregation — used by smoke tests.
+ * Mirrors loadSecurityDashboardSummary reduction without I/O.
+ */
+export function summarizeSecurityLines(
+  entries: Array<{
+    shift: ShiftKind
+    submitted_at?: string
+    lines: Array<{
+      machine_no: string
+      is_running: boolean
+      stop_reason: string | null
+      operator_name: string | null
+      production_mtr: number
+    }>
+  }>,
+): Pick<
+  SecurityDashboardSummary,
+  'day_total' | 'night_total' | 'daily_total' | 'running_count' | 'stopped_count' | 'machines' | 'operators'
+> {
+  const byMachine = new Map<string, DashboardMachineRow>()
+  for (const m of MACHINES) {
+    byMachine.set(m, {
+      machine_no: m,
+      status: 'running',
+      day_mtr: 0,
+      night_mtr: 0,
+      total_mtr: 0,
+      stop_reason: null,
+      day_operator: null,
+      night_operator: null,
+    })
+  }
+  let day_total = 0
+  let night_total = 0
+  const latestStatusSeen = new Set<string>()
+  const opMap = new Map<string, DashboardOperatorRow>()
+
+  for (const u of entries) {
+    const shift = u.shift
+    for (const line of u.lines) {
+      const row = byMachine.get(line.machine_no)
+      if (!row) continue
+      const mtr = Number(line.production_mtr) || 0
+      if (shift === 'Day') {
+        row.day_mtr += mtr
+        day_total += mtr
+        if (line.operator_name) row.day_operator = line.operator_name
+      } else {
+        row.night_mtr += mtr
+        night_total += mtr
+        if (line.operator_name) row.night_operator = line.operator_name
+      }
+      row.total_mtr = row.day_mtr + row.night_mtr
+
+      const statusKey = `${line.machine_no}::${shift}`
+      if (!latestStatusSeen.has(statusKey)) {
+        latestStatusSeen.add(statusKey)
+        if (!line.is_running) {
+          row.status = 'stopped'
+          row.stop_reason = line.stop_reason
+        } else if (row.status !== 'stopped') {
+          row.status = 'running'
+          row.stop_reason = null
+        }
+      }
+
+      const opName = (line.operator_name || '').trim()
+      if (opName && mtr > 0) {
+        const existing = opMap.get(opName) || {
+          operator_name: opName,
+          machines: [],
+          day_mtr: 0,
+          night_mtr: 0,
+          total_mtr: 0,
+        }
+        if (!existing.machines.includes(line.machine_no)) existing.machines.push(line.machine_no)
+        if (shift === 'Day') existing.day_mtr += mtr
+        else existing.night_mtr += mtr
+        existing.total_mtr = existing.day_mtr + existing.night_mtr
+        opMap.set(opName, existing)
+      }
+    }
+  }
+
+  const machines = MACHINES.map((m) => byMachine.get(m)!).filter(Boolean)
+  return {
+    day_total,
+    night_total,
+    daily_total: day_total + night_total,
+    running_count: machines.filter((m) => m.status === 'running').length,
+    stopped_count: machines.filter((m) => m.status === 'stopped').length,
+    machines,
+    operators: [...opMap.values()].sort((a, b) => b.total_mtr - a.total_mtr),
   }
 }
 
