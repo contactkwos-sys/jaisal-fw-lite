@@ -39,6 +39,7 @@ const INVENTORY_TONES: Record<string, HubTone> = {
   'warp-beam-pipe': 'orange',
   'yarn-inward': 'teal',
   'security-inventory': 'blue',
+  'security-machine-update': 'green',
   'greige-stock': 'amber',
   consumables: 'pink',
   inward: 'teal',
@@ -101,6 +102,8 @@ const ICON_PATHS: Record<string, string> = {
     'M11 4h2v7h3l-4 5-4-5h3V4zm-7 14h16v2H4v-2z',
   'security-inventory':
     'M12 2l7 3v6c0 5-3.5 8.5-7 9.5C8.5 19.5 5 16 5 11V5l7-3zm0 2.2L7 6.1v4.9c0 3.6 2.4 6.3 5 7.2 2.6-.9 5-3.6 5-7.2V6.1l-5-1.9zM11 10h2v5h-2v-5zm0-3h2v2h-2V7z',
+  'security-machine-update':
+    'M3 13h2v8H3v-8zm4-6h2v14H7V7zm4-4h2v18h-2V3zm4 8h2v10h-2V11zm4-3h2v13h-2V8z',
   'greige-stock':
     'M4 5h16v3H4V5zm0 5h16v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-9zm3 2v2h10v-2H7z',
   consumables:
