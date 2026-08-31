@@ -12,7 +12,6 @@ import {
   fillRecipeDenierFromRateMaster,
   qualityMasterTablesReady,
   saveQualityMaster,
-  setQualityActive,
   type QualityMasterRow,
   type QualityWarpRecipeRow,
   type QualityWeftRecipeRow,
@@ -20,6 +19,8 @@ import {
 import { rateMasterItemNames } from '../lib/dinIntakeCosting'
 import { fetchAllRates, type RateMasterRow } from '../lib/rateMaster'
 import { FALLBACK_COLOURS, fetchAllColours } from '../lib/colourMaster'
+import { RecordActions } from '../components/RecordActions'
+import { confirmDeleteRecord } from '../lib/recordCrud'
 import { todayISO } from '../lib/mutate'
 
 const FEEDER_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8] as const
@@ -264,6 +265,27 @@ export function QualityMasterScreen() {
     }
   }
 
+  async function handleDelete(row: QualityMasterRow) {
+    if (!canEdit) return
+    if (!confirmDeleteRecord({ label: row.quality_name, linked: true })) return
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const result = await deleteQualityMaster(row.id)
+      if (result.mode === 'inactivated') {
+        setMessage(result.message || 'Quality set inactive (linked to existing costings)')
+      } else {
+        setMessage('Quality deleted')
+      }
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Delete failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="screen">
       <header className="screen-header">
@@ -330,43 +352,15 @@ export function QualityMasterScreen() {
                   <td className="num">{row.default_tar_ends}</td>
                   <td>{row.is_active ? 'Active' : 'Inactive'}</td>
                   <td>
-                    <div className="dwc-row-actions">
-                      <button type="button" className="btn-link" onClick={() => openView(row)}>
-                        View
-                      </button>
-                      {canEdit ? (
-                        <>
-                          <button type="button" className="btn-link" onClick={() => openEdit(row)}>
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-link"
-                            disabled={busy}
-                            onClick={() => {
-                              void setQualityActive(row.id, !row.is_active, session?.user?.id || null)
-                                .then(load)
-                                .catch((e: Error) => setError(e.message))
-                            }}
-                          >
-                            {row.is_active ? 'Deactivate' : 'Activate'}
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-link text-danger"
-                            disabled={busy}
-                            onClick={() => {
-                              if (!confirm(`Delete quality "${row.quality_name}"?`)) return
-                              void deleteQualityMaster(row.id)
-                                .then(load)
-                                .catch((e: Error) => setError(e.message))
-                            }}
-                          >
-                            Delete
-                          </button>
-                        </>
-                      ) : null}
-                    </div>
+                    <RecordActions
+                      busy={busy}
+                      canView
+                      canEdit={canEdit}
+                      canDelete={canEdit}
+                      onView={() => openView(row)}
+                      onEdit={() => openEdit(row)}
+                      onDelete={() => void handleDelete(row)}
+                    />
                   </td>
                 </tr>
               ))}

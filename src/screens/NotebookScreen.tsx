@@ -3,6 +3,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ImageLightbox } from '../components/ImageLightbox'
+import { RecordActions } from '../components/RecordActions'
 import { useAuth } from '../lib/auth'
 import {
   NOTEBOOK_CATEGORIES,
@@ -37,6 +38,7 @@ import {
   type PurchaseType,
 } from '../lib/factoryNotebook'
 import { applyOrQueue } from '../lib/mutate'
+import { confirmDeleteRecord } from '../lib/recordCrud'
 import type { NavTarget } from '../lib/nav'
 
 type View = 'list' | 'add' | 'edit' | 'detail' | 'quick' | 'purchase-photo'
@@ -416,7 +418,7 @@ export function NotebookScreen({ initialSub, initialMachine, initialDinRef }: Pr
   }
 
   async function handleDelete(id: string) {
-    if (!window.confirm('Delete this note?')) return
+    if (!confirmDeleteRecord({ label: 'this note' })) return
     setBusy(true)
     try {
       await applyOrQueue({
@@ -609,9 +611,15 @@ export function NotebookScreen({ initialSub, initialMachine, initialDinRef }: Pr
                     </td>
                     <td><span className={`nb-status-pill ${statusClass(n.status)}`}>{n.status}</span></td>
                     <td>
-                      <button type="button" className="nb-icon-btn" onClick={() => void openDetail(n.id)}>View</button>
-                      <button type="button" className="nb-icon-btn" onClick={() => void openEdit(n.id)}>Edit</button>
-                      <button type="button" className="nb-icon-btn danger" onClick={() => void handleDelete(n.id)}>Delete</button>
+                      <RecordActions
+                        busy={busy}
+                        canView
+                        canEdit
+                        canDelete
+                        onView={() => void openDetail(n.id)}
+                        onEdit={() => void openEdit(n.id)}
+                        onDelete={() => void handleDelete(n.id)}
+                      />
                     </td>
                   </tr>
                 )

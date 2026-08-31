@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { RecordActions } from './RecordActions'
 import { useAuth } from '../lib/auth'
 import type { WeftYarnStock, YarnStockLedger } from '../lib/database.types'
 import { applyOrQueue, todayISO } from '../lib/mutate'
+import { confirmDeleteRecord } from '../lib/recordCrud'
 import { supabase } from '../lib/supabase'
 import {
   EMPTY_YARN_FILTERS,
@@ -305,7 +307,7 @@ export function YarnStockPanel() {
   async function deleteYarn(row: WeftYarnStock, e?: React.MouseEvent) {
     e?.stopPropagation()
     if (!profile) return
-    if (!window.confirm(`Delete yarn ${yarnDisplayName(row)}? This cannot be undone.`)) return
+    if (!confirmDeleteRecord({ label: yarnDisplayName(row), linked: true })) return
     setBusy(true)
     setError(null)
     try {
@@ -1086,31 +1088,15 @@ export function YarnStockPanel() {
                       </td>
                       <td>
                         <div className="yarn-row-actions" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            type="button"
-                            className="btn-secondary"
-                            aria-label="View"
-                            onClick={() => openDetail(row)}
-                          >
-                            View
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-secondary"
-                            aria-label="Edit"
-                            onClick={(e) => openEdit(row, e)}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-ghost text-danger"
-                            aria-label="Delete"
-                            disabled={busy}
-                            onClick={(e) => void deleteYarn(row, e)}
-                          >
-                            Delete
-                          </button>
+                          <RecordActions
+                            busy={busy}
+                            canView
+                            canEdit
+                            canDelete
+                            onView={() => openDetail(row)}
+                            onEdit={() => openEdit(row)}
+                            onDelete={() => void deleteYarn(row)}
+                          />
                         </div>
                       </td>
                     </tr>
@@ -1168,31 +1154,15 @@ export function YarnStockPanel() {
                     </div>
                   </div>
                   <div className="yarn-mobile-actions">
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        openDetail(row)
-                      }}
-                    >
-                      View
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      onClick={(e) => openEdit(row, e)}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-ghost text-danger"
-                      disabled={busy}
-                      onClick={(e) => void deleteYarn(row, e)}
-                    >
-                      Delete
-                    </button>
+                    <RecordActions
+                      busy={busy}
+                      canView
+                      canEdit
+                      canDelete
+                      onView={() => openDetail(row)}
+                      onEdit={() => openEdit(row)}
+                      onDelete={() => void deleteYarn(row)}
+                    />
                   </div>
                 </button>
               )

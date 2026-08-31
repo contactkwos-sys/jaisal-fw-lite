@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { RecordActions } from '../components/RecordActions'
 import { SubTabs } from '../components/SubTabs'
 import { useAuth } from '../lib/auth'
 import {
@@ -28,6 +29,7 @@ import {
 /** Floor machines (M1–M6) plus shared/general expenses. Machine Master is still a placeholder. */
 const CASHBOOK_MACHINE_OPTIONS = [...MACHINES, 'Others'] as const
 import { todayISO } from '../lib/mutate'
+import { confirmDeleteRecord } from '../lib/recordCrud'
 
 type TabId = 'entry' | 'list' | 'ledger' | 'book'
 
@@ -268,6 +270,7 @@ export function CashBookScreen() {
   const [master, setMaster] = useState<CashBookItemMaster[]>([])
   const [form, setForm] = useState<FormState>(emptyForm)
   const [editEntry, setEditEntry] = useState<CashBookEntry | null>(null)
+  const [viewEntry, setViewEntry] = useState<CashBookEntry | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -300,9 +303,12 @@ export function CashBookScreen() {
     }
   }, [itemsTotal, form.amountManual])
 
+  const formReadOnly = Boolean(viewEntry)
+
   function resetForm() {
     setForm(emptyForm())
     setEditEntry(null)
+    setViewEntry(null)
   }
 
   function mergeMaster(added: CashBookItemMaster[]) {
@@ -447,6 +453,7 @@ export function CashBookScreen() {
   }
 
   function startEdit(row: CashBookEntry) {
+    setViewEntry(null)
     setEditEntry(row)
     setForm(formFromEntry(row))
     setTab('entry')
@@ -457,17 +464,26 @@ export function CashBookScreen() {
     )
   }
 
+  function startView(row: CashBookEntry) {
+    setEditEntry(null)
+    setViewEntry(row)
+    setForm(formFromEntry(row))
+    setTab('entry')
+    setMessage(null)
+  }
+
   async function handleDelete(row: CashBookEntry) {
     if (!profile) {
       setError('Not signed in — please log in again.')
       return
     }
     const label = row.party_name.trim() || entryItemsLabel(row)
-    const ok = window.confirm(
-      isCeo
+    const ok = confirmDeleteRecord({
+      label,
+      message: isCeo
         ? `Delete entry for ${label}? (CEO approval)`
         : `Send delete request to CEO for ${label}? Entry will not be deleted until CEO approves.`,
-    )
+    })
     if (!ok) return
     setBusy(true)
     setError(null)
@@ -483,7 +499,7 @@ export function CashBookScreen() {
           ? 'Entry deleted (CEO approved)'
           : 'Delete sent for CEO approval — not deleted yet',
       )
-      if (editEntry?.id === row.id) resetForm()
+      if (editEntry?.id === row.id || viewEntry?.id === row.id) resetForm()
       await load()
     } catch (err) {
       setError(formatCashBookError(err, 'Delete failed'))
@@ -512,7 +528,7 @@ export function CashBookScreen() {
           value={tab}
           onChange={(id) => setTab(id as TabId)}
           options={[
-            { id: 'entry', label: editEntry ? 'Edit Entry' : 'New Entry' },
+            { id: 'entry', label: viewEntry ? 'View Entry' : editEntry ? 'Edit Entry' : 'New Entry' },
             { id: 'list', label: 'Entries' },
             { id: 'ledger', label: 'Party Ledger' },
             { id: 'book', label: 'Ledger Book' },
@@ -525,7 +541,14 @@ export function CashBookScreen() {
 
       {tab === 'entry' ? (
         <form className="form-stack cashbook-form" onSubmit={(e) => void handleSave(e)}>
-          {editEntry ? (
+          {viewEntry ? (
+            <p className="text-muted2">
+              Viewing entry ·{' '}
+              <button type="button" className="btn-ghost cashbook-link-btn" onClick={resetForm}>
+                Close
+              </button>
+            </p>
+          ) : editEntry ? (
             <p className="text-muted2">
               Editing ·{' '}
               <button type="button" className="btn-ghost cashbook-link-btn" onClick={resetForm}>
@@ -544,7 +567,7 @@ export function CashBookScreen() {
                     ? 'cashbook-type-btn credit active'
                     : 'cashbook-type-btn credit'
                 }
-                disabled={busy}
+                disabled={busy || formReadOnly}
                 onClick={() =>
                   setForm((f) => ({
                     ...f,
@@ -563,7 +586,7 @@ export function CashBookScreen() {
                     ? 'cashbook-type-btn debit active'
                     : 'cashbook-type-btn debit'
                 }
-                disabled={busy}
+                disabled={busy || formReadOnly}
                 onClick={() => setForm((f) => ({ ...f, entry_type: 'debit' }))}
               >
                 Debit
@@ -578,7 +601,7 @@ export function CashBookScreen() {
               value={form.entry_date}
               onChange={(e) => setForm((f) => ({ ...f, entry_date: e.target.value }))}
               required
-              disabled={busy}
+              disabled={busy || formReadOnly}
             />
           </label>
 
@@ -588,7 +611,7 @@ export function CashBookScreen() {
               value={form.party_name}
               onChange={(e) => setForm((f) => ({ ...f, party_name: e.target.value }))}
               placeholder="Person / party — optional"
-              disabled={busy}
+              disabled={busy || formReadOnly}
             />
           </label>
 
@@ -599,7 +622,7 @@ export function CashBookScreen() {
               onChange={(e) => setForm((f) => ({ ...f, contact_number: e.target.value }))}
               placeholder="Optional"
               inputMode="tel"
-              disabled={busy}
+              disabled={busy || formReadOnly}
             />
           </label>
 
@@ -607,7 +630,7 @@ export function CashBookScreen() {
             <span>Category</span>
             <select
               value={form.category}
-              disabled={busy}
+              disabled={busy || formReadOnly}
               onChange={(e) => {
                 const category = e.target.value as CashBookCategory
                 setForm((f) => ({
@@ -640,7 +663,7 @@ export function CashBookScreen() {
                 value={form.machine_number}
                 onChange={(e) => setForm((f) => ({ ...f, machine_number: e.target.value }))}
                 required={needsMachine}
-                disabled={busy}
+                disabled={busy || formReadOnly}
               >
                 <option value="">{needsMachine ? 'Select machine' : '— None —'}</option>
                 {CASHBOOK_MACHINE_OPTIONS.map((m) => (
@@ -664,6 +687,7 @@ export function CashBookScreen() {
                 onChange={(e) => setForm((f) => ({ ...f, purpose_notes: e.target.value }))}
                 placeholder="Why this deposit was given (required)"
                 required
+                readOnly={formReadOnly}
               />
               <span className="text-muted2">
                 Owner-side deposits must record the purpose they were given for.
@@ -676,6 +700,7 @@ export function CashBookScreen() {
                 value={form.purpose_notes}
                 onChange={(e) => setForm((f) => ({ ...f, purpose_notes: e.target.value }))}
                 placeholder="Optional notes"
+                readOnly={formReadOnly}
               />
             </label>
           )}
@@ -689,7 +714,7 @@ export function CashBookScreen() {
                     value={row.item_name}
                     freeText={row.freeText}
                     master={master}
-                    disabled={busy}
+                    disabled={busy || formReadOnly}
                     onError={setError}
                     onMasterAdded={(m) =>
                       setMaster((prev) =>
@@ -711,7 +736,9 @@ export function CashBookScreen() {
                     aria-label="Item amount"
                     value={row.amount}
                     onChange={(e) => updateItem(row.key, { amount: e.target.value })}
+                    readOnly={formReadOnly}
                   />
+                  {!formReadOnly ? (
                   <button
                     type="button"
                     className="btn-ghost"
@@ -726,9 +753,11 @@ export function CashBookScreen() {
                   >
                     Remove
                   </button>
+                  ) : null}
                 </div>
               ))}
             </div>
+            {!formReadOnly ? (
             <button
               type="button"
               className="btn-ghost"
@@ -742,6 +771,7 @@ export function CashBookScreen() {
             >
               + Add Item
             </button>
+            ) : null}
           </div>
 
           <label className="field">
@@ -765,9 +795,11 @@ export function CashBookScreen() {
                 }))
               }
               required
+              readOnly={formReadOnly}
             />
           </label>
 
+          {!formReadOnly ? (
           <button type="submit" className="cashbook-save-btn" disabled={busy} aria-busy={busy}>
             {busy ? (
               <>
@@ -780,6 +812,7 @@ export function CashBookScreen() {
               'Save entry'
             )}
           </button>
+          ) : null}
         </form>
       ) : null}
 
@@ -804,19 +837,15 @@ export function CashBookScreen() {
                   {!isCeo ? ' · edit/delete needs CEO approval' : ''}
                 </div>
               </div>
-              <div className="icon-actions">
-                <button type="button" className="btn-ghost icon-btn" disabled={busy} onClick={() => startEdit(row)}>
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  className="btn-ghost icon-btn"
-                  disabled={busy}
-                  onClick={() => void handleDelete(row)}
-                >
-                  Del
-                </button>
-              </div>
+              <RecordActions
+                busy={busy}
+                canView
+                canEdit
+                canDelete
+                onView={() => startView(row)}
+                onEdit={() => startEdit(row)}
+                onDelete={() => void handleDelete(row)}
+              />
             </article>
           ))}
           {!rows.length ? <p className="text-muted">No cash book entries yet</p> : null}

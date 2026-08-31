@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { RecordActions } from '../components/RecordActions'
 import { useAuth } from '../lib/auth'
+import { confirmDeleteRecord } from '../lib/recordCrud'
 import { todayISO } from '../lib/mutate'
 import {
   WARP_CATALOGUE,
@@ -87,6 +89,7 @@ export function RateMasterScreen({ preset }: Props = {}) {
   const [historyItem, setHistoryItem] = useState<string | null>(null)
   const [form, setForm] = useState<FormState>(EMPTY_FORM('warp'))
   const [formMode, setFormMode] = useState<FormMode>('add')
+  const [viewOnly, setViewOnly] = useState(false)
   const [migrationHint, setMigrationHint] = useState(false)
 
   const load = useCallback(async () => {
@@ -187,6 +190,7 @@ export function RateMasterScreen({ preset }: Props = {}) {
   }
 
   function openAdd(category: RateCategory, preset?: Partial<FormState>) {
+    setViewOnly(false)
     setForm({
       ...EMPTY_FORM(category),
       gst_percent: defaultGst,
@@ -201,6 +205,7 @@ export function RateMasterScreen({ preset }: Props = {}) {
 
   function openEdit(row: (typeof displayRows)[0]) {
     const r = row.rate
+    setViewOnly(false)
     setForm({
       category: tab,
       item_name: row.item_name,
@@ -216,9 +221,28 @@ export function RateMasterScreen({ preset }: Props = {}) {
     setModalOpen(true)
   }
 
+  function openView(row: (typeof displayRows)[0]) {
+    const r = row.rate
+    setForm({
+      category: tab,
+      item_name: row.item_name,
+      denier: row.denier || '',
+      supplier_name: row.supplier_name || '',
+      basic_rate: r ? String(r.basic_rate) : '',
+      gst_percent: r ? String(r.gst_percent) : defaultGst,
+      freight_per_kg: r ? String(r.freight_per_kg) : defaultFreight,
+      effective_from: r?.effective_from || todayISO(),
+    })
+    setFormMode('version')
+    setViewOnly(true)
+    setModalError(null)
+    setModalOpen(true)
+  }
+
   function closeModal() {
     setModalOpen(false)
     setModalError(null)
+    setViewOnly(false)
     resetFormState(tab)
   }
 
@@ -285,7 +309,14 @@ export function RateMasterScreen({ preset }: Props = {}) {
 
   async function deleteRate(id: string, itemName: string) {
     if (!canEdit) return
-    if (!window.confirm(`Deactivate rate for "${itemName}"? Historical records are preserved.`)) return
+    if (
+      !confirmDeleteRecord({
+        label: itemName,
+        message: `Deactivate rate for "${itemName}"? Historical records are preserved.`,
+      })
+    ) {
+      return
+    }
     setBusy(true)
     try {
       await deactivateRate(id, session?.user?.id ?? null)
@@ -458,16 +489,15 @@ export function RateMasterScreen({ preset }: Props = {}) {
                     <td>{r ? formatDisplayDate(r.effective_from) : '—'}</td>
                     <td>
                       <div className="rm-actions-cell">
-                        {canEdit ? (
-                          <button
-                            type="button"
-                            className="rm-action-btn"
-                            title="Add / update rate"
-                            onClick={() => openEdit(row)}
-                          >
-                            Edit
-                          </button>
-                        ) : null}
+                        <RecordActions
+                          busy={busy}
+                          canView
+                          canEdit={canEdit}
+                          canDelete={canEdit && Boolean(r)}
+                          onView={() => openView(row)}
+                          onEdit={() => openEdit(row)}
+                          onDelete={r ? () => void deleteRate(r.id, row.item_name) : undefined}
+                        />
                         <button
                           type="button"
                           className="rm-action-btn"
@@ -476,16 +506,6 @@ export function RateMasterScreen({ preset }: Props = {}) {
                         >
                           History
                         </button>
-                        {canEdit && r ? (
-                          <button
-                            type="button"
-                            className="rm-action-btn rm-action-btn-danger"
-                            title="Deactivate rate"
-                            onClick={() => void deleteRate(r.id, row.item_name)}
-                          >
-                            Delete
-                          </button>
-                        ) : null}
                       </div>
                     </td>
                   </tr>
@@ -522,7 +542,13 @@ export function RateMasterScreen({ preset }: Props = {}) {
         <div className="rm-modal-backdrop" onClick={closeModal}>
           <div className="rm-modal" onClick={(e) => e.stopPropagation()}>
             <div className="rm-modal-head">
-              <h2>{formMode === 'version' ? 'New Rate Version' : 'Add New Rate'}</h2>
+              <h2>
+                {viewOnly
+                  ? `View Rate — ${form.item_name}`
+                  : formMode === 'version'
+                    ? 'New Rate Version'
+                    : 'Add New Rate'}
+              </h2>
             </div>
             <div className="rm-modal-body">
               {modalError ? <p className="form-error text-danger rm-modal-error">{modalError}</p> : null}
@@ -530,6 +556,7 @@ export function RateMasterScreen({ preset }: Props = {}) {
                 <span>Category</span>
                 <select
                   value={form.category}
+                  disabled={viewOnly}
                   onChange={(e) => {
                     const category = e.target.value as RateCategory
                     if (formMode === 'add') {
@@ -550,6 +577,7 @@ export function RateMasterScreen({ preset }: Props = {}) {
                     <input
                       list={`rm-item-catalogue-${form.category}`}
                       value={form.item_name}
+                      disabled={viewOnly}
                       placeholder="e.g. MARBLE, HSY, 300 Tex"
                       onChange={(e) => {
                         const v = e.target.value
@@ -576,12 +604,17 @@ export function RateMasterScreen({ preset }: Props = {}) {
               </label>
               <label>
                 <span>Denier / Spec</span>
-                <input value={form.denier} onChange={(e) => setForm((f) => ({ ...f, denier: e.target.value }))} />
+                <input
+                  value={form.denier}
+                  readOnly={viewOnly}
+                  onChange={(e) => setForm((f) => ({ ...f, denier: e.target.value }))}
+                />
               </label>
               <label>
                 <span>Supplier Name (Optional)</span>
                 <input
                   value={form.supplier_name}
+                  readOnly={viewOnly}
                   onChange={(e) => setForm((f) => ({ ...f, supplier_name: e.target.value }))}
                 />
               </label>
@@ -593,6 +626,7 @@ export function RateMasterScreen({ preset }: Props = {}) {
                   min="0"
                   step="any"
                   value={form.basic_rate}
+                  readOnly={viewOnly}
                   onChange={(e) => setForm((f) => ({ ...f, basic_rate: e.target.value }))}
                 />
               </label>
@@ -604,6 +638,7 @@ export function RateMasterScreen({ preset }: Props = {}) {
                   min="0"
                   step="any"
                   value={form.gst_percent}
+                  readOnly={viewOnly}
                   onChange={(e) => setForm((f) => ({ ...f, gst_percent: e.target.value }))}
                 />
               </label>
@@ -615,6 +650,7 @@ export function RateMasterScreen({ preset }: Props = {}) {
                   min="0"
                   step="any"
                   value={form.freight_per_kg}
+                  readOnly={viewOnly}
                   onChange={(e) => setForm((f) => ({ ...f, freight_per_kg: e.target.value }))}
                 />
               </label>
@@ -623,6 +659,7 @@ export function RateMasterScreen({ preset }: Props = {}) {
                 <input
                   type="date"
                   value={form.effective_from}
+                  readOnly={viewOnly}
                   onChange={(e) => setForm((f) => ({ ...f, effective_from: e.target.value }))}
                 />
               </label>
@@ -647,11 +684,13 @@ export function RateMasterScreen({ preset }: Props = {}) {
             </div>
             <div className="rm-modal-foot">
               <button type="button" className="rm-btn-cancel" onClick={closeModal}>
-                Cancel
+                {viewOnly ? 'Close' : 'Cancel'}
               </button>
-              <button type="button" className="rm-btn-save" disabled={busy || !canEdit} onClick={() => void saveRate()}>
-                {busy ? 'Saving…' : 'Save Rate'}
-              </button>
+              {!viewOnly ? (
+                <button type="button" className="rm-btn-save" disabled={busy || !canEdit} onClick={() => void saveRate()}>
+                  {busy ? 'Saving…' : 'Save Rate'}
+                </button>
+              ) : null}
             </div>
           </div>
         </div>

@@ -1,0 +1,106 @@
+/* Shared RecordActions — desktop inline, mobile ⋮ menu */
+
+.record-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: 100%;
+  position: relative;
+}
+
+.record-actions-inline {
+  display: none;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+  align-items: center;
+}
+
+.record-actions-menu {
+  display: inline-flex;
+  position: relative;
+}
+
+.record-action-btn,
+.record-action-more {
+  min-height: 32px;
+  min-width: 32px;
+  padding: 0.25rem 0.55rem;
+  border: 1px solid var(--line, #dbe3ee);
+  border-radius: 6px;
+  background: var(--surface, #fff);
+  color: var(--text, #0f172a);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.record-action-btn:hover:not(:disabled),
+.record-action-more:hover:not(:disabled) {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.record-action-btn:disabled,
+.record-action-more:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.record-action-danger,
+.record-actions-dropdown .record-action-danger {
+  color: #b91c1c;
+}
+
+.record-action-more {
+  font-size: 1.15rem;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  padding: 0.15rem 0.45rem;
+}
+
+.record-actions-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 40;
+  min-width: 132px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0.35rem;
+  border: 1px solid var(--line, #dbe3ee);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+}
+
+.record-actions-dropdown button {
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 0.45rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: inherit;
+}
+
+.record-actions-dropdown button:hover:not(:disabled) {
+  background: #f1f5f9;
+}
+
+@media (min-width: 900px) {
+  .record-actions-inline {
+    display: inline-flex;
+  }
+  .record-actions-menu {
+    display: none;
+  }
+}
+
+/* Keep action column from forcing huge horizontal scroll */
+td .record-actions {
+  max-width: 11rem;
+}

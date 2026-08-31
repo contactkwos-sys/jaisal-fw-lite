@@ -199,10 +199,55 @@ export async function setQualityActive(
   if (error) throw error
 }
 
-export async function deleteQualityMaster(id: string): Promise<void> {
+export type DeleteQualityResult =
+  | { mode: 'deleted' }
+  | { mode: 'inactivated'; message: string }
+
+export async function deleteQualityMaster(id: string): Promise<DeleteQualityResult> {
   await assertDesignMasterWrite()
+
+  // Prefer soft-deactivate when already referenced by DIN Costing
+  const { count, error: cErr } = await supabase
+    .from('design_costing')
+    .select('id', { count: 'exact', head: true })
+    .eq('quality_master_id', id)
+  if (!cErr && (count || 0) > 0) {
+    const { error } = await supabase
+      .from('quality_master')
+      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .eq('id', id)
+    if (error) throw error
+    return {
+      mode: 'inactivated',
+      message:
+        'Cannot delete: this quality is already used in existing DIN Costing. It was set Inactive instead.',
+    }
+  }
+
+  // Also block when quality_name matches existing costings (legacy rows without FK)
+  const { data: qm } = await supabase.from('quality_master').select('quality_name').eq('id', id).maybeSingle()
+  if (qm?.quality_name) {
+    const { count: byName } = await supabase
+      .from('design_costing')
+      .select('id', { count: 'exact', head: true })
+      .ilike('quality_name', qm.quality_name)
+    if ((byName || 0) > 0) {
+      const { error } = await supabase
+        .from('quality_master')
+        .update({ is_active: false, updated_at: new Date().toISOString() })
+        .eq('id', id)
+      if (error) throw error
+      return {
+        mode: 'inactivated',
+        message:
+          'Cannot delete: this quality is already used in existing DIN Costing. It was set Inactive instead.',
+      }
+    }
+  }
+
   const { error } = await supabase.from('quality_master').delete().eq('id', id)
   if (error) throw error
+  return { mode: 'deleted' }
 }
 
 /** Resolve base denier + costing denier (+ rate_master_id) from Rate Master for a yarn pick. */

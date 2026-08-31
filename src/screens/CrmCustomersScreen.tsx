@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { RecordActions } from '../components/RecordActions'
 import type { CrmCustomer } from '../lib/database.types'
 import {
   deleteCrmCustomer,
@@ -7,6 +8,7 @@ import {
   syncCrmFromKmos,
   updateCrmCustomer,
 } from '../lib/crmCustomers'
+import { confirmDeleteRecord } from '../lib/recordCrud'
 
 type FormState = {
   name: string
@@ -24,6 +26,7 @@ export function CrmCustomersScreen() {
   const [message, setMessage] = useState<string | null>(null)
 
   const [formOpen, setFormOpen] = useState(false)
+  const [viewOnly, setViewOnly] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [form, setForm] = useState<FormState>(emptyForm)
 
@@ -49,6 +52,7 @@ export function CrmCustomersScreen() {
 
   function openAdd() {
     setEditId(null)
+    setViewOnly(false)
     setForm(emptyForm)
     setFormOpen(true)
     setError(null)
@@ -57,6 +61,20 @@ export function CrmCustomersScreen() {
 
   function openEdit(row: CrmCustomer) {
     setEditId(row.id)
+    setViewOnly(false)
+    setForm({
+      name: row.name,
+      whatsapp_number: row.whatsapp_number,
+      notes: row.notes || '',
+    })
+    setFormOpen(true)
+    setError(null)
+    setMessage(null)
+  }
+
+  function openView(row: CrmCustomer) {
+    setEditId(row.id)
+    setViewOnly(true)
     setForm({
       name: row.name,
       whatsapp_number: row.whatsapp_number,
@@ -90,7 +108,7 @@ export function CrmCustomersScreen() {
   }
 
   async function handleDelete(row: CrmCustomer) {
-    if (!confirm(`Delete ${row.name}?`)) return
+    if (!confirmDeleteRecord({ label: row.name })) return
     setBusy(true)
     setError(null)
     setMessage(null)
@@ -198,17 +216,15 @@ export function CrmCustomersScreen() {
                   </td>
                   <td className="text-muted2">{row.notes || '—'}</td>
                   <td className="crm-row-actions">
-                    <button type="button" className="btn-ghost" disabled={busy} onClick={() => openEdit(row)}>
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-ghost crm-del"
-                      disabled={busy}
-                      onClick={() => void handleDelete(row)}
-                    >
-                      Delete
-                    </button>
+                    <RecordActions
+                      busy={busy}
+                      canView
+                      canEdit
+                      canDelete
+                      onView={() => openView(row)}
+                      onEdit={() => openEdit(row)}
+                      onDelete={() => void handleDelete(row)}
+                    />
                   </td>
                 </tr>
               ))}
@@ -221,12 +237,15 @@ export function CrmCustomersScreen() {
         <div className="crm-modal" role="dialog" aria-modal="true" aria-labelledby="crm-form-title">
           <div className="crm-modal-backdrop" onClick={() => !busy && setFormOpen(false)} />
           <div className="crm-modal-panel surface">
-            <h2 id="crm-form-title">{editId ? 'Edit Customer' : 'Add Customer'}</h2>
+            <h2 id="crm-form-title">
+              {viewOnly ? 'View Customer' : editId ? 'Edit Customer' : 'Add Customer'}
+            </h2>
             <form className="form-stack crm-form" onSubmit={(e) => void handleSave(e)}>
               <label className="field">
                 <span className="text-muted">Name</span>
                 <input
                   value={form.name}
+                  readOnly={viewOnly}
                   onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                   required
                 />
@@ -238,6 +257,7 @@ export function CrmCustomersScreen() {
                   inputMode="tel"
                   placeholder="+919876543210"
                   value={form.whatsapp_number}
+                  readOnly={viewOnly}
                   onChange={(e) => setForm((f) => ({ ...f, whatsapp_number: e.target.value }))}
                   required
                 />
@@ -247,16 +267,19 @@ export function CrmCustomersScreen() {
                 <textarea
                   rows={3}
                   value={form.notes}
+                  readOnly={viewOnly}
                   onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
                 />
               </label>
               <div className="crm-modal-actions">
                 <button type="button" className="btn-ghost" disabled={busy} onClick={() => setFormOpen(false)}>
-                  Cancel
+                  {viewOnly ? 'Close' : 'Cancel'}
                 </button>
-                <button type="submit" className="primary-save" disabled={busy}>
-                  {busy ? 'Saving…' : 'Save'}
-                </button>
+                {!viewOnly ? (
+                  <button type="submit" className="primary-save" disabled={busy}>
+                    {busy ? 'Saving…' : 'Save'}
+                  </button>
+                ) : null}
               </div>
             </form>
           </div>
