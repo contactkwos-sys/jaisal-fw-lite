@@ -1,21 +1,25 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ImageLightbox } from '../components/ImageLightbox'
 import { ShareActions } from '../components/ShareActions'
 import { useAuth } from '../lib/auth'
 import { todayISO } from '../lib/mutate'
 import type { NavTarget } from '../lib/nav'
 import {
+  blankDesignForOrder,
   buildRecipeFeeders,
   buildWhatsAppStatusMessage,
   calcRecipeTotals,
+  DIN_OTHERS_VALUE,
   downloadCsv,
   emptyFeeder,
   fmtInrIn,
+  isManualDinSelection,
   ITEM_NAME_OPTIONS,
   listDinOptions,
   listOperators,
   listParties,
   loadBookedOrders,
+  loadCustomerOrderDetail,
   loadDesignForOrder,
   loadMachineWarpBoard,
   loadOrderStatusRows,
@@ -29,6 +33,7 @@ import {
   saveProgramWithJobCard,
   statusBadgeClass,
   friendlyFactoryStatus,
+  updateCustomerOrder,
   type BookedOrderOption,
   type DesignForOrder,
   type FeederRow,
@@ -125,12 +130,33 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
   const [orderDate, setOrderDate] = useState(todayISO())
   const [party, setParty] = useState('')
   const [itemName, setItemName] = useState<string>(ITEM_NAME_OPTIONS[0])
-  const [dinNumber, setDinNumber] = useState(initialDinNumber || '')
+  /** Dropdown value: master DIN number, or DIN_OTHERS_VALUE for manual entry. */
+  const [dinSelect, setDinSelect] = useState(initialDinNumber || '')
+  /** Manual DIN / Design No. when Others is selected — this is what gets saved. */
+  const [manualDin, setManualDin] = useState('')
+  const [debouncedManualDin, setDebouncedManualDin] = useState('')
   const [design, setDesign] = useState<DesignForOrder | null>(null)
+  const [editingOrderId, setEditingOrderId] = useState<string | null>(null)
+  const [editingOrderNo, setEditingOrderNo] = useState<string | null>(null)
+  /** When set, design-load effect restores these colour lines instead of master matchings. */
+  const pendingEditLinesRef = useRef<LineDraft[] | null>(null)
 
   useEffect(() => {
-    if (initialDinNumber) setDinNumber(initialDinNumber)
+    if (initialDinNumber) setDinSelect(initialDinNumber)
   }, [initialDinNumber])
+
+  useEffect(() => {
+    if (dinSelect !== DIN_OTHERS_VALUE) {
+      setDebouncedManualDin('')
+      return
+    }
+    const t = window.setTimeout(() => setDebouncedManualDin(manualDin.trim()), 300)
+    return () => window.clearTimeout(t)
+  }, [dinSelect, manualDin])
+
+  const effectiveDinNumber =
+    dinSelect === DIN_OTHERS_VALUE ? debouncedManualDin : dinSelect.trim()
+
   const [deliveryDays, setDeliveryDays] = useState('30')
   const [deliveryDate, setDeliveryDate] = useState('')
   const [paymentTerms, setPaymentTerms] = useState('30 Days')
@@ -185,42 +211,120 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
     setParties(p)
     setOperators(ops)
     setMachines(m)
-    if (!dinNumber && (initialDinNumber || d[0]?.din_number)) {
-      setDinNumber(initialDinNumber || d[0].din_number)
+    if (!dinSelect && (initialDinNumber || d[0]?.din_number)) {
+      setDinSelect(initialDinNumber || d[0].din_number)
     }
-  }, [dinNumber, initialDinNumber])
+  }, [dinSelect, initialDinNumber])
 
   useEffect(() => {
     void boot().catch((e) => setError(handleUserError('OTP.boot', e, 'Unable to load masters.')))
   }, [boot])
 
   useEffect(() => {
-    if (!dinNumber) {
+    if (!effectiveDinNumber) {
       setDesign(null)
-      setLines([])
+      if (dinSelect === DIN_OTHERS_VALUE) {
+        setLines((prev) =>
+          prev.length
+            ? prev
+            : [
+                {
+                  key: crypto.randomUUID(),
+                  matchingNo: 1,
+                  matchingId: null,
+                  matchingName: 'M-01',
+                  mainColour: '',
+                  otherInfo: '',
+                  meter: '',
+                },
+              ],
+        )
+      } else {
+        setLines([])
+      }
       return
     }
-    void loadDesignForOrder(dinNumber)
+    let cancelled = false
+    void loadDesignForOrder(effectiveDinNumber)
       .then((d) => {
-        setDesign(d)
-        if (d?.partyName && !party) setParty(d.partyName)
-        const approved = (d?.matchings || []).filter((m) => m.status === 'Approved')
-        const pool = approved.length ? approved : d?.matchings || []
-        setLines(
-          pool.map((m) => ({
-            key: crypto.randomUUID(),
-            matchingNo: m.matching_no,
-            matchingId: m.id,
-            matchingName: `M-${String(m.matching_no).padStart(2, '0')}`,
-            mainColour: matchingMainColour(m),
-            otherInfo: '',
-            meter: '',
-          })),
-        )
+        if (cancelled) return
+        const applyPendingOr = (fallback: () => void) => {
+          if (pendingEditLinesRef.current) {
+            setLines(pendingEditLinesRef.current)
+            pendingEditLinesRef.current = null
+            return
+          }
+          fallback()
+        }
+        if (d) {
+          setDesign(d)
+          if (d.partyName && !party) setParty(d.partyName)
+          applyPendingOr(() => {
+            const approved = (d.matchings || []).filter((m) => m.status === 'Approved')
+            const pool = approved.length ? approved : d.matchings || []
+            if (pool.length) {
+              setLines(
+                pool.map((m) => ({
+                  key: crypto.randomUUID(),
+                  matchingNo: m.matching_no,
+                  matchingId: m.id,
+                  matchingName: `M-${String(m.matching_no).padStart(2, '0')}`,
+                  mainColour: matchingMainColour(m),
+                  otherInfo: '',
+                  meter: '',
+                })),
+              )
+            } else if (dinSelect === DIN_OTHERS_VALUE) {
+              setLines((prev) =>
+                prev.length
+                  ? prev
+                  : [
+                      {
+                        key: crypto.randomUUID(),
+                        matchingNo: 1,
+                        matchingId: null,
+                        matchingName: 'M-01',
+                        mainColour: '',
+                        otherInfo: '',
+                        meter: '',
+                      },
+                    ],
+              )
+            }
+          })
+          return
+        }
+        // Manual / unknown DIN — allow order without blocking; keep design details blank.
+        if (dinSelect === DIN_OTHERS_VALUE) {
+          setDesign(blankDesignForOrder(effectiveDinNumber))
+          applyPendingOr(() => {
+            setLines((prev) =>
+              prev.length
+                ? prev
+                : [
+                    {
+                      key: crypto.randomUUID(),
+                      matchingNo: 1,
+                      matchingId: null,
+                      matchingName: 'M-01',
+                      mainColour: '',
+                      otherInfo: '',
+                      meter: '',
+                    },
+                  ],
+            )
+          })
+        } else {
+          setDesign(null)
+          applyPendingOr(() => setLines([]))
+        }
       })
       .catch((e) => setError(handleUserError('OTP.design', e, 'Unable to load design from Design Module.')))
+    return () => {
+      cancelled = true
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dinNumber])
+  }, [effectiveDinNumber, dinSelect])
 
   const refreshStatusAndOrders = useCallback(async () => {
     const [orders, status, dash] = await Promise.all([
@@ -357,11 +461,22 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
       setError('Please select Customer')
       return
     }
-    if (!design) {
+    const savedDin =
+      dinSelect === DIN_OTHERS_VALUE ? manualDin.trim() : (design?.dinNumber || dinSelect).trim()
+    if (dinSelect === DIN_OTHERS_VALUE && !manualDin.trim()) {
+      setError('Please enter DIN / Design No.')
+      return
+    }
+    if (!savedDin || savedDin === DIN_OTHERS_VALUE) {
       setError('Please select Design / DIN')
       return
     }
-    if (salesRate <= 0) {
+    if (!design && dinSelect !== DIN_OTHERS_VALUE) {
+      setError('Please select Design / DIN')
+      return
+    }
+    // Existing master DIN selection still requires a sales rate; Others may be blank/optional.
+    if (dinSelect !== DIN_OTHERS_VALUE && salesRate <= 0) {
       setError('Please enter a valid Rate (greater than 0)')
       return
     }
@@ -398,29 +513,91 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
     setError(null)
     setMessage(null)
     try {
-      const res = await saveCustomerOrder({
+      const payload = {
         partyName: party,
         orderDate,
         itemName,
-        dinId: design.dinId || null,
-        dinNumber: design.dinNumber,
-        qualityName: design.qualityName,
+        dinId: design?.dinId || null,
+        dinNumber: savedDin,
+        qualityName: design?.qualityName || '',
         salesRate,
-        previewUrl: design.previewUrl,
+        previewUrl: design?.previewUrl || null,
         deliveryWithinDays: withinDays,
         paymentTerms,
         remarks,
         discountPct: Number(discountPct) || 0,
         discountAmount: orderTotals.discount,
         lines: matchingLines,
-      })
+      }
+      const res = editingOrderId
+        ? await updateCustomerOrder(editingOrderId, payload)
+        : await saveCustomerOrder(payload)
       setOrderCreated({ orderId: res.orderId, orderNo: res.orderNo })
       setSelectedOrderId(res.orderId)
-      setMessage(`ORDER CREATED · ${res.orderNo}`)
+      setMessage(editingOrderId ? `ORDER UPDATED · ${res.orderNo}` : `ORDER CREATED · ${res.orderNo}`)
+      setEditingOrderId(null)
+      setEditingOrderNo(null)
       setLines((prev) => prev.map((l) => ({ ...l, meter: '' })))
       await refreshStatusAndOrders()
     } catch (e) {
       setError(handleUserError('OTP.saveOrder', e, 'Could not save customer order. Please try again.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function onEditOrder(orderId: string) {
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const detail = await loadCustomerOrderDetail(orderId)
+      if (!detail) {
+        setError('Order not found')
+        return
+      }
+      const masterNumbers = dins.map((d) => d.din_number)
+      const useOthers = isManualDinSelection(detail.dinNumber, masterNumbers)
+      const editLines: LineDraft[] = detail.lines.map((l) => ({
+        key: crypto.randomUUID(),
+        matchingNo: l.matchingNo,
+        matchingId: l.matchingId,
+        matchingName: l.matchingName,
+        mainColour: l.mainColour,
+        otherInfo: l.otherInfo,
+        meter: l.orderedMeter ? String(l.orderedMeter) : '',
+      }))
+      pendingEditLinesRef.current = editLines
+      setLines(editLines)
+      setEditingOrderId(detail.orderId)
+      setEditingOrderNo(detail.orderNo)
+      setParty(detail.partyName)
+      setOrderDate(detail.orderDate || todayISO())
+      setItemName(detail.itemName || ITEM_NAME_OPTIONS[0])
+      setPaymentTerms(detail.paymentTerms || '30 Days')
+      setRemarks(detail.remarks || '')
+      setDiscountPct(detail.discountPct ? String(detail.discountPct) : '')
+      setDeliveryDays(detail.deliveryWithinDays != null ? String(detail.deliveryWithinDays) : '30')
+      setDeliveryDate('')
+      setOrderCreated(null)
+      if (useOthers) {
+        setDinSelect(DIN_OTHERS_VALUE)
+        setManualDin(detail.dinNumber)
+        setDebouncedManualDin(detail.dinNumber.trim())
+        // Ensure blank shell immediately when design effect may not re-fire.
+        setDesign((prev) =>
+          prev?.dinNumber === detail.dinNumber.trim()
+            ? prev
+            : blankDesignForOrder(detail.dinNumber),
+        )
+      } else {
+        setManualDin('')
+        setDinSelect(detail.dinNumber)
+      }
+      setStep('order-entry')
+      setMessage(`Editing ${detail.orderNo}`)
+    } catch (e) {
+      setError(handleUserError('OTP.editOrder', e, 'Could not open order for edit.'))
     } finally {
       setBusy(false)
     }
@@ -494,6 +671,13 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
     setDeliveryDate('')
     setPaymentTerms('30 Days')
     setOrderCreated(null)
+    setEditingOrderId(null)
+    setEditingOrderNo(null)
+    setManualDin('')
+    setDebouncedManualDin('')
+    pendingEditLinesRef.current = null
+    if (dins[0]?.din_number) setDinSelect(dins[0].din_number)
+    else setDinSelect('')
     setLines((prev) => prev.map((l) => ({ ...l, meter: '', otherInfo: '' })))
     setMessage(null)
     setError(null)
@@ -723,7 +907,9 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
             </div>
           ) : (
             <>
-          <h2 className="section-title">Customer Order</h2>
+          <h2 className="section-title">
+            {editingOrderId ? `Edit Order${editingOrderNo ? ` · ${editingOrderNo}` : ''}` : 'Customer Order'}
+          </h2>
           <div className="otp-order-grid">
             <div className="otp-form-grid">
               <label className="field">
@@ -741,15 +927,37 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
               </label>
               <label className="field">
                 <span>Design / DIN</span>
-                <select value={dinNumber} onChange={(e) => setDinNumber(e.target.value)}>
+                <select
+                  value={dinSelect}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setDinSelect(v)
+                    if (v !== DIN_OTHERS_VALUE) {
+                      setManualDin('')
+                      setDebouncedManualDin('')
+                    }
+                  }}
+                >
                   <option value="">Select DIN…</option>
                   {dins.map((d) => (
                     <option key={d.id} value={d.din_number}>
                       {d.din_number} · {d.design_name || '—'}
                     </option>
                   ))}
+                  <option value={DIN_OTHERS_VALUE}>Others</option>
                 </select>
               </label>
+              {dinSelect === DIN_OTHERS_VALUE ? (
+                <label className="field">
+                  <span>Enter DIN / Design No.</span>
+                  <input
+                    value={manualDin}
+                    onChange={(e) => setManualDin(e.target.value)}
+                    placeholder="Enter DIN / Design No."
+                    autoComplete="off"
+                  />
+                </label>
+              ) : null}
               <label className="field">
                 <span>Rate (per meter)</span>
                 <input className="num" value={fmtInrIn(salesRate)} readOnly />
@@ -765,17 +973,19 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
             </div>
 
             <aside className="otp-design-preview">
-              <h3>Design Preview {design ? `(${design.dinNumber})` : ''}</h3>
-              {design ? (
+              <h3>Design Preview {design?.dinNumber ? `(${design.dinNumber})` : ''}</h3>
+              {design && effectiveDinNumber ? (
                 <>
-                  <ImageLightbox src={design.previewUrl} alt={design.designName} thumbClassName="otp-preview-img" />
+                  <ImageLightbox src={design.previewUrl} alt={design.designName || design.dinNumber} thumbClassName="otp-preview-img" />
                   <dl className="otp-meta">
-                    <div><dt>Design Name</dt><dd>{design.designName}</dd></div>
-                    <div><dt>Quality</dt><dd>{design.qualityName}</dd></div>
-                    <div><dt>Width</dt><dd>{design.widthLabel}</dd></div>
-                    <div><dt>Final Sales Rate</dt><dd>{fmtInrIn(design.salesRate)} / Meter</dd></div>
+                    <div><dt>Design Name</dt><dd>{design.designName || '—'}</dd></div>
+                    <div><dt>Quality</dt><dd>{design.qualityName || '—'}</dd></div>
+                    <div><dt>Width</dt><dd>{design.widthLabel || '—'}</dd></div>
+                    <div><dt>Final Sales Rate</dt><dd>{design.salesRate > 0 ? `${fmtInrIn(design.salesRate)} / Meter` : '—'}</dd></div>
                   </dl>
                 </>
+              ) : dinSelect === DIN_OTHERS_VALUE ? (
+                <p className="text-muted">Enter a DIN / Design No. Design details load automatically when found; new DINs can be ordered with blank details.</p>
               ) : (
                 <p className="text-muted">Select a DIN to auto-load preview, quality &amp; sales rate.</p>
               )}
@@ -865,7 +1075,9 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
               Back
             </button>
             <button type="button" className="btn-ghost" onClick={clearOrderForm}>Clear</button>
-            <button type="button" className="primary-save" disabled={busy} onClick={() => void onSaveOrder()}>Save Order</button>
+            <button type="button" className="primary-save" disabled={busy} onClick={() => void onSaveOrder()}>
+              {editingOrderId ? 'Update Order' : 'Save Order'}
+            </button>
           </div>
             </>
           )}
@@ -895,6 +1107,7 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
                   <th>Checking</th>
                   <th>Dispatch</th>
                   <th>Overall</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -913,6 +1126,11 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
                     <td><span className={statusBadgeClass(r.checkingStatus)}>{friendlyFactoryStatus(r.checkingStatus)}</span></td>
                     <td><span className={statusBadgeClass(r.dispatchStatus)}>{friendlyFactoryStatus(r.dispatchStatus)}</span></td>
                     <td><span className={statusBadgeClass(r.overallStatus)}>{friendlyFactoryStatus(r.overallStatus)}</span></td>
+                    <td>
+                      <button type="button" className="link-btn" disabled={busy} onClick={() => void onEditOrder(r.orderId)}>
+                        Edit
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
