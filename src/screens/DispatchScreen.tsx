@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { RecordActions } from '../components/RecordActions'
 import { ShareActions } from '../components/ShareActions'
 import { SubTabs } from '../components/SubTabs'
 import { useAuth } from '../lib/auth'
 import type { Challan, Gatepass, JobCard } from '../lib/database.types'
 import { applyOrQueue, nextDocNo, todayISO } from '../lib/mutate'
 import { markProgramDispatched } from '../lib/programs'
+import { applyEditDeleteOrQueue } from '../lib/pendingApprovals'
+import { confirmDeleteRecord } from '../lib/recordCrud'
 import { printSummary, rowsToHtml, shareWhatsApp } from '../lib/share'
 import { supabase } from '../lib/supabase'
 
@@ -43,6 +46,11 @@ export function DispatchScreen({ initialSub = 'folding' }: Props) {
   const [driverSigned, setDriverSigned] = useState(false)
   const [receivedSigned, setReceivedSigned] = useState(false)
   const [pendingGp, setPendingGp] = useState<Gatepass[]>([])
+  const [foldingEntries, setFoldingEntries] = useState<Array<Record<string, unknown>>>([])
+  const [recentGp, setRecentGp] = useState<Gatepass[]>([])
+  const [viewFolding, setViewFolding] = useState<Record<string, unknown> | null>(null)
+  const [viewChallan, setViewChallan] = useState<Challan | null>(null)
+  const [viewGatepass, setViewGatepass] = useState<Gatepass | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const drawing = useRef(false)
 
@@ -53,8 +61,10 @@ export function DispatchScreen({ initialSub = 'folding' }: Props) {
     return m * r * (1 + g / 100)
   }, [meter, rate, gstPct])
 
+  const enteredBy = profile?.full_name || profile?.id || 'Unknown'
+
   const loadChallans = useCallback(async () => {
-    const [{ data: ch }, { data: gp }, { data: jobs }] = await Promise.all([
+    const [{ data: ch }, { data: gp }, { data: jobs }, { data: fold }, { data: allGp }] = await Promise.all([
       supabase.from('challans').select('*').order('created_at', { ascending: false }).limit(50),
       supabase
         .from('gatepass')
@@ -67,10 +77,14 @@ export function DispatchScreen({ initialSub = 'folding' }: Props) {
         .select('*')
         .order('created_at', { ascending: false })
         .limit(50),
+      supabase.from('folding_entries').select('*').order('created_at', { ascending: false }).limit(20),
+      supabase.from('gatepass').select('*').order('created_at', { ascending: false }).limit(20),
     ])
     setChallans((ch as Challan[]) ?? [])
     setPendingGp((gp as Gatepass[]) ?? [])
     setJobCards((jobs as JobCard[]) ?? [])
+    setFoldingEntries((fold as Array<Record<string, unknown>>) ?? [])
+    setRecentGp((allGp as Gatepass[]) ?? [])
     setChallanNo(nextDocNo('CH-', (ch ?? []).map((c) => c.challan_no)))
     setGpNo(nextDocNo('DG-', (gp ?? []).map((g) => g.gatepass_no ?? '')))
     if (!challanId && ch?.[0]) setChallanId(ch[0].id)
@@ -126,6 +140,7 @@ export function DispatchScreen({ initialSub = 'folding' }: Props) {
       setDno('')
       setMeterFolded('')
       setRolls('')
+      await loadChallans()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed')
     } finally {
@@ -249,6 +264,92 @@ export function DispatchScreen({ initialSub = 'folding' }: Props) {
     return { x: ev.clientX - r.left, y: ev.clientY - r.top }
   }
 
+  async function handleDeleteFolding(row: Record<string, unknown>) {
+    if (!profile) return
+    const id = String(row.id || '')
+    if (!id) return
+    const label = String(row.dno || row.lot_no || 'folding entry')
+    if (!confirmDeleteRecord({ label, linked: Boolean(row.program_id) })) return
+    setBusy(true)
+    try {
+      const result = await applyEditDeleteOrQueue({
+        isCeo,
+        createdAt: String(row.created_at || ''),
+        tableName: 'folding_entries',
+        recordId: id,
+        action: 'delete',
+        requestedBy: enteredBy,
+        apply: async () => {
+          const { error: dErr } = await supabase.from('folding_entries').delete().eq('id', id)
+          if (dErr) throw dErr
+        },
+      })
+      setMessage(result === 'applied' ? 'Folding deleted' : 'Delete queued for CEO approval')
+      if (viewFolding?.id === row.id) setViewFolding(null)
+      await loadChallans()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Delete failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleDeleteChallan(c: Challan) {
+    if (!profile) return
+    const linked = recentGp.some((g) => g.challan_id === c.id)
+    if (!confirmDeleteRecord({ label: c.challan_no || c.party, linked })) return
+    setBusy(true)
+    try {
+      const result = await applyEditDeleteOrQueue({
+        isCeo,
+        createdAt: c.created_at,
+        tableName: 'challans',
+        recordId: c.id,
+        action: 'delete',
+        requestedBy: enteredBy,
+        apply: async () => {
+          const { error: dErr } = await supabase.from('challans').delete().eq('id', c.id)
+          if (dErr) throw dErr
+        },
+      })
+      setMessage(result === 'applied' ? 'Challan deleted' : 'Delete queued for CEO approval')
+      if (viewChallan?.id === c.id) setViewChallan(null)
+      await loadChallans()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Delete failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleDeleteGatepass(g: Gatepass) {
+    if (!profile) return
+    const linked = Boolean(g.driver_signed && g.received_signed)
+    if (!confirmDeleteRecord({ label: g.gatepass_no || g.id.slice(0, 8), linked })) return
+    setBusy(true)
+    try {
+      const result = await applyEditDeleteOrQueue({
+        isCeo,
+        createdAt: g.created_at,
+        tableName: 'gatepass',
+        recordId: g.id,
+        action: 'delete',
+        requestedBy: enteredBy,
+        apply: async () => {
+          const { error: dErr } = await supabase.from('gatepass').delete().eq('id', g.id)
+          if (dErr) throw dErr
+        },
+      })
+      setMessage(result === 'applied' ? 'Gatepass deleted' : 'Delete queued for CEO approval')
+      if (viewGatepass?.id === g.id) setViewGatepass(null)
+      await loadChallans()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Delete failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="screen">
       <header className="screen-header">
@@ -279,6 +380,37 @@ export function DispatchScreen({ initialSub = 'folding' }: Props) {
             <input className="num" type="number" value={rolls} onChange={(e) => setRolls(e.target.value)} />
           </label>
           <button type="submit" className="primary-save" disabled={busy}>Save</button>
+
+          <h2 className="section-title">Recent folding</h2>
+          <div className="list">
+            {foldingEntries.slice(0, 8).map((f) => (
+              <article key={String(f.id)} className="card-row surface row-top">
+                <div>
+                  <strong>{String(f.dno || '—')}</strong>
+                  <div className="text-muted">
+                    {Number(f.meter_folded || 0)} m · {Number(f.rolls || 0)} rolls
+                  </div>
+                </div>
+                <RecordActions
+                  busy={busy}
+                  canEdit={false}
+                  onView={() => setViewFolding(f)}
+                  onDelete={() => void handleDeleteFolding(f)}
+                />
+              </article>
+            ))}
+            {!foldingEntries.length ? <p className="text-muted">No folding entries</p> : null}
+          </div>
+
+          {viewFolding ? (
+            <article className="card-row surface form-stack">
+              <div className="row-top">
+                <strong>Folding detail</strong>
+                <button type="button" className="btn-ghost" onClick={() => setViewFolding(null)}>Close</button>
+              </div>
+              <pre className="payload-preview">{JSON.stringify(viewFolding, null, 2)}</pre>
+            </article>
+          ) : null}
         </form>
       ) : null}
 
@@ -386,14 +518,32 @@ export function DispatchScreen({ initialSub = 'folding' }: Props) {
           <h2 className="section-title">Recent</h2>
           <div className="list">
             {challans.slice(0, 8).map((c) => (
-              <article key={c.id} className="card-row surface">
-                <strong>{c.challan_no}</strong>
-                <div className="text-muted">
-                  {c.party} · {c.meter}m · ₹<span className="num">{Number(c.total).toFixed(2)}</span>
+              <article key={c.id} className="card-row surface row-top">
+                <div>
+                  <strong>{c.challan_no}</strong>
+                  <div className="text-muted">
+                    {c.party} · {c.meter}m · ₹<span className="num">{Number(c.total).toFixed(2)}</span>
+                  </div>
                 </div>
+                <RecordActions
+                  busy={busy}
+                  canEdit={false}
+                  onView={() => setViewChallan(c)}
+                  onDelete={() => void handleDeleteChallan(c)}
+                />
               </article>
             ))}
           </div>
+
+          {viewChallan ? (
+            <article className="card-row surface form-stack">
+              <div className="row-top">
+                <strong>Challan detail</strong>
+                <button type="button" className="btn-ghost" onClick={() => setViewChallan(null)}>Close</button>
+              </div>
+              <pre className="payload-preview">{JSON.stringify(viewChallan, null, 2)}</pre>
+            </article>
+          ) : null}
         </form>
       ) : null}
 
@@ -477,16 +627,55 @@ export function DispatchScreen({ initialSub = 'folding' }: Props) {
               <h2 className="section-title">Pending sign-off</h2>
               <div className="list">
                 {pendingGp.map((g) => (
-                  <article key={g.id} className="card-row surface">
-                    <strong>{g.gatepass_no ?? g.id.slice(0, 8)}</strong>
-                    <div className="text-muted">
-                      {g.tempo_driver ?? '—'} · {g.vehicle_no ?? '—'} · driver{' '}
-                      {g.driver_signed ? '✓' : '…'} · recv {g.received_signed ? '✓' : '…'}
+                  <article key={g.id} className="card-row surface row-top">
+                    <div>
+                      <strong>{g.gatepass_no ?? g.id.slice(0, 8)}</strong>
+                      <div className="text-muted">
+                        {g.tempo_driver ?? '—'} · {g.vehicle_no ?? '—'} · driver{' '}
+                        {g.driver_signed ? '✓' : '…'} · recv {g.received_signed ? '✓' : '…'}
+                      </div>
                     </div>
+                    <RecordActions
+                      busy={busy}
+                      canEdit={false}
+                      onView={() => setViewGatepass(g)}
+                      onDelete={() => void handleDeleteGatepass(g)}
+                    />
                   </article>
                 ))}
               </div>
             </>
+          ) : null}
+
+          <h2 className="section-title">Recent gatepass</h2>
+          <div className="list">
+            {recentGp.slice(0, 8).map((g) => (
+              <article key={g.id} className="card-row surface row-top">
+                <div>
+                  <strong>{g.gatepass_no ?? g.id.slice(0, 8)}</strong>
+                  <div className="text-muted">
+                    {g.tempo_driver ?? '—'} · {g.vehicle_no ?? '—'}
+                  </div>
+                </div>
+                <RecordActions
+                  busy={busy}
+                  canEdit={false}
+                  onView={() => setViewGatepass(g)}
+                  onDelete={() => void handleDeleteGatepass(g)}
+                />
+              </article>
+            ))}
+            {!recentGp.length ? <p className="text-muted">No gatepass entries</p> : null}
+          </div>
+
+          {viewGatepass ? (
+            <article className="card-row surface form-stack">
+              <div className="row-top">
+                <strong>Gatepass detail</strong>
+                <button type="button" className="btn-ghost" onClick={() => setViewGatepass(null)}>Close</button>
+              </div>
+              <pre className="payload-preview">{JSON.stringify(viewGatepass, null, 2)}</pre>
+            </article>
           ) : null}
         </form>
       ) : null}

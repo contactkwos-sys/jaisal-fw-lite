@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { RecordActions } from '../components/RecordActions'
 import { SubTabs } from '../components/SubTabs'
 import { useAuth } from '../lib/auth'
 import type { GebReading } from '../lib/database.types'
 import { todayISO } from '../lib/mutate'
 import { applyEditDeleteOrQueue } from '../lib/pendingApprovals'
+import { confirmDeleteRecord } from '../lib/recordCrud'
 import { supabase } from '../lib/supabase'
 
 type TabId = 'entry' | 'list' | 'graph'
@@ -22,6 +24,8 @@ export function GebReadingScreen() {
   const [meterReading, setMeterReading] = useState('')
   const [previousReading, setPreviousReading] = useState(0)
   const [rate, setRate] = useState(String(DEFAULT_RATE))
+  const [editId, setEditId] = useState<string | null>(null)
+  const [viewOnly, setViewOnly] = useState(false)
 
   const enteredBy = profile?.full_name || profile?.roles?.role_name || 'Unknown'
 
@@ -35,13 +39,13 @@ export function GebReadingScreen() {
     if (err) throw err
     const list = (data as GebReading[]) ?? []
     setRows(list)
-    if (list[0]) {
+    if (!editId && list[0]) {
       setPreviousReading(Number(list[0].meter_reading) || 0)
       setRate(String(list[0].rate_per_unit ?? DEFAULT_RATE))
-    } else {
+    } else if (!editId && !list.length) {
       setPreviousReading(0)
     }
-  }, [])
+  }, [editId])
 
   useEffect(() => {
     void load().catch((e: Error) => setError(e.message))
@@ -65,9 +69,39 @@ export function GebReadingScreen() {
 
   const maxUnits = Math.max(1, ...chartRows.map((c) => c.units))
 
+  function openView(row: GebReading) {
+    setViewOnly(true)
+    setEditId(row.id)
+    setReadingDate(row.reading_date)
+    setMeterReading(String(row.meter_reading))
+    setPreviousReading(Number(row.previous_reading) || 0)
+    setRate(String(row.rate_per_unit ?? DEFAULT_RATE))
+    setTab('entry')
+  }
+
+  function openEdit(row: GebReading) {
+    setViewOnly(false)
+    setEditId(row.id)
+    setReadingDate(row.reading_date)
+    setMeterReading(String(row.meter_reading))
+    setPreviousReading(Number(row.previous_reading) || 0)
+    setRate(String(row.rate_per_unit ?? DEFAULT_RATE))
+    setTab('entry')
+  }
+
+  function resetForm() {
+    setEditId(null)
+    setViewOnly(false)
+    setMeterReading('')
+    if (rows[0]) {
+      setPreviousReading(Number(rows[0].meter_reading) || 0)
+      setRate(String(rows[0].rate_per_unit ?? DEFAULT_RATE))
+    }
+  }
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
-    if (!profile) return
+    if (!profile || viewOnly) return
     if (current <= 0) {
       setError('Enter meter reading')
       return
@@ -80,7 +114,7 @@ export function GebReadingScreen() {
     setError(null)
     setMessage(null)
     try {
-      const { error: iErr } = await supabase.from('geb_readings').insert({
+      const payload = {
         reading_date: readingDate,
         meter_reading: current,
         previous_reading: previousReading,
@@ -88,10 +122,29 @@ export function GebReadingScreen() {
         rate_per_unit: rateNum,
         amount,
         entered_by: enteredBy,
-      })
-      if (iErr) throw iErr
-      setMessage('GEB reading saved')
-      setMeterReading('')
+      }
+      if (editId) {
+        const row = rows.find((r) => r.id === editId)
+        const result = await applyEditDeleteOrQueue({
+          isCeo,
+          createdAt: row?.created_at || new Date().toISOString(),
+          tableName: 'geb_readings',
+          recordId: editId,
+          action: 'edit',
+          requestedBy: enteredBy,
+          newData: payload,
+          apply: async () => {
+            const { error: uErr } = await supabase.from('geb_readings').update(payload).eq('id', editId)
+            if (uErr) throw uErr
+          },
+        })
+        setMessage(result === 'applied' ? 'Reading updated' : 'Edit queued for CEO approval')
+      } else {
+        const { error: iErr } = await supabase.from('geb_readings').insert(payload)
+        if (iErr) throw iErr
+        setMessage('GEB reading saved')
+      }
+      resetForm()
       setTab('list')
       await load()
     } catch (err) {
@@ -103,7 +156,7 @@ export function GebReadingScreen() {
 
   async function handleDelete(row: GebReading) {
     if (!profile) return
-    if (!window.confirm(`Delete reading for ${row.reading_date}?`)) return
+    if (!confirmDeleteRecord({ label: row.reading_date })) return
     setBusy(true)
     try {
       const result = await applyEditDeleteOrQueue({
@@ -119,6 +172,7 @@ export function GebReadingScreen() {
         },
       })
       setMessage(result === 'applied' ? 'Deleted' : 'Delete queued for CEO approval')
+      if (editId === row.id) resetForm()
       await load()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Delete failed')
@@ -148,9 +202,23 @@ export function GebReadingScreen() {
 
       {tab === 'entry' ? (
         <form className="form-stack" onSubmit={(e) => void handleSave(e)}>
+          {editId ? (
+            <p className="text-muted2">
+              {viewOnly ? 'Viewing reading' : 'Editing reading'} ·{' '}
+              <button type="button" className="btn-ghost" onClick={resetForm}>
+                {viewOnly ? 'Close' : 'Cancel edit'}
+              </button>
+            </p>
+          ) : null}
           <label className="field">
             <span>Reading date</span>
-            <input type="date" value={readingDate} onChange={(e) => setReadingDate(e.target.value)} required />
+            <input
+              type="date"
+              value={readingDate}
+              onChange={(e) => setReadingDate(e.target.value)}
+              required
+              readOnly={viewOnly}
+            />
           </label>
           <label className="field">
             <span>Previous reading (auto)</span>
@@ -165,6 +233,7 @@ export function GebReadingScreen() {
               value={meterReading}
               onChange={(e) => setMeterReading(e.target.value)}
               required
+              readOnly={viewOnly}
             />
           </label>
           <label className="field">
@@ -173,15 +242,24 @@ export function GebReadingScreen() {
           </label>
           <label className="field">
             <span>Rate per unit</span>
-            <input className="num" type="number" step="0.01" value={rate} onChange={(e) => setRate(e.target.value)} />
+            <input
+              className="num"
+              type="number"
+              step="0.01"
+              value={rate}
+              onChange={(e) => setRate(e.target.value)}
+              readOnly={viewOnly}
+            />
           </label>
           <label className="field">
             <span>Amount (auto)</span>
             <input className="num" type="number" value={amount.toFixed(2)} readOnly />
           </label>
-          <button type="submit" disabled={busy}>
-            {busy ? 'Saving…' : 'Save reading'}
-          </button>
+          {!viewOnly ? (
+            <button type="submit" disabled={busy}>
+              {busy ? 'Saving…' : editId ? 'Update reading' : 'Save reading'}
+            </button>
+          ) : null}
         </form>
       ) : null}
 
@@ -198,9 +276,12 @@ export function GebReadingScreen() {
                   Prev {row.previous_reading} · Rate {row.rate_per_unit} · {row.entered_by}
                 </div>
               </div>
-              <button type="button" className="btn-ghost icon-btn" disabled={busy} onClick={() => void handleDelete(row)}>
-                Del
-              </button>
+              <RecordActions
+                busy={busy}
+                onView={() => openView(row)}
+                onEdit={() => openEdit(row)}
+                onDelete={() => void handleDelete(row)}
+              />
             </article>
           ))}
           {!rows.length ? <p className="text-muted">No readings yet</p> : null}

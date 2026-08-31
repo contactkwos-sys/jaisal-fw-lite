@@ -3,6 +3,7 @@
  * Syncs into existing Warp / Weft / Purchase / Maintenance modules.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { RecordActions } from '../components/RecordActions'
 import { SubTabs } from '../components/SubTabs'
 import { useAuth } from '../lib/auth'
 import { MACHINES } from '../lib/database.types'
@@ -35,6 +36,7 @@ import {
   voidSecurityEntry,
   uploadSiPhotos,
 } from '../lib/securityInventory'
+import { confirmDeleteRecord } from '../lib/recordCrud'
 import { supabase } from '../lib/supabase'
 import type { NavTarget } from '../lib/nav'
 
@@ -109,6 +111,7 @@ export function SecurityInventoryScreen({ initialSub = 'dashboard', onSubChange 
   const [filters, setFilters] = useState<SiFilters>(emptySiFilters())
   const [parties, setParties] = useState<string[]>([])
   const [pipes, setPipes] = useState<Array<{ id: string; pipe_no: string; yarn_quality: string | null }>>([])
+  const [viewEntry, setViewEntry] = useState<SecurityInventoryEntry | null>(null)
 
   const userName = profile?.full_name || roleName || 'Security'
   const actor = useMemo(
@@ -238,6 +241,8 @@ export function SecurityInventoryScreen({ initialSub = 'dashboard', onSubChange 
           parties={parties}
           pipes={pipes}
           entries={entries.filter((e) => e.entry_type === 'warp_inward' || e.entry_type === 'warp_outward')}
+          onViewEntry={setViewEntry}
+          onVoidEntry={(id, reason) => withSave(() => voidSecurityEntry(id, reason, actor), 'Entry voided')}
           onSaveIn={(payload) =>
             withSave(() => saveWarpInward({ ...payload, entry_date: payload.entry_date || date, shift }, actor), `Saved ${payload.challan_no || 'Warp Inward'} → Warp Yarn Management`)
           }
@@ -254,6 +259,8 @@ export function SecurityInventoryScreen({ initialSub = 'dashboard', onSubChange 
           busy={busy}
           parties={parties}
           entries={entries.filter((e) => e.entry_type === 'weft_inward')}
+          onViewEntry={setViewEntry}
+          onVoidEntry={(id, reason) => withSave(() => voidSecurityEntry(id, reason, actor), 'Entry voided')}
           onSave={(payload) =>
             withSave(() => saveWeftInward({ ...payload, entry_date: payload.entry_date || date, shift }, actor), 'Weft Inward saved · Yarn stock updated')
           }
@@ -268,6 +275,8 @@ export function SecurityInventoryScreen({ initialSub = 'dashboard', onSubChange 
           parties={parties}
           items={items.filter((i) => i.category === 'maintenance')}
           entries={entries.filter((e) => e.entry_type === 'maint_inward')}
+          onViewEntry={setViewEntry}
+          onVoidEntry={(id, reason) => withSave(() => voidSecurityEntry(id, reason, actor), 'Entry voided')}
           onSave={(payload) =>
             withSave(() => saveMaintInward({ ...payload, entry_date: payload.entry_date || date, shift }, actor), 'Maintenance Inward saved · Store stock updated')
           }
@@ -282,6 +291,8 @@ export function SecurityInventoryScreen({ initialSub = 'dashboard', onSubChange 
           parties={parties}
           items={items.filter((i) => i.category === 'maintenance')}
           entries={entries.filter((e) => e.entry_type === 'maint_outward' || e.entry_type === 'maint_return')}
+          onViewEntry={setViewEntry}
+          onVoidEntry={(id, reason) => withSave(() => voidSecurityEntry(id, reason, actor), 'Entry voided')}
           onSaveOut={(payload) =>
             withSave(() => saveMaintOutward({ ...payload, entry_date: payload.entry_date || date, shift }, actor), 'Maintenance Outward saved · Pending repair updated')
           }
@@ -300,6 +311,8 @@ export function SecurityInventoryScreen({ initialSub = 'dashboard', onSubChange 
           parties={parties}
           items={items.filter((i) => i.category === (sub === 'others' ? 'other' : 'general') || i.category === 'general')}
           entries={entries.filter((e) => e.entry_type === (sub === 'others' ? 'other' : 'general_inward'))}
+          onViewEntry={setViewEntry}
+          onVoidEntry={(id, reason) => withSave(() => voidSecurityEntry(id, reason, actor), 'Entry voided')}
           onSave={(payload) =>
             withSave(
               () =>
@@ -317,6 +330,7 @@ export function SecurityInventoryScreen({ initialSub = 'dashboard', onSubChange 
         <PendingPanel
           entries={entries}
           onVoid={(id, reason) => withSave(() => voidSecurityEntry(id, reason, actor), 'Entry voided')}
+          onView={(entry) => setViewEntry(entry)}
           busy={busy}
         />
       ) : null}
@@ -330,7 +344,20 @@ export function SecurityInventoryScreen({ initialSub = 'dashboard', onSubChange 
           setFilters={setFilters}
           date={date}
           shift={shift}
+          onViewEntry={setViewEntry}
+          onVoidEntry={(id, reason) => withSave(() => voidSecurityEntry(id, reason, actor), 'Entry voided')}
+          busy={busy}
         />
+      ) : null}
+
+      {viewEntry ? (
+        <article className="si-panel si-mt">
+          <div className="si-panel-head">
+            <h3>Entry detail · {viewEntry.entry_no}</h3>
+            <button type="button" className="btn-link" onClick={() => setViewEntry(null)}>Close</button>
+          </div>
+          <pre className="payload-preview">{JSON.stringify(viewEntry, null, 2)}</pre>
+        </article>
       ) : null}
 
       <p className="si-footnote">
@@ -677,6 +704,8 @@ function WarpPanel({
   entries,
   onSaveIn,
   onSaveOut,
+  onViewEntry,
+  onVoidEntry,
 }: {
   date: string
   shift: string
@@ -686,6 +715,8 @@ function WarpPanel({
   entries: SecurityInventoryEntry[]
   onSaveIn: (p: Parameters<typeof saveWarpInward>[0]) => void
   onSaveOut: (p: Parameters<typeof saveWarpOutward>[0]) => void
+  onViewEntry?: (e: SecurityInventoryEntry) => void
+  onVoidEntry?: (id: string, reason: string) => void
 }) {
   const [mode, setMode] = useState<'inward' | 'outward'>('inward')
   const [form, setForm] = useState({
@@ -861,7 +892,7 @@ function WarpPanel({
           </button>
         </div>
       </form>
-      <EntryList entries={entries} />
+      <EntryList entries={entries} busy={busy} onView={onViewEntry} onVoid={onVoidEntry} />
     </div>
   )
 }
@@ -883,7 +914,17 @@ function Field({
   )
 }
 
-function EntryList({ entries }: { entries: SecurityInventoryEntry[] }) {
+function EntryList({
+  entries,
+  busy,
+  onView,
+  onVoid,
+}: {
+  entries: SecurityInventoryEntry[]
+  busy?: boolean
+  onView?: (e: SecurityInventoryEntry) => void
+  onVoid?: (id: string, reason: string) => void
+}) {
   return (
     <section className="si-panel si-mt">
       <div className="si-panel-head">
@@ -891,7 +932,7 @@ function EntryList({ entries }: { entries: SecurityInventoryEntry[] }) {
       </div>
       <div className="si-cards-mobile">
         {entries.slice(0, 20).map((r) => (
-          <article key={r.id} className="si-card-row">
+          <article key={r.id} className="si-card-row row-top">
             <div>
               <strong>{r.entry_no}</strong>
               <div className="text-muted">
@@ -901,6 +942,24 @@ function EntryList({ entries }: { entries: SecurityInventoryEntry[] }) {
             <div className="si-card-meta">
               <span>{formatQty(r.quantity)} {r.unit}</span>
               <span className={statusBadgeClass(r.status)}>{r.status.replace(/_/g, ' ')}</span>
+              {onView || onVoid ? (
+                <RecordActions
+                  busy={busy}
+                  canEdit={false}
+                  deleteLabel="Void"
+                  onView={onView ? () => onView(r) : undefined}
+                  onDelete={
+                    onVoid && r.status !== 'void'
+                      ? () => {
+                          if (!confirmDeleteRecord({ label: r.entry_no, message: `Void entry ${r.entry_no}?` })) return
+                          const reason = window.prompt('Void reason?') || 'Voided'
+                          onVoid(r.id, reason)
+                        }
+                      : undefined
+                  }
+                  canDelete={r.status !== 'void'}
+                />
+              ) : null}
             </div>
           </article>
         ))}
@@ -919,6 +978,8 @@ function WeftPanel({
   parties,
   entries,
   onSave,
+  onViewEntry,
+  onVoidEntry,
 }: {
   date: string
   shift: string
@@ -926,6 +987,8 @@ function WeftPanel({
   parties: string[]
   entries: SecurityInventoryEntry[]
   onSave: (p: Parameters<typeof saveWeftInward>[0]) => void
+  onViewEntry?: (e: SecurityInventoryEntry) => void
+  onVoidEntry?: (id: string, reason: string) => void
 }) {
   const [form, setForm] = useState({
     entry_date: date,
@@ -1219,7 +1282,7 @@ function WeftPanel({
           </button>
         </div>
       </form>
-      <EntryList entries={entries} />
+      <EntryList entries={entries} busy={busy} onView={onViewEntry} onVoid={onVoidEntry} />
     </div>
   )
 }
@@ -1234,6 +1297,8 @@ function MaintInPanel({
   items,
   entries,
   onSave,
+  onViewEntry,
+  onVoidEntry,
 }: {
   date: string
   shift: string
@@ -1242,6 +1307,8 @@ function MaintInPanel({
   items: InventoryItemMaster[]
   entries: SecurityInventoryEntry[]
   onSave: (p: Parameters<typeof saveMaintInward>[0]) => void
+  onViewEntry?: (e: SecurityInventoryEntry) => void
+  onVoidEntry?: (id: string, reason: string) => void
 }) {
   const [form, setForm] = useState({
     entry_date: date,
@@ -1409,7 +1476,7 @@ function MaintInPanel({
           </button>
         </div>
       </form>
-      <EntryList entries={entries} />
+      <EntryList entries={entries} busy={busy} onView={onViewEntry} onVoid={onVoidEntry} />
     </div>
   )
 }
@@ -1425,6 +1492,8 @@ function MaintOutPanel({
   entries,
   onSaveOut,
   onSaveReturn,
+  onViewEntry,
+  onVoidEntry,
 }: {
   date: string
   shift: string
@@ -1434,6 +1503,8 @@ function MaintOutPanel({
   entries: SecurityInventoryEntry[]
   onSaveOut: (p: Parameters<typeof saveMaintOutward>[0]) => void
   onSaveReturn: (p: Parameters<typeof saveMaintReturn>[0]) => void
+  onViewEntry?: (e: SecurityInventoryEntry) => void
+  onVoidEntry?: (id: string, reason: string) => void
 }) {
   const [mode, setMode] = useState<'out' | 'return'>('out')
   const [form, setForm] = useState({
@@ -1670,6 +1741,7 @@ function MaintOutPanel({
           </table>
         </div>
       </section>
+      <EntryList entries={entries} busy={busy} onView={onViewEntry} onVoid={onVoidEntry} />
     </div>
   )
 }
@@ -1685,6 +1757,8 @@ function GeneralPanel({
   items,
   entries,
   onSave,
+  onViewEntry,
+  onVoidEntry,
 }: {
   mode: 'general' | 'other'
   date: string
@@ -1694,6 +1768,8 @@ function GeneralPanel({
   items: InventoryItemMaster[]
   entries: SecurityInventoryEntry[]
   onSave: (p: Parameters<typeof saveGeneralInward>[0]) => void
+  onViewEntry?: (e: SecurityInventoryEntry) => void
+  onVoidEntry?: (id: string, reason: string) => void
 }) {
   const [form, setForm] = useState({
     entry_date: date,
@@ -1912,7 +1988,7 @@ function GeneralPanel({
           </button>
         </div>
       </form>
-      <EntryList entries={entries} />
+      <EntryList entries={entries} busy={busy} onView={onViewEntry} onVoid={onVoidEntry} />
     </div>
   )
 }
@@ -1922,10 +1998,12 @@ function GeneralPanel({
 function PendingPanel({
   entries,
   onVoid,
+  onView,
   busy,
 }: {
   entries: SecurityInventoryEntry[]
   onVoid: (id: string, reason: string) => void
+  onView?: (e: SecurityInventoryEntry) => void
   busy: boolean
 }) {
   const pending = entries.filter((e) =>
@@ -1972,17 +2050,22 @@ function PendingPanel({
                     <span className={statusBadgeClass(st)}>{st.replace(/_/g, ' ')}</span>
                   </td>
                   <td>
-                    <button
-                      type="button"
-                      className="btn-link"
-                      disabled={busy || r.status === 'void'}
-                      onClick={() => {
-                        const reason = window.prompt('Void reason?')
-                        if (reason) onVoid(r.id, reason)
-                      }}
-                    >
-                      Void
-                    </button>
+                    <RecordActions
+                      busy={busy}
+                      canEdit={false}
+                      deleteLabel="Void"
+                      onView={onView ? () => onView(r) : undefined}
+                      onDelete={
+                        r.status !== 'void'
+                          ? () => {
+                              if (!confirmDeleteRecord({ label: r.entry_no, message: `Void entry ${r.entry_no}?` })) return
+                              const reason = window.prompt('Void reason?')
+                              if (reason) onVoid(r.id, reason)
+                            }
+                          : undefined
+                      }
+                      canDelete={r.status !== 'void'}
+                    />
                   </td>
                 </tr>
               )
@@ -2064,12 +2147,18 @@ function ReportsPanel({
   setFilters,
   date,
   shift,
+  onViewEntry,
+  onVoidEntry,
+  busy,
 }: {
   entries: SecurityInventoryEntry[]
   filters: SiFilters
   setFilters: (f: SiFilters) => void
   date: string
   shift: string
+  onViewEntry?: (e: SecurityInventoryEntry) => void
+  onVoidEntry?: (id: string, reason: string) => void
+  busy?: boolean
 }) {
   const daily = entries.filter((e) => e.entry_date === (filters.dateFrom || date) && e.status !== 'void')
 
@@ -2169,7 +2258,7 @@ function ReportsPanel({
         </button>
       </div>
 
-      <EntryList entries={entries} />
+      <EntryList entries={entries} busy={busy} onView={onViewEntry} onVoid={onVoidEntry} />
     </div>
   )
 }

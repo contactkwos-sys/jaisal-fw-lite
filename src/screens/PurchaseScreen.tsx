@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { InputModePanel } from '../components/InputModePanel'
+import { RecordActions } from '../components/RecordActions'
 import { PurchasePhotosPanel } from './NotebookScreen'
 import { SubTabs } from '../components/SubTabs'
 import { useAuth } from '../lib/auth'
 import type { RepairingTracker } from '../lib/database.types'
 import { applyOrQueue, todayISO, uploadPurchasePhoto } from '../lib/mutate'
+import { applyEditDeleteOrQueue } from '../lib/pendingApprovals'
+import { confirmDeleteRecord, cannotDeleteUsedMessage } from '../lib/recordCrud'
 import { supabase } from '../lib/supabase'
 
 type Sub = 'general' | 'weft' | 'maint_in' | 'repair_inv' | 'report'
@@ -158,6 +161,8 @@ export function PurchaseScreen({ initialSub }: Props) {
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
   const [detail, setDetail] = useState<ReportRow | null>(null)
+
+  const enteredBy = profile?.full_name || profile?.id || 'Unknown'
 
   const gSubtotal = useMemo(() => gItems.reduce((s, r) => s + genAmount(r), 0), [gItems])
   const gGrand = useMemo(() => gSubtotal * (1 + gGst / 100), [gSubtotal, gGst])
@@ -634,6 +639,57 @@ export function PurchaseScreen({ initialSub }: Props) {
     }
   }
 
+  async function handleDeleteReport(row: ReportRow) {
+    if (!profile) return
+    if (row.type === 'Yarn Stock') {
+      setError(cannotDeleteUsedMessage('yarn stock row', 'yarn ledger / purchases'))
+      return
+    }
+    const label = `${row.type} · ${row.party}`
+    const linked = row.type === 'Repair Inv' && Boolean(row.detail.repairing_tracker_id)
+    if (!confirmDeleteRecord({ label, linked })) return
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const tableMap: Record<ReportRow['type'], string | null> = {
+        General: 'general_purchases',
+        Weft: 'weft_purchases',
+        'Maint In': 'maintenance_inward',
+        'Repair Inv': 'maintenance_repair_invoices',
+        'Yarn Stock': null,
+      }
+      const tableName = tableMap[row.type]
+      if (!tableName) return
+      const result = await applyEditDeleteOrQueue({
+        isCeo,
+        createdAt: row.created_at,
+        tableName,
+        recordId: row.id,
+        action: 'delete',
+        requestedBy: enteredBy,
+        apply: async () => {
+          if (row.type === 'General') {
+            await supabase.from('general_purchase_items').delete().eq('purchase_id', row.id)
+          } else if (row.type === 'Weft') {
+            await supabase.from('weft_purchase_items').delete().eq('purchase_id', row.id)
+          } else if (row.type === 'Maint In') {
+            await supabase.from('maintenance_inward_items').delete().eq('inward_id', row.id)
+          }
+          const { error: dErr } = await supabase.from(tableName).delete().eq('id', row.id)
+          if (dErr) throw dErr
+        },
+      })
+      setMessage(result === 'applied' ? 'Deleted' : 'Delete queued for CEO approval')
+      if (detail?.id === row.id) setDetail(null)
+      await loadReport()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Delete failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const filteredReport = reportRows.filter((row) => {
     if (filterType !== 'all' && row.type !== filterType) return false
     if (fromDate && row.date < fromDate) return false
@@ -1091,34 +1147,34 @@ export function PurchaseScreen({ initialSub }: Props) {
 
           <div className="list">
             {filteredReport.map((row) => (
-              <button
-                key={`${row.type}-${row.id}`}
-                type="button"
-                className="card-row surface"
-                style={{ textAlign: 'left', width: '100%' }}
-                onClick={() => setDetail(row)}
-              >
-                <div className="row-top">
+              <article key={`${row.type}-${row.id}`} className="card-row surface row-top">
+                <div>
                   <strong>
                     {row.type} · {row.party}
                   </strong>
+                  <div className="text-muted">
+                    {row.date} · {row.docNo}
+                    {row.type === 'Yarn Stock'
+                      ? ` · Open ${Number(row.openingStockKg ?? 0).toLocaleString('en-IN')} ${row.unit || 'KG'}`
+                      : ''}
+                  </div>
                   {row.type === 'Yarn Stock' ? (
-                    <span className="num text-weft">
-                      Open {Number(row.openingStockKg ?? 0).toLocaleString('en-IN')}{' '}
-                      {row.unit || 'KG'} · Now{' '}
-                      {Number(row.currentStockKg ?? 0).toLocaleString('en-IN')} {row.unit || 'KG'}
-                    </span>
+                    <div className="num text-weft">
+                      Now {Number(row.currentStockKg ?? 0).toLocaleString('en-IN')} {row.unit || 'KG'} · Value ₹
+                      {money(row.grandTotal)}
+                    </div>
                   ) : (
-                    <span className="num text-weft">₹{money(row.grandTotal)}</span>
+                    <div className="num text-weft">₹{money(row.grandTotal)}</div>
                   )}
                 </div>
-                <div className="text-muted">
-                  {row.date} · {row.docNo}
-                  {row.type === 'Yarn Stock'
-                    ? ` · Value ₹${money(row.grandTotal)}`
-                    : ''}
-                </div>
-              </button>
+                <RecordActions
+                  busy={busy}
+                  canEdit={false}
+                  onView={() => setDetail(row)}
+                  onDelete={() => void handleDeleteReport(row)}
+                  canDelete={row.type !== 'Yarn Stock'}
+                />
+              </article>
             ))}
             {!filteredReport.length ? <p className="text-muted">No entries in range</p> : null}
           </div>
