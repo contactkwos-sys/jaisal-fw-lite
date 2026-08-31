@@ -27,15 +27,25 @@ async function shot(page, name) {
   console.log('shot', p)
 }
 
-async function loginAs(page, role, pins) {
-  await page.waitForSelector('.chip', { timeout: 20000 })
-  await page.locator('.chip', { hasText: new RegExp(`^${role}$`) }).click()
-  await page.waitForTimeout(200)
+async function enterPin(page, pins) {
   for (const d of pins) {
     await page.locator('.pin-key', { hasText: new RegExp(`^${d}$`) }).click()
   }
+}
+
+async function tryLogin(page, role, pin) {
+  await page.goto(BASE, { waitUntil: 'networkidle', timeout: 60000 })
+  await page.waitForSelector('.chip', { timeout: 20000 })
+  await page.locator('.chip', { hasText: new RegExp(`^${role}$`) }).click({ force: true })
+  await page.waitForTimeout(250)
+  // clear any partial pin
+  const clear = page.locator('.pin-key', { hasText: /C|Clear|⌫|×/i }).first()
+  if (await clear.count()) {
+    for (let i = 0; i < 4; i++) await clear.click().catch(() => {})
+  }
+  await enterPin(page, pin.split(''))
   await page.getByRole('button', { name: /Login as/i }).click()
-  await page.waitForSelector('.app-shell', { timeout: 25000 })
+  await page.waitForSelector('.app-shell', { timeout: 15000 })
 }
 
 const ctx = await browser.newContext({
@@ -45,83 +55,87 @@ const ctx = await browser.newContext({
 const page = await ctx.newPage()
 page.on('pageerror', (err) => console.log('PAGEERR', err.message))
 
-await page.goto(BASE, { waitUntil: 'networkidle', timeout: 60000 })
-await page.waitForTimeout(800)
-
-// Try Security role first (seed PIN often 0000 / 1234 / 152348 last4 — try common)
-let logged = false
-for (const pin of ['1234', '0000', '3060', '1523']) {
+let roleUsed = null
+for (const [role, pin] of [
+  ['Security', '1234'],
+  ['CEO', '1234'],
+  ['CEO', '3060'],
+]) {
   try {
-    await page.goto(BASE, { waitUntil: 'networkidle', timeout: 60000 })
-    await loginAs(page, 'Security', pin.split(''))
-    logged = true
-    record('security login', true, { pin })
+    await tryLogin(page, role, pin)
+    roleUsed = role
+    record('login', true, { role, pin })
     break
-  } catch {
-    /* try next */
+  } catch (e) {
+    record('login attempt', false, { role, pin, err: String(e.message || e).slice(0, 120) })
   }
 }
 
-if (!logged) {
-  await page.goto(BASE, { waitUntil: 'networkidle', timeout: 60000 })
-  await loginAs(page, 'CEO', ['1', '2', '3', '4'])
-  record('ceo fallback login', true)
-  // Navigate via sidebar to Security → Machine & Production Update
+if (!roleUsed) {
+  await shot(page, 'smp-login-fail')
+  console.log(JSON.stringify(results, null, 2))
+  await browser.close()
+  process.exit(1)
+}
+
+await page.waitForTimeout(600)
+
+// If CEO, open Security module hub then the screen card
+if (roleUsed !== 'Security') {
   await page.locator('.hamburger').click()
-  await page.waitForTimeout(300)
-  const secBtn = page.locator('.side-nav button, .side-nav a, .nav-module-btn', { hasText: /Security/i }).first()
-  if (await secBtn.count()) {
-    await secBtn.click()
-    await page.waitForTimeout(400)
-  }
-  const item = page.getByText(/Machine & Production Update/i).first()
-  if (await item.count()) {
-    await item.click()
-    await page.waitForTimeout(500)
-  }
+  await page.waitForTimeout(400)
+  await page.locator('button.side-nav-item', { hasText: /^Security$/i }).click({ force: true })
+  await page.waitForTimeout(700)
+  // Hub card or any control with the label
+  const hubCard = page.locator('.hub-card, .module-hub button, button, a').filter({ hasText: /Machine & Production Update/i }).first()
+  await hubCard.waitFor({ state: 'attached', timeout: 10000 })
+  await hubCard.evaluate((el) => (el).click())
+  await page.waitForTimeout(600)
 }
 
-await page.waitForTimeout(800)
-const title = await page.locator('h1', { hasText: /Machine/i }).first().textContent().catch(() => null)
-record('screen title visible', !!title && /Machine/.test(title || ''), { title })
+await page.waitForSelector('.smp-screen', { timeout: 15000 })
+await shot(page, 'smp-mobile-initial')
 
-const m1 = page.locator('.smp-machine-btn', { hasText: 'M1' })
-record('M1–M6 grid present', (await page.locator('.smp-machine-btn').count()) === 6)
+const title = await page.locator('.smp-header h1').textContent()
+record('screen title', /Machine/.test(title || ''), { title })
+record('M1–M6 grid', (await page.locator('.smp-machine-btn').count()) === 6)
+record('WhatsApp buttons', (await page.locator('.smp-btn-wa, .smp-btn-wab').count()) === 2)
+
+// Day shift selected by default or toggle
+await page.locator('.smp-shift-toggle button', { hasText: /^Day$/ }).click()
 
 // Stop M3 and M6
-await page.locator('.smp-machine-btn', { hasText: 'M3' }).click()
-await page.locator('.smp-machine-btn', { hasText: 'M6' }).click()
+await page.locator('.smp-machine-btn').filter({ has: page.locator('.smp-machine-no', { hasText: /^M3$/ }) }).click()
+await page.locator('.smp-machine-btn').filter({ has: page.locator('.smp-machine-no', { hasText: /^M6$/ }) }).click()
 await page.waitForTimeout(200)
+record('stop reason UI', (await page.locator('.smp-stop-row').count()) >= 2)
 
-const stopRows = await page.locator('.smp-stop-row').count()
-record('stop reason UI shown', stopRows >= 2, { stopRows })
+await page.locator('.smp-stop-row', { hasText: 'M3' }).locator('.smp-reason-btn', { hasText: /Mechanical/i }).click()
+await page.locator('.smp-stop-row', { hasText: 'M6' }).locator('.smp-reason-btn', { hasText: /Electronic/i }).click()
 
-// Set Mechanical for M3
-const m3Block = page.locator('.smp-stop-row', { hasText: 'M3' })
-await m3Block.locator('.smp-reason-btn', { hasText: /Mechanical/i }).click()
-
-// Add operators
 async function ensureOperator(name) {
-  const chip = page.locator('.smp-op-chip', { hasText: new RegExp(`^${name}$`) })
-  if ((await chip.count()) > 0) return
-  await page.getByRole('button', { name: /\+ Add Operator/i }).click()
+  if ((await page.locator('.smp-op-chip', { hasText: new RegExp(`^${name}$`) }).count()) > 0) return
+  // Close any open add form first
+  if (await page.locator('.smp-add-op-form').count()) {
+    await page.locator('.smp-btn-cancel-op').click().catch(() => {})
+    await page.waitForTimeout(200)
+  }
+  await page.locator('button.smp-add-op').click()
   await page.locator('.smp-add-op-form input').fill(name)
   await page.locator('.smp-btn-save-op').click()
-  await page.waitForTimeout(500)
+  await page.waitForTimeout(900)
+  record(`operator saved ${name}`, (await page.locator('.smp-op-chip', { hasText: new RegExp(`^${name}$`) }).count()) > 0)
 }
 
 await ensureOperator('Ramesh')
 await ensureOperator('Suresh')
 await ensureOperator('Amit')
 
-// Assign operators + production on running machines
-const prodRows = page.locator('.smp-prod-row')
-const count = await prodRows.count()
-record('running production rows', count === 4, { count })
+record('running rows', (await page.locator('.smp-prod-row').count()) === 4)
 
 const fillRow = async (machine, op, meters) => {
-  const row = page.locator('.smp-prod-row', { hasText: machine })
-  await row.locator('.smp-op-chip', { hasText: new RegExp(`^${op}$`) }).click()
+  const row = page.locator('.smp-prod-row').filter({ has: page.locator('.smp-prod-machine', { hasText: machine }) })
+  await row.locator('.smp-op-chip', { hasText: new RegExp(`^${op}$`) }).first().click()
   await row.locator('input[type="number"]').fill(String(meters))
 }
 
@@ -133,25 +147,67 @@ await page.waitForTimeout(200)
 
 const totalText = await page.locator('.smp-total strong').textContent()
 record('total 4850', /4,?850/.test(totalText || ''), { totalText })
-
 await shot(page, 'smp-mobile-filled')
 
-// Draft persistence: reload
+// Night shift toggle works
+await page.locator('.smp-shift-toggle button', { hasText: /^Night$/ }).click()
+record('night shift toggle', await page.locator('.smp-shift-toggle button.is-active', { hasText: /^Night$/ }).count() === 1)
+await page.locator('.smp-shift-toggle button', { hasText: /^Day$/ }).click()
+
+// Draft persistence — verify localStorage survives reload (core requirement)
+const draftBefore = await page.evaluate(() => localStorage.getItem('jaisal_security_machine_draft_v1'))
+const opsBefore = await page.evaluate(() => localStorage.getItem('jaisal_security_operators_cache_v1'))
+record('draft written to localStorage', !!(draftBefore && draftBefore.includes('1250')), {
+  len: draftBefore?.length || 0,
+})
+record('operators written to localStorage', !!(opsBefore && opsBefore.includes('Ramesh')), {
+  opsBefore,
+})
+
 await page.reload({ waitUntil: 'networkidle' })
-await page.waitForTimeout(1000)
-// May need re-login if session lost — if login screen, stop draft check
+await page.waitForTimeout(1200)
+
+const draftAfter = await page.evaluate(() => localStorage.getItem('jaisal_security_machine_draft_v1'))
+const opsAfter = await page.evaluate(() => localStorage.getItem('jaisal_security_operators_cache_v1'))
+record('draft preserved after refresh', !!(draftAfter && draftAfter.includes('1250') && draftAfter.includes('Ramesh')))
+record('operators remain after refresh', !!(opsAfter && opsAfter.includes('Ramesh') && opsAfter.includes('Amit')))
+
+// Re-open screen if session bounced to login
+if ((await page.locator('.smp-screen').count()) === 0) {
+  try {
+    await tryLogin(page, 'CEO', '1234')
+    await page.locator('.hamburger').click()
+    await page.waitForTimeout(400)
+    await page.locator('button.side-nav-item', { hasText: /^Security$/i }).click({ force: true })
+    await page.waitForTimeout(700)
+    const hubCard = page.locator('.hub-card, .module-hub button, button, a').filter({ hasText: /Machine & Production Update/i }).first()
+    await hubCard.evaluate((el) => el.click())
+    await page.waitForTimeout(600)
+  } catch (e) {
+    record('reopen after refresh', false, { err: String(e.message || e).slice(0, 100) })
+  }
+}
+
 if (await page.locator('.smp-screen').count()) {
   const after = await page.locator('.smp-total strong').textContent()
-  record('draft preserved after refresh', /4,?850/.test(after || ''), { after })
-  const ops = await page.locator('.smp-op-chip').allTextContents()
-  record('operators remain after refresh', ops.includes('Ramesh') && ops.includes('Suresh') && ops.includes('Amit'), { ops })
+  record('UI shows restored draft', /4,?850/.test(after || ''), { after })
 } else {
-  record('draft preserved after refresh', false, { reason: 'session lost on reload' })
+  record('UI shows restored draft', false, { reason: 'screen not open; localStorage checks above still apply' })
 }
 
 await shot(page, 'smp-mobile-after-refresh')
 
+// iPhone width already 390 — also test 360
+await page.setViewportSize({ width: 360, height: 740 })
+await page.waitForTimeout(300)
+record('no horizontal overflow', await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 2))
+await shot(page, 'smp-mobile-360')
+
 const failed = results.filter((r) => !r.pass)
 console.log(JSON.stringify(results, null, 2))
 await browser.close()
-if (failed.length) process.exit(1)
+if (failed.length) {
+  console.error(`${failed.length} failed`)
+  process.exit(1)
+}
+console.log('UI smoke passed')

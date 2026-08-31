@@ -11,7 +11,7 @@ import {
   type MainModuleId,
   type NavTarget,
 } from '../lib/nav'
-import { canAccessModule, canAccessSub, isSalesmanRole } from '../lib/permissions'
+import { canAccessModule, canAccessSub, isSalesmanRole, isSecurityRole } from '../lib/permissions'
 import { todayISO } from '../lib/mutate'
 import { GlobalSearch } from './GlobalSearch'
 
@@ -172,6 +172,7 @@ export function AppShell({ active, sub, filter, activeModule, onNavigate, childr
   const pageTitle = titleFor(active, sub, activeModule, filter)
   const roleName = authRoleName || (isCeo ? 'CEO' : 'User')
   const userName = profile?.full_name || roleName
+  const securityOnly = isSecurityRole(roleName) && !isCeo
 
   const modules = MAIN_MODULES.filter((m) => {
     if (isSalesmanRole(roleName) && m.id === 'design-to-order') return false
@@ -322,44 +323,48 @@ export function AppShell({ active, sub, filter, activeModule, onNavigate, childr
       </aside>
 
       <div className="app-content">
-        <div className="content-topbar">
-          <div>
-            <h1 className="content-page-title">{pageTitle}</h1>
-            <div className="content-meta">
-              <span>{formatDate(today)}</span>
-              <span className="meta-dot" aria-hidden="true">
-                ·
-              </span>
-              <span>Day Shift</span>
-              <span className="meta-dot" aria-hidden="true">
-                ·
-              </span>
-              <span>{userName}</span>
+        {securityOnly ? null : (
+          <div className="content-topbar">
+            <div>
+              <h1 className="content-page-title">{pageTitle}</h1>
+              <div className="content-meta">
+                <span>{formatDate(today)}</span>
+                <span className="meta-dot" aria-hidden="true">
+                  ·
+                </span>
+                <span>Day Shift</span>
+                <span className="meta-dot" aria-hidden="true">
+                  ·
+                </span>
+                <span>{userName}</span>
+              </div>
+            </div>
+            <div className="content-top-actions">
+              <GlobalSearch onNavigate={onNavigate} />
             </div>
           </div>
-          <div className="content-top-actions">
-            <GlobalSearch onNavigate={onNavigate} />
-          </div>
-        </div>
-        <main className="app-main">{children}</main>
+        )}
+        <main className={`app-main${securityOnly ? ' smp-security-main' : ''}`}>{children}</main>
       </div>
 
-      <nav className="bottom-nav" aria-label="Quick modules">
-        {bottom.map((mod) => {
-          const isActive = activeModule === mod.id || moduleForScreen(active, sub, filter) === mod.id
-          return (
-            <button
-              key={mod.id}
-              type="button"
-              className={isActive ? 'bottom-nav-item active' : 'bottom-nav-item'}
-              onClick={() => openModule(mod.id)}
-            >
-              <span className="bottom-nav-ico">{ICONS[mod.icon]}</span>
-              <span>{mod.label}</span>
-            </button>
-          )
-        })}
-      </nav>
+      {securityOnly ? null : (
+        <nav className="bottom-nav" aria-label="Quick modules">
+          {bottom.map((mod) => {
+            const isActive = activeModule === mod.id || moduleForScreen(active, sub, filter) === mod.id
+            return (
+              <button
+                key={mod.id}
+                type="button"
+                className={isActive ? 'bottom-nav-item active' : 'bottom-nav-item'}
+                onClick={() => openModule(mod.id)}
+              >
+                <span className="bottom-nav-ico">{ICONS[mod.icon]}</span>
+                <span>{mod.label}</span>
+              </button>
+            )
+          })}
+        </nav>
+      )}
     </div>
   )
 }

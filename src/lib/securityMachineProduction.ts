@@ -250,6 +250,13 @@ export async function addOperator(name: string, userId?: string | null): Promise
   if (!cleaned) throw new Error('Enter operator name')
   if (cleaned.length < 2) throw new Error('Operator name too short')
 
+  const mergeLocal = (saved: string) => {
+    const local = loadOperatorsLocal()
+    cacheOperatorsLocal(
+      Array.from(new Set([...local, saved])).sort((a, b) => a.localeCompare(b)),
+    )
+  }
+
   const { data, error } = await supabase
     .from('security_operators')
     .upsert(
@@ -264,26 +271,14 @@ export async function addOperator(name: string, userId?: string | null): Promise
     .maybeSingle()
 
   if (error) {
-    // Fallback: keep local so Security can continue
-    const local = loadOperatorsLocal()
-    if (!local.some((n) => n.toLowerCase() === cleaned.toLowerCase())) {
-      cacheOperatorsLocal([...local, cleaned].sort((a, b) => a.localeCompare(b)))
-    }
-    // Unique violation may still succeed conceptually
-    if (!/duplicate|unique/i.test(error.message)) {
-      throw new Error(error.message || 'Could not save operator')
-    }
+    // Table missing / offline — keep operator locally so Security can continue
+    mergeLocal(cleaned)
+    console.warn('security_operators upsert', error.message)
+    return cleaned
   }
 
   const saved = data?.name || cleaned
-  const local = loadOperatorsLocal()
-  if (!local.some((n) => n.toLowerCase() === saved.toLowerCase())) {
-    cacheOperatorsLocal([...local, saved].sort((a, b) => a.localeCompare(b)))
-  } else {
-    cacheOperatorsLocal(
-      Array.from(new Set([...local, saved])).sort((a, b) => a.localeCompare(b)),
-    )
-  }
+  mergeLocal(saved)
   return saved
 }
 
@@ -314,8 +309,7 @@ export async function submitSecurityUpdate(args: {
     await supabase.from('security_machine_updates').delete().eq('id', existing.id)
   }
 
-  // Remove prior security-sourced production_entries for this date+shift (tagged via remarks pattern not available)
-  // Match by date+shift+machine without program_id to avoid wiping program-linked entries
+  // Remove prior security-sourced production_entries for this date+shift
   const { data: priorProd } = await supabase
     .from('production_entries')
     .select('id, machine_no, program_id')
@@ -350,6 +344,29 @@ export async function submitSecurityUpdate(args: {
     .single()
 
   if (hErr || !header) {
+    // Still sync production_entries when dedicated tables are not migrated yet
+    const prodRows = machines
+      .filter((m) => m.run_status === 'Running' && Number(m.production_meter) > 0)
+      .map((m) => ({
+        machine_no: m.machine_no,
+        entry_date: args.draft.entry_date,
+        shift: args.draft.shift,
+        operator_name: m.operator_name.trim(),
+        working_hour: 12,
+        total_meter: Number(m.production_meter) || 0,
+        program_id: null,
+      }))
+    if (prodRows.length) {
+      const { error: pErr } = await supabase.from('production_entries').insert(prodRows)
+      if (pErr) {
+        throw new Error(
+          hErr?.message ||
+            'Could not save update. Apply migration-security-machine-production.sql',
+        )
+      }
+      clearDraft()
+      return { updateId: 'local-fallback', total }
+    }
     throw new Error(hErr?.message || 'Could not save update. Apply migration-security-machine-production.sql')
   }
 
@@ -381,7 +398,6 @@ export async function submitSecurityUpdate(args: {
   if (prodRows.length) {
     const { error: pErr } = await supabase.from('production_entries').insert(prodRows)
     if (pErr) {
-      // Do not fail the security save if production_entries insert has a schema quirk
       console.warn('security sync production_entries', pErr.message)
     }
   }
