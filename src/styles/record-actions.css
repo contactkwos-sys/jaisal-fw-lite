@@ -6,6 +6,7 @@
   gap: 0.25rem;
   max-width: 100%;
   position: relative;
+  z-index: 2;
 }
 
 .record-actions-inline {
@@ -18,12 +19,13 @@
 .record-actions-menu {
   display: inline-flex;
   position: relative;
+  z-index: 3;
 }
 
 .record-action-btn,
 .record-action-more {
-  min-height: 32px;
-  min-width: 32px;
+  min-height: 36px;
+  min-width: 36px;
   padding: 0.25rem 0.55rem;
   border: 1px solid var(--line, #dbe3ee);
   border-radius: 6px;
@@ -53,17 +55,17 @@
 }
 
 .record-action-more {
-  font-size: 1.15rem;
+  font-size: 1.25rem;
   line-height: 1;
   letter-spacing: 0.02em;
-  padding: 0.15rem 0.45rem;
+  padding: 0.15rem 0.5rem;
 }
 
 .record-actions-dropdown {
   position: absolute;
   right: 0;
   top: calc(100% + 4px);
-  z-index: 40;
+  z-index: 50;
   min-width: 132px;
   display: flex;
   flex-direction: column;
@@ -79,7 +81,8 @@
   text-align: left;
   border: 0;
   background: transparent;
-  padding: 0.45rem 0.6rem;
+  padding: 0.55rem 0.65rem;
+  min-height: 40px;
   border-radius: 6px;
   font-size: 0.85rem;
   font-weight: 600;
@@ -103,4 +106,15 @@
 /* Keep action column from forcing huge horizontal scroll */
 td .record-actions {
   max-width: 11rem;
+}
+
+/* On narrow screens, pin action cells above sticky content where possible */
+@media (max-width: 899px) {
+  td:has(.record-actions) {
+    position: sticky;
+    right: 0;
+    background: var(--surface, #fff);
+    z-index: 4;
+    box-shadow: -4px 0 8px rgba(15, 23, 42, 0.06);
+  }
 }
