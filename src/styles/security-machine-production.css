@@ -1,0 +1,599 @@
+/* Security Machine & Production Update — mobile-first Security screen */
+
+.smp-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding-bottom: 6.5rem;
+  max-width: 32rem;
+  margin: 0 auto;
+  min-width: 0;
+}
+
+.smp-header {
+  background: linear-gradient(135deg, var(--teal) 0%, var(--teal-deep) 100%);
+  color: #fff;
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem 1.15rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.smp-header h1 {
+  margin: 0;
+  font-size: clamp(1.35rem, 5vw, 1.65rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: #fff;
+}
+
+.smp-header-sub {
+  margin: 0.35rem 0 0;
+  font-size: 0.92rem;
+  opacity: 0.92;
+}
+
+.smp-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
+}
+
+.smp-meta-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.7rem 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.smp-meta-card span {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.smp-meta-card strong {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.smp-meta-shift {
+  grid-column: 1 / -1;
+}
+
+.smp-shift-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+  margin-top: 0.25rem;
+}
+
+.smp-shift-toggle button {
+  min-height: 2.85rem;
+  font-size: 1.05rem;
+  font-weight: 800;
+  border-radius: var(--radius);
+  border: 2px solid var(--line);
+  background: var(--surface2);
+  color: var(--muted);
+}
+
+.smp-shift-toggle button.is-active {
+  background: var(--teal);
+  border-color: var(--teal);
+  color: #fff;
+}
+
+.smp-banner {
+  margin: 0;
+  padding: 0.75rem 0.9rem;
+  border-radius: var(--radius);
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.smp-banner-error {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border: 1px solid color-mix(in srgb, var(--danger) 25%, var(--line));
+}
+
+.smp-banner-ok {
+  background: var(--success-soft);
+  color: #166534;
+  border: 1px solid color-mix(in srgb, var(--success) 25%, var(--line));
+}
+
+.smp-section {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.95rem 1rem 1.1rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.smp-section h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--teal-deep);
+}
+
+.smp-hint {
+  margin: 0.3rem 0 0.75rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.smp-machine-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.smp-machine-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 5.25rem;
+  border-radius: var(--radius);
+  border: 2px solid var(--line);
+  background: #fff;
+  padding: 0.55rem;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+
+.smp-machine-btn:active {
+  transform: scale(0.97);
+}
+
+.smp-machine-btn.is-running {
+  border-color: color-mix(in srgb, var(--success) 55%, var(--line));
+  background: color-mix(in srgb, var(--success-soft) 70%, #fff);
+}
+
+.smp-machine-btn.is-stopped {
+  border-color: color-mix(in srgb, var(--danger) 50%, var(--line));
+  background: color-mix(in srgb, var(--danger-soft) 75%, #fff);
+}
+
+.smp-machine-no {
+  font-size: 1.45rem;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.smp-machine-mark {
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+  font-weight: 900;
+  color: #fff;
+}
+
+.smp-machine-mark.ok {
+  background: var(--success);
+}
+
+.smp-machine-mark.bad {
+  background: var(--danger);
+}
+
+.smp-stop-block {
+  margin-top: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.smp-stop-row {
+  background: var(--danger-soft);
+  border: 1px solid color-mix(in srgb, var(--danger) 22%, var(--line));
+  border-radius: var(--radius);
+  padding: 0.75rem;
+}
+
+.smp-stop-row strong {
+  display: block;
+  font-size: 0.95rem;
+  margin-bottom: 0.5rem;
+  color: #991b1b;
+}
+
+.smp-reason-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.smp-reason-btn {
+  min-height: 2.75rem;
+  font-size: 1rem;
+  font-weight: 700;
+  text-align: left;
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--radius);
+  border: 2px solid color-mix(in srgb, var(--danger) 20%, var(--line));
+  background: #fff;
+  color: var(--text);
+}
+
+.smp-reason-btn.is-selected {
+  border-color: var(--danger);
+  background: #fff;
+  box-shadow: inset 0 0 0 1px var(--danger);
+  color: #991b1b;
+}
+
+.smp-op-master {
+  margin-bottom: 0.85rem;
+}
+
+.smp-add-op {
+  width: 100%;
+  min-height: 3rem;
+  font-size: 1.05rem;
+  font-weight: 800;
+  border-radius: var(--radius);
+  border: 2px dashed var(--teal);
+  background: var(--teal-soft);
+  color: var(--teal-deep);
+}
+
+.smp-add-op-form {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.smp-add-op-form input {
+  min-height: 3rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  border-radius: var(--radius);
+  border: 2px solid var(--line);
+  padding: 0.5rem 0.75rem;
+  width: 100%;
+}
+
+.smp-btn-save-op,
+.smp-btn-cancel-op {
+  min-height: 3rem;
+  padding: 0 0.85rem;
+  font-weight: 800;
+  border-radius: var(--radius);
+  border: none;
+}
+
+.smp-btn-save-op {
+  background: var(--teal);
+  color: #fff;
+}
+
+.smp-btn-cancel-op {
+  background: var(--surface2);
+  color: var(--muted);
+  border: 1px solid var(--line);
+}
+
+.smp-op-saved {
+  margin: 0.45rem 0 0;
+  font-size: 0.85rem;
+}
+
+.smp-prod-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.smp-empty {
+  margin: 0;
+  padding: 0.85rem;
+  text-align: center;
+  color: var(--muted);
+  background: var(--surface2);
+  border-radius: var(--radius);
+}
+
+.smp-prod-row {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  background: #fff;
+  display: grid;
+  grid-template-columns: 3.25rem 1fr;
+  gap: 0.65rem;
+  align-items: start;
+}
+
+.smp-prod-machine {
+  font-size: 1.35rem;
+  font-weight: 900;
+  color: var(--teal-deep);
+  padding-top: 0.35rem;
+}
+
+.smp-prod-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.smp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.smp-field > span {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+}
+
+.smp-field select {
+  min-height: 2.85rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  border-radius: var(--radius);
+  border: 2px solid var(--line);
+  padding: 0.35rem 0.55rem;
+  width: 100%;
+  background: #fff;
+}
+
+.smp-need-op {
+  font-size: 0.95rem;
+  color: var(--warning);
+  font-weight: 700;
+}
+
+.smp-op-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.smp-op-chip {
+  min-height: 2.4rem;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  border-radius: var(--radius);
+  border: 2px solid var(--line);
+  background: var(--surface2);
+  color: var(--text);
+}
+
+.smp-op-chip.is-selected {
+  background: var(--teal);
+  border-color: var(--teal);
+  color: #fff;
+}
+
+.smp-meter-wrap {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.smp-meter-wrap input {
+  min-height: 3rem;
+  font-size: 1.25rem;
+  font-weight: 800;
+  border-radius: var(--radius);
+  border: 2px solid var(--line);
+  padding: 0.4rem 0.65rem;
+  width: 100%;
+}
+
+.smp-meter-suffix {
+  font-weight: 800;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.smp-total {
+  margin-top: 0.9rem;
+  background: var(--info-soft);
+  border: 1px solid color-mix(in srgb, var(--info) 28%, var(--line));
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.smp-total span {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.smp-total strong {
+  font-size: clamp(1.45rem, 5vw, 1.85rem);
+  font-weight: 900;
+  color: var(--teal-deep);
+}
+
+.smp-actions {
+  position: sticky;
+  bottom: 0.5rem;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
+  padding: 0.55rem;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(8px);
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-md);
+}
+
+.smp-btn-wa,
+.smp-btn-wab {
+  min-height: 3.35rem;
+  font-size: 1.05rem;
+  font-weight: 900;
+  border-radius: var(--radius);
+  border: none;
+  color: #fff;
+}
+
+.smp-btn-wa {
+  background: #128c7e;
+}
+
+.smp-btn-wab {
+  background: var(--wa);
+}
+
+.smp-btn-wa:disabled,
+.smp-btn-wab:disabled {
+  opacity: 0.55;
+}
+
+.smp-footer-note {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.4;
+}
+
+/* Dashboard Security Machine panel */
+.smp-dash {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.smp-dash-kpis {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+@media (min-width: 720px) {
+  .smp-dash-kpis {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+.smp-dash-kpi {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.75rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.smp-dash-kpi span {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.smp-dash-kpi strong {
+  font-size: 1.25rem;
+  font-weight: 900;
+  color: var(--teal-deep);
+}
+
+.smp-dash-kpi.is-danger strong {
+  color: var(--danger);
+}
+
+.smp-dash-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.smp-dash-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+  min-width: 32rem;
+}
+
+.smp-dash-table th,
+.smp-dash-table td {
+  border: 1px solid var(--line);
+  padding: 0.55rem 0.65rem;
+  text-align: left;
+}
+
+.smp-dash-table th {
+  background: var(--surface2);
+  font-weight: 800;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+}
+
+.smp-status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.smp-status-pill.running {
+  background: var(--success-soft);
+  color: #166534;
+}
+
+.smp-status-pill.stopped {
+  background: var(--danger-soft);
+  color: #991b1b;
+}
+
+@media (max-width: 420px) {
+  .smp-machine-grid {
+    gap: 0.45rem;
+  }
+
+  .smp-machine-btn {
+    min-height: 4.75rem;
+  }
+
+  .smp-machine-no {
+    font-size: 1.25rem;
+  }
+
+  .smp-add-op-form {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .smp-add-op-form input {
+    grid-column: 1 / -1;
+  }
+}
