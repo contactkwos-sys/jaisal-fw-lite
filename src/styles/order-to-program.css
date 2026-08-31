@@ -403,6 +403,22 @@
 }
 
 @media (max-width: 640px) {
+  .otp-header .otp-header-actions {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .otp-header .otp-header-actions .share-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .otp-header .otp-header-actions button,
+  .otp-header .otp-header-actions .share-actions button {
+    width: 100%;
+  }
+
   .otp-stepper {
     grid-template-columns: 1fr 1fr;
   }

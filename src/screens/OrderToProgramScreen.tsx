@@ -567,6 +567,17 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
           </p>
         </div>
         <div className="otp-header-actions">
+          <button
+            type="button"
+            className="primary-save"
+            onClick={() => {
+              setStep('order-entry')
+              clearOrderForm()
+              onNavigate({ screen: 'order-to-program', filter: 'order-entry', module: 'order-to-program' })
+            }}
+          >
+            + New Customer Order
+          </button>
           <ShareActions
             onWhatsApp={() => confirmWhatsApp(waPayload(), false)}
             onWhatsAppBusiness={() => confirmWhatsApp(waPayload(), true)}
@@ -580,17 +591,6 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
             }}
           >
             Reports
-          </button>
-          <button
-            type="button"
-            className="primary-save"
-            onClick={() => {
-              setStep('order-entry')
-              clearOrderForm()
-              onNavigate({ screen: 'order-to-program', filter: 'order-entry', module: 'order-to-program' })
-            }}
-          >
-            + New Customer Order
           </button>
         </div>
       </header>
