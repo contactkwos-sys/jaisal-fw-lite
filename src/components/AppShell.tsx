@@ -221,9 +221,17 @@ export function AppShell({ active, sub, filter, activeModule, onNavigate, childr
   }
 
   const bottom = modules.filter((m) => m.mobileNav).slice(0, 4)
+  const isSecurityRole =
+    roleName.toLowerCase() === 'security' ||
+    (roleName.toLowerCase().includes('security') && !roleName.toLowerCase().includes('supervisor'))
+  const hideChromeExtras = isSecurityRole || active === 'security-machine-update'
 
   return (
-    <div className={drawerOpen ? 'app-shell drawer-is-open' : 'app-shell'} data-screen={active}>
+    <div
+      className={drawerOpen ? 'app-shell drawer-is-open' : 'app-shell'}
+      data-screen={active}
+      data-security-simple={hideChromeExtras ? '1' : undefined}
+    >
       <header className="mobile-topbar">
         <button
           type="button"
@@ -338,28 +346,30 @@ export function AppShell({ active, sub, filter, activeModule, onNavigate, childr
             </div>
           </div>
           <div className="content-top-actions">
-            <GlobalSearch onNavigate={onNavigate} />
+            {!hideChromeExtras ? <GlobalSearch onNavigate={onNavigate} /> : null}
           </div>
         </div>
         <main className="app-main">{children}</main>
       </div>
 
-      <nav className="bottom-nav" aria-label="Quick modules">
-        {bottom.map((mod) => {
-          const isActive = activeModule === mod.id || moduleForScreen(active, sub, filter) === mod.id
-          return (
-            <button
-              key={mod.id}
-              type="button"
-              className={isActive ? 'bottom-nav-item active' : 'bottom-nav-item'}
-              onClick={() => openModule(mod.id)}
-            >
-              <span className="bottom-nav-ico">{ICONS[mod.icon]}</span>
-              <span>{mod.label}</span>
-            </button>
-          )
-        })}
-      </nav>
+      {!hideChromeExtras && bottom.length > 0 ? (
+        <nav className="bottom-nav" aria-label="Quick modules">
+          {bottom.map((mod) => {
+            const isActive = activeModule === mod.id || moduleForScreen(active, sub, filter) === mod.id
+            return (
+              <button
+                key={mod.id}
+                type="button"
+                className={isActive ? 'bottom-nav-item active' : 'bottom-nav-item'}
+                onClick={() => openModule(mod.id)}
+              >
+                <span className="bottom-nav-ico">{ICONS[mod.icon]}</span>
+                <span>{mod.label}</span>
+              </button>
+            )
+          })}
+        </nav>
+      ) : null}
     </div>
   )
 }

@@ -9,6 +9,7 @@ import { applyOrQueue, todayISO } from '../lib/mutate'
 import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import { ApprovalsWidget } from '../components/ApprovalsWidget'
+import { SecurityMachineDashboardPanel } from '../components/SecurityMachineDashboardPanel'
 import { PendingOrdersWidget } from './OrdersPendingScreen'
 import { NotebookDashboardWidget } from './NotebookScreen'
 import { inr, loadDashboardPnLCards } from '../lib/dailyCosting'
@@ -821,6 +822,8 @@ export function DashboardScreen({ onNavigate }: Props) {
           </div>
         </section>
       </div>
+
+      <SecurityMachineDashboardPanel />
 
       <div className="dash-split">
         <section className="dash-panel">

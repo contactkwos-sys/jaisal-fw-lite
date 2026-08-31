@@ -51,6 +51,7 @@ export type AppScreen =
   | 'program-dispatch'
   | 'machine-wise-production'
   | 'security-inventory'
+  | 'security-machine-update'
   | 'module-hub'
   | 'settings-hub'
   | 'ceo-pin-management'
@@ -684,6 +685,12 @@ export const MAIN_MODULES: MainModule[] = [
     navGroup: 'SECURITY / SETTINGS',
     items: [
       {
+        id: 'security-machine-update',
+        label: 'Machine & Production Update',
+        screen: 'security-machine-update',
+        hint: 'Security mobile · machine run · production · WhatsApp',
+      },
+      {
         id: 'security-inventory',
         label: 'Security Inventory',
         screen: 'security-inventory',
@@ -869,6 +876,7 @@ export const PAGE_TITLES: Record<AppScreen, string> = {
   'program-dispatch': 'Production & Dispatch',
   'machine-wise-production': 'Machine-wise Production',
   'security-inventory': 'Security Inventory',
+  'security-machine-update': 'Machine & Production Update',
   'module-hub': 'Module',
   'settings-hub': 'Settings',
   placeholder: 'Coming Soon',
@@ -886,7 +894,7 @@ export function moduleForScreen(screen: AppScreen, sub?: string, filter?: string
   }
   if (screen === 'hr-payroll' || screen === 'attendance') return 'hr-payroll'
   if (screen === 'program-dispatch') return 'program-dispatch'
-  if (screen === 'security-inventory') return 'security'
+  if (screen === 'security-inventory' || screen === 'security-machine-update') return 'security'
   if (screen === 'warp-yarn' || screen === 'warp-beam-pipe' || screen === 'beam-remaining') {
     // Prefer warp-yarn module when opened from there; inventory deep-links still work via explicit module
     return 'warp-yarn'
@@ -1015,6 +1023,7 @@ export function titleFor(screen: AppScreen, sub?: string, moduleId?: MainModuleI
     }
     return labels[sub || 'pto'] || 'Program & Dispatch'
   }
+  if (screen === 'security-machine-update') return 'Machine & Production Update'
   if (screen === 'security-inventory') {
     const labels: Record<string, string> = {
       dashboard: 'Security Inventory',
