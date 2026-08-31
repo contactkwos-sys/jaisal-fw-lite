@@ -116,7 +116,7 @@ export function SecurityMachineUpdateScreen() {
       else shareWhatsAppBusiness(text)
       void markWhatsAppSent(result.update_id)
       clearSecurityDraft()
-      setDraft(createEmptyDraft(draft.shift === 'Day' ? 'Night' : detectShift()))
+      setDraft(createEmptyDraft(detectShift()))
       setMessage(`Sent · Total ${fmtMtr(result.total_production_mtr)} Mtr · Saved to ERP`)
     } catch (e) {
       // Still allow WhatsApp even if remote DB save fails (e.g. migration pending)
