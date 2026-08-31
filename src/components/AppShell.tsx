@@ -221,9 +221,20 @@ export function AppShell({ active, sub, filter, activeModule, onNavigate, childr
   }
 
   const bottom = modules.filter((m) => m.mobileNav).slice(0, 4)
+  const nRole = (roleName || '').trim().toLowerCase()
+  const isSecurityOnly =
+    (nRole === 'security' || (nRole.includes('security') && !nRole.includes('supervisor'))) &&
+    !isCeo
 
   return (
-    <div className={drawerOpen ? 'app-shell drawer-is-open' : 'app-shell'} data-screen={active}>
+    <div
+      className={
+        drawerOpen
+          ? `app-shell drawer-is-open${isSecurityOnly ? ' security-simple' : ''}`
+          : `app-shell${isSecurityOnly ? ' security-simple' : ''}`
+      }
+      data-screen={active}
+    >
       <header className="mobile-topbar">
         <button
           type="button"
@@ -322,28 +333,31 @@ export function AppShell({ active, sub, filter, activeModule, onNavigate, childr
       </aside>
 
       <div className="app-content">
-        <div className="content-topbar">
-          <div>
-            <h1 className="content-page-title">{pageTitle}</h1>
-            <div className="content-meta">
-              <span>{formatDate(today)}</span>
-              <span className="meta-dot" aria-hidden="true">
-                ·
-              </span>
-              <span>Day Shift</span>
-              <span className="meta-dot" aria-hidden="true">
-                ·
-              </span>
-              <span>{userName}</span>
+        {!isSecurityOnly ? (
+          <div className="content-topbar">
+            <div>
+              <h1 className="content-page-title">{pageTitle}</h1>
+              <div className="content-meta">
+                <span>{formatDate(today)}</span>
+                <span className="meta-dot" aria-hidden="true">
+                  ·
+                </span>
+                <span>Day Shift</span>
+                <span className="meta-dot" aria-hidden="true">
+                  ·
+                </span>
+                <span>{userName}</span>
+              </div>
+            </div>
+            <div className="content-top-actions">
+              <GlobalSearch onNavigate={onNavigate} />
             </div>
           </div>
-          <div className="content-top-actions">
-            <GlobalSearch onNavigate={onNavigate} />
-          </div>
-        </div>
-        <main className="app-main">{children}</main>
+        ) : null}
+        <main className={`app-main${isSecurityOnly ? ' smu-main' : ''}`}>{children}</main>
       </div>
 
+      {!isSecurityOnly ? (
       <nav className="bottom-nav" aria-label="Quick modules">
         {bottom.map((mod) => {
           const isActive = activeModule === mod.id || moduleForScreen(active, sub, filter) === mod.id
@@ -360,6 +374,7 @@ export function AppShell({ active, sub, filter, activeModule, onNavigate, childr
           )
         })}
       </nav>
+      ) : null}
     </div>
   )
 }

@@ -521,3 +521,25 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Security-only shell: no ERP chrome */
+.app-shell.security-simple .mobile-topbar {
+  background: #1769c2;
+  color: #fff;
+  border-bottom: 0;
+}
+
+.app-shell.security-simple .mobile-brand-name,
+.app-shell.security-simple .mobile-topbar-title,
+.app-shell.security-simple .mobile-role-chip {
+  color: #fff;
+}
+
+.app-shell.security-simple .app-main.smu-main {
+  padding: 0;
+  max-width: none;
+}
+
+.app-shell.security-simple .smu-actions {
+  bottom: 0;
+}
