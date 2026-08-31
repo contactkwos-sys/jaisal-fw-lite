@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { RecordActions } from '../../components/RecordActions'
 import { useAuth } from '../../lib/auth'
-import type { CheckingLot } from '../../lib/database.types'
+import type { Challan, CheckingLot } from '../../lib/database.types'
 import { applyOrQueue, nextDocNo, todayISO } from '../../lib/mutate'
 import { markProgramDispatched } from '../../lib/programs'
 import { printChallan, shareDocWhatsApp } from '../../lib/printDocs'
@@ -23,6 +24,8 @@ export function PdChallan({ onGo }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [lastChallanId, setLastChallanId] = useState<string | null>(null)
+  const [recentChallans, setRecentChallans] = useState<Challan[]>([])
+  const [viewChallan, setViewChallan] = useState<Challan | null>(null)
 
   const load = useCallback(async () => {
     const [{ data }, { data: ch }] = await Promise.all([
@@ -37,6 +40,12 @@ export function PdChallan({ onGo }: Props) {
     ])
     setLots((data as CheckingLot[]) ?? [])
     setChallanNo(nextDocNo('CH-', (ch ?? []).map((c) => c.challan_no)))
+    const { data: recent } = await supabase
+      .from('challans')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(15)
+    setRecentChallans((recent as Challan[]) ?? [])
   }, [])
 
   useEffect(() => {
@@ -316,6 +325,43 @@ export function PdChallan({ onGo }: Props) {
           </button>
         ) : null}
       </div>
+
+      <section className="pd-panel" style={{ marginTop: 16 }}>
+        <h2>Recent Challans</h2>
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Challan</th>
+                <th>Party</th>
+                <th className="num">Meter</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recentChallans.map((c) => (
+                <tr key={c.id}>
+                  <td>{c.challan_no}</td>
+                  <td>{c.party}</td>
+                  <td className="num">{Number(c.meter || 0).toFixed(1)}</td>
+                  <td>
+                    <RecordActions busy={busy} canEdit={false} canDelete={false} onView={() => setViewChallan(c)} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {viewChallan ? (
+          <article className="card-row surface form-stack" style={{ marginTop: 12 }}>
+            <div className="row-top">
+              <strong>Challan detail</strong>
+              <button type="button" className="btn-ghost" onClick={() => setViewChallan(null)}>Close</button>
+            </div>
+            <pre className="payload-preview">{JSON.stringify(viewChallan, null, 2)}</pre>
+          </article>
+        ) : null}
+      </section>
     </div>
   )
 }

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { RecordActions } from '../components/RecordActions'
 import { useAuth } from '../lib/auth'
 import type { PartyMaster } from '../lib/database.types'
 import { suggestMarka } from '../lib/marka'
 import { applyOrQueue } from '../lib/mutate'
+import { confirmDeleteRecord } from '../lib/recordCrud'
 import { supabase } from '../lib/supabase'
 
 export function PartyMasterScreen() {
@@ -12,6 +14,7 @@ export function PartyMasterScreen() {
   const [singleName, setSingleName] = useState('')
   const [singleMarka, setSingleMarka] = useState('')
   const [editId, setEditId] = useState<string | null>(null)
+  const [viewId, setViewId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
   const [editMarka, setEditMarka] = useState('')
   const [busy, setBusy] = useState(false)
@@ -171,7 +174,7 @@ export function PartyMasterScreen() {
 
   async function removeParty(row: PartyMaster) {
     if (!profile) return
-    if (!window.confirm(`Delete ${row.party_name}?`)) return
+    if (!confirmDeleteRecord({ label: row.party_name, linked: true })) return
     setBusy(true)
     setError(null)
     setMessage(null)
@@ -275,6 +278,18 @@ export function PartyMasterScreen() {
                   Cancel
                 </button>
               </div>
+            ) : viewId === p.id ? (
+              <>
+                <div>
+                  <strong>{p.party_name}</strong>
+                  <span className="text-muted" style={{ marginLeft: '0.5rem' }}>
+                    Marka: <strong className="pd-marka">{p.marka || suggestMarka(p.party_name)}</strong>
+                  </span>
+                </div>
+                <button type="button" className="btn-ghost" onClick={() => setViewId(null)}>
+                  Close
+                </button>
+              </>
             ) : (
               <>
                 <div>
@@ -283,28 +298,23 @@ export function PartyMasterScreen() {
                     Marka: <strong className="pd-marka">{p.marka || suggestMarka(p.party_name)}</strong>
                   </span>
                 </div>
-                <div className="icon-actions">
-                  <button
-                    type="button"
-                    className="btn-ghost icon-btn"
-                    disabled={busy}
-                    onClick={() => {
-                      setEditId(p.id)
-                      setEditName(p.party_name)
-                      setEditMarka(p.marka || suggestMarka(p.party_name))
-                    }}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-ghost icon-btn"
-                    disabled={busy}
-                    onClick={() => void removeParty(p)}
-                  >
-                    Del
-                  </button>
-                </div>
+                <RecordActions
+                  busy={busy}
+                  canView
+                  canEdit
+                  canDelete
+                  onView={() => {
+                    setViewId(p.id)
+                    setEditId(null)
+                  }}
+                  onEdit={() => {
+                    setEditId(p.id)
+                    setViewId(null)
+                    setEditName(p.party_name)
+                    setEditMarka(p.marka || suggestMarka(p.party_name))
+                  }}
+                  onDelete={() => void removeParty(p)}
+                />
               </>
             )}
           </article>

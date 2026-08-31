@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { RecordActions } from '../../components/RecordActions'
 import { useAuth } from '../../lib/auth'
 import type { Challan } from '../../lib/database.types'
 import { applyOrQueue, todayISO } from '../../lib/mutate'
@@ -30,6 +31,8 @@ export function PdInvoice({ onGo }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [recentInvoices, setRecentInvoices] = useState<Array<Record<string, unknown>>>([])
+  const [viewInvoice, setViewInvoice] = useState<Record<string, unknown> | null>(null)
 
   const taxable = (Number(qty) || 0) * (Number(rate) || 0)
   const gst = Number(gstPct) || 0
@@ -40,12 +43,14 @@ export function PdInvoice({ onGo }: Props) {
   const grand = taxable + tax
 
   const load = useCallback(async () => {
-    const [{ data }, invNo] = await Promise.all([
+    const [{ data }, invNo, { data: invs }] = await Promise.all([
       supabase.from('challans').select('*').order('created_at', { ascending: false }).limit(50),
       nextInvoiceNo(),
+      supabase.from('gst_invoices').select('*').order('created_at', { ascending: false }).limit(15),
     ])
     setChallans((data as Challan[]) ?? [])
     setInvoiceNo(invNo)
+    setRecentInvoices((invs as Array<Record<string, unknown>>) ?? [])
     if (!challanId && data?.[0]) setChallanId(data[0].id)
   }, [challanId])
 
@@ -280,6 +285,48 @@ export function PdInvoice({ onGo }: Props) {
           WhatsApp
         </button>
       </div>
+
+      <section className="pd-panel" style={{ marginTop: 16 }}>
+        <h2>Recent Invoices</h2>
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Invoice</th>
+                <th>Party</th>
+                <th className="num">Grand</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recentInvoices.map((inv) => (
+                <tr key={String(inv.id)}>
+                  <td>{String(inv.invoice_no || '—')}</td>
+                  <td>{String(inv.party || '—')}</td>
+                  <td className="num">₹{Number(inv.grand_total || 0).toFixed(2)}</td>
+                  <td>
+                    <RecordActions
+                      busy={busy}
+                      canEdit={false}
+                      canDelete={false}
+                      onView={() => setViewInvoice(inv)}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {viewInvoice ? (
+          <article className="card-row surface form-stack" style={{ marginTop: 12 }}>
+            <div className="row-top">
+              <strong>Invoice detail</strong>
+              <button type="button" className="btn-ghost" onClick={() => setViewInvoice(null)}>Close</button>
+            </div>
+            <pre className="payload-preview">{JSON.stringify(viewInvoice, null, 2)}</pre>
+          </article>
+        ) : null}
+      </section>
     </div>
   )
 }

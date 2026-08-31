@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { RecordActions } from '../components/RecordActions'
 import { useAuth } from '../lib/auth'
 import type { DesignCatalog } from '../lib/database.types'
 import {
@@ -10,12 +11,16 @@ import {
   catalogShareCaption,
   fetchDesignCatalog,
   insertDesignCatalog,
+  deleteDesignCatalog,
+  updateDesignCatalog,
   loadCatalogCustomers,
   nextCatalogDesignNo,
   shareCatalogDesign,
   uploadCatalogImage,
   type CatalogCustomerStub,
 } from '../lib/designCatalog'
+import { applyEditDeleteOrQueue } from '../lib/pendingApprovals'
+import { confirmDeleteRecord } from '../lib/recordCrud'
 
 type ShareMode = 'one' | 'broadcast'
 
@@ -42,7 +47,7 @@ function useObjectUrl(file: File | null) {
 }
 
 export function DesignCatalogScreen() {
-  const { profile } = useAuth()
+  const { profile, isCeo } = useAuth()
   const [rows, setRows] = useState<DesignCatalog[]>([])
   const [query, setQuery] = useState('')
   const [busy, setBusy] = useState(false)
@@ -50,6 +55,8 @@ export function DesignCatalogScreen() {
   const [message, setMessage] = useState<string | null>(null)
 
   const [formOpen, setFormOpen] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [viewOnly, setViewOnly] = useState(false)
   const [designNo, setDesignNo] = useState('1')
   const [jfgNo, setJfgNo] = useState('')
   const [notes, setNotes] = useState('')
@@ -135,6 +142,8 @@ export function DesignCatalogScreen() {
   async function openAddForm() {
     setError(null)
     setMessage(null)
+    setEditingId(null)
+    setViewOnly(false)
     setJfgNo('')
     setNotes('')
     setDesignFile(null)
@@ -251,9 +260,59 @@ export function DesignCatalogScreen() {
     }
   }
 
+  function openView(row: DesignCatalog) {
+    setViewOnly(true)
+    setEditingId(row.id)
+    setDesignNo(String(row.design_no))
+    setJfgNo(row.jfg_no)
+    setNotes(row.notes || '')
+    setFormOpen(true)
+  }
+
+  function openEdit(row: DesignCatalog) {
+    setViewOnly(false)
+    setEditingId(row.id)
+    setDesignNo(String(row.design_no))
+    setJfgNo(row.jfg_no)
+    setNotes(row.notes || '')
+    setDesignFile(null)
+    setMatchingFile(null)
+    setFormOpen(true)
+  }
+
+  async function handleDelete(row: DesignCatalog) {
+    if (!profile) return
+    if (!confirmDeleteRecord({ label: `#${row.design_no} · ${row.jfg_no}` })) return
+    setBusy(true)
+    setError(null)
+    try {
+      const result = await applyEditDeleteOrQueue({
+        isCeo,
+        createdAt: row.created_at,
+        tableName: 'design_catalog',
+        recordId: row.id,
+        action: 'delete',
+        requestedBy: profile.id,
+        apply: async () => {
+          await deleteDesignCatalog(row.id)
+        },
+      })
+      setMessage(result === 'applied' ? 'Design deleted' : 'Delete queued for CEO approval')
+      if (editingId === row.id) {
+        setFormOpen(false)
+        setEditingId(null)
+      }
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Delete failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
-    if (!profile) return
+    if (!profile || viewOnly) return
     const no = Number.parseInt(designNo, 10)
     if (!Number.isFinite(no) || no < 1) {
       setError('Design No. must be a positive integer')
@@ -263,29 +322,59 @@ export function DesignCatalogScreen() {
       setError('JFG No. is required')
       return
     }
-    if (!designFile || !matchingFile) {
-      setError('Upload both Design and Matching photos')
-      return
-    }
 
     setBusy(true)
     setError(null)
     setMessage(null)
     try {
-      const [designUrl, matchingUrl] = await Promise.all([
-        uploadCatalogImage(designFile, 'design'),
-        uploadCatalogImage(matchingFile, 'matching'),
-      ])
-      await insertDesignCatalog({
-        design_no: no,
-        jfg_no: jfgNo.trim(),
-        design_image_url: designUrl,
-        matching_image_url: matchingUrl,
-        notes: notes.trim() || null,
-        created_by: profile.id,
-      })
-      setMessage(`Design #${no} · ${jfgNo.trim()} saved`)
+      if (editingId) {
+        const patch: {
+          jfg_no: string
+          notes: string | null
+          design_image_url?: string
+          matching_image_url?: string | null
+        } = {
+          jfg_no: jfgNo.trim(),
+          notes: notes.trim() || null,
+        }
+        if (designFile) patch.design_image_url = await uploadCatalogImage(designFile, 'design')
+        if (matchingFile) patch.matching_image_url = await uploadCatalogImage(matchingFile, 'matching')
+        const row = rows.find((r) => r.id === editingId)
+        const result = await applyEditDeleteOrQueue({
+          isCeo,
+          createdAt: row?.created_at || new Date().toISOString(),
+          tableName: 'design_catalog',
+          recordId: editingId,
+          action: 'edit',
+          requestedBy: profile.id,
+          newData: patch,
+          apply: async () => {
+            await updateDesignCatalog(editingId, patch)
+          },
+        })
+        setMessage(result === 'applied' ? `Design #${no} updated` : 'Edit queued for CEO approval')
+      } else {
+        if (!designFile || !matchingFile) {
+          setError('Upload both Design and Matching photos')
+          setBusy(false)
+          return
+        }
+        const [designUrl, matchingUrl] = await Promise.all([
+          uploadCatalogImage(designFile, 'design'),
+          uploadCatalogImage(matchingFile, 'matching'),
+        ])
+        await insertDesignCatalog({
+          design_no: no,
+          jfg_no: jfgNo.trim(),
+          design_image_url: designUrl,
+          matching_image_url: matchingUrl,
+          notes: notes.trim() || null,
+          created_by: profile.id,
+        })
+        setMessage(`Design #${no} · ${jfgNo.trim()} saved`)
+      }
       setFormOpen(false)
+      setEditingId(null)
       setDesignFile(null)
       setMatchingFile(null)
       await load()
@@ -468,14 +557,22 @@ export function DesignCatalogScreen() {
                   #{row.design_no} · {row.jfg_no}
                 </h2>
                 {row.notes ? <p className="text-muted2 dna-card-notes">{row.notes}</p> : null}
-                <button
-                  type="button"
-                  className="btn-wa dna-share-btn"
-                  onClick={() => openShare(row)}
-                  aria-label={`Share design ${row.design_no}`}
-                >
-                  WhatsApp
-                </button>
+                <div className="row-top" style={{ gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <RecordActions
+                    busy={busy}
+                    onView={() => openView(row)}
+                    onEdit={() => openEdit(row)}
+                    onDelete={() => void handleDelete(row)}
+                  />
+                  <button
+                    type="button"
+                    className="btn-wa dna-share-btn"
+                    onClick={() => openShare(row)}
+                    aria-label={`Share design ${row.design_no}`}
+                  >
+                    WhatsApp
+                  </button>
+                </div>
               </div>
             </article>
           ))}
@@ -486,7 +583,9 @@ export function DesignCatalogScreen() {
         <div className="dna-modal" role="dialog" aria-modal="true" aria-labelledby="dna-form-title">
           <div className="dna-modal-backdrop" onClick={() => !busy && setFormOpen(false)} />
           <div className="dna-modal-panel surface">
-            <h2 id="dna-form-title">Add New Design</h2>
+            <h2 id="dna-form-title">
+              {viewOnly ? 'View Design' : editingId ? 'Edit Design' : 'Add New Design'}
+            </h2>
             {error ? <p className="form-error text-danger">{error}</p> : null}
             <form className="form-stack dna-form" onSubmit={(e) => void handleSave(e)}>
               <label className="field">
@@ -496,6 +595,7 @@ export function DesignCatalogScreen() {
                   min={1}
                   step={1}
                   value={designNo}
+                  readOnly={Boolean(editingId)}
                   onChange={(e) => setDesignNo(e.target.value)}
                   required
                 />
@@ -506,24 +606,32 @@ export function DesignCatalogScreen() {
                   type="text"
                   placeholder="e.g. JFG2244"
                   value={jfgNo}
+                  readOnly={viewOnly}
                   onChange={(e) => setJfgNo(e.target.value)}
                   required
                 />
               </label>
 
+              {!editingId || designFile || matchingFile || viewOnly ? (
               <div className="dna-upload-pair">
                 <label className="field dna-upload-slot">
                   <span className="text-muted">Design photo</span>
+                  {!viewOnly ? (
                   <input
                     type="file"
                     accept="image/*"
                     capture="environment"
                     onChange={(e) => setDesignFile(e.target.files?.[0] ?? null)}
-                    required
+                    required={!editingId}
                   />
+                  ) : null}
                   {designPreview ? (
                     <div className="dna-upload-preview">
                       <img src={designPreview} alt="Design preview" />
+                    </div>
+                  ) : editingId && rows.find((r) => r.id === editingId) ? (
+                    <div className="dna-upload-preview">
+                      <img src={rows.find((r) => r.id === editingId)!.design_image_url} alt="Design" />
                     </div>
                   ) : (
                     <div className="dna-upload-placeholder">Camera or file</div>
@@ -531,28 +639,36 @@ export function DesignCatalogScreen() {
                 </label>
                 <label className="field dna-upload-slot">
                   <span className="text-muted">Matching photo</span>
+                  {!viewOnly ? (
                   <input
                     type="file"
                     accept="image/*"
                     capture="environment"
                     onChange={(e) => setMatchingFile(e.target.files?.[0] ?? null)}
-                    required
+                    required={!editingId}
                   />
+                  ) : null}
                   {matchingPreview ? (
                     <div className="dna-upload-preview">
                       <img src={matchingPreview} alt="Matching preview" />
+                    </div>
+                  ) : editingId && rows.find((r) => r.id === editingId)?.matching_image_url ? (
+                    <div className="dna-upload-preview">
+                      <img src={rows.find((r) => r.id === editingId)!.matching_image_url!} alt="Matching" />
                     </div>
                   ) : (
                     <div className="dna-upload-placeholder">Camera or file</div>
                   )}
                 </label>
               </div>
+              ) : null}
 
               <label className="field">
                 <span className="text-muted">Notes (optional)</span>
                 <textarea
                   rows={3}
                   value={notes}
+                  readOnly={viewOnly}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Optional notes"
                 />
@@ -563,13 +679,19 @@ export function DesignCatalogScreen() {
                   type="button"
                   className="btn-ghost"
                   disabled={busy}
-                  onClick={() => setFormOpen(false)}
+                  onClick={() => {
+                    setFormOpen(false)
+                    setEditingId(null)
+                    setViewOnly(false)
+                  }}
                 >
-                  Cancel
+                  {viewOnly ? 'Close' : 'Cancel'}
                 </button>
+                {!viewOnly ? (
                 <button type="submit" className="primary-save" disabled={busy}>
-                  {busy ? 'Saving…' : 'Save Design'}
+                  {busy ? 'Saving…' : editingId ? 'Update Design' : 'Save Design'}
                 </button>
+                ) : null}
               </div>
             </form>
           </div>

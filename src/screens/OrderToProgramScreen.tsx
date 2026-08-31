@@ -34,7 +34,9 @@ import {
   statusBadgeClass,
   friendlyFactoryStatus,
   updateCustomerOrder,
+  deleteCustomerOrder,
   type BookedOrderOption,
+  type CustomerOrderDetail,
   type DesignForOrder,
   type FeederRow,
   type MachineWarpInfo,
@@ -51,9 +53,11 @@ import {
   isSalesmanRole,
 } from '../lib/permissions'
 import { printSummary, shareWhatsApp, shareWhatsAppBusiness } from '../lib/share'
+import { RecordActions } from '../components/RecordActions'
 import { OrderSettlementPanel } from '../components/OrderSettlementPanel'
 import type { DinWithMatchings } from '../lib/designToOrder'
 import { handleUserError } from '../lib/userError'
+import { confirmDeleteRecord } from '../lib/recordCrud'
 
 type Props = {
   onNavigate: (t: NavTarget) => void
@@ -138,6 +142,7 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
   const [design, setDesign] = useState<DesignForOrder | null>(null)
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null)
   const [editingOrderNo, setEditingOrderNo] = useState<string | null>(null)
+  const [viewingOrder, setViewingOrder] = useState<CustomerOrderDetail | null>(null)
   /** When set, design-load effect restores these colour lines instead of master matchings. */
   const pendingEditLinesRef = useRef<LineDraft[] | null>(null)
 
@@ -571,6 +576,7 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
       setLines(editLines)
       setEditingOrderId(detail.orderId)
       setEditingOrderNo(detail.orderNo)
+      setViewingOrder(null)
       setParty(detail.partyName)
       setOrderDate(detail.orderDate || todayISO())
       setItemName(detail.itemName || ITEM_NAME_OPTIONS[0])
@@ -598,6 +604,48 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
       setMessage(`Editing ${detail.orderNo}`)
     } catch (e) {
       setError(handleUserError('OTP.editOrder', e, 'Could not open order for edit.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function onViewOrder(orderId: string) {
+    setBusy(true)
+    setError(null)
+    try {
+      const detail = await loadCustomerOrderDetail(orderId)
+      if (!detail) {
+        setError('Order not found')
+        return
+      }
+      setViewingOrder(detail)
+    } catch (e) {
+      setError(handleUserError('OTP.viewOrder', e, 'Could not open order.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function onDeleteOrder(orderId: string, orderNo: string, hasProgram: boolean) {
+    if (
+      !confirmDeleteRecord({
+        label: orderNo,
+        linked: hasProgram,
+      })
+    ) {
+      return
+    }
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      await deleteCustomerOrder(orderId)
+      setMessage(`Deleted ${orderNo}`)
+      if (viewingOrder?.orderId === orderId) setViewingOrder(null)
+      if (editingOrderId === orderId) clearOrderForm()
+      await refreshStatusAndOrders()
+    } catch (e) {
+      setError(handleUserError('OTP.deleteOrder', e, 'Could not delete order.'))
     } finally {
       setBusy(false)
     }
@@ -1107,7 +1155,7 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
                   <th>Checking</th>
                   <th>Dispatch</th>
                   <th>Overall</th>
-                  <th />
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -1127,9 +1175,21 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
                     <td><span className={statusBadgeClass(r.dispatchStatus)}>{friendlyFactoryStatus(r.dispatchStatus)}</span></td>
                     <td><span className={statusBadgeClass(r.overallStatus)}>{friendlyFactoryStatus(r.overallStatus)}</span></td>
                     <td>
-                      <button type="button" className="link-btn" disabled={busy} onClick={() => void onEditOrder(r.orderId)}>
-                        Edit
-                      </button>
+                      <RecordActions
+                        busy={busy}
+                        canView
+                        canEdit
+                        canDelete={!salesman}
+                        onView={() => void onViewOrder(r.orderId)}
+                        onEdit={() => void onEditOrder(r.orderId)}
+                        onDelete={() =>
+                          void onDeleteOrder(
+                            r.orderId,
+                            r.orderNo,
+                            !/PENDING/i.test(r.programStatus),
+                          )
+                        }
+                      />
                     </td>
                   </tr>
                 ))}
@@ -1496,6 +1556,76 @@ export function OrderToProgramScreen({ onNavigate, initialStep, initialDinNumber
             </table>
           </div>
         </section>
+      ) : null}
+
+      {viewingOrder ? (
+        <div className="modal-backdrop" role="dialog" aria-modal="true">
+          <div className="modal-card" style={{ maxWidth: 640, width: '94vw', maxHeight: '90vh', overflow: 'auto' }}>
+            <header className="modal-head">
+              <h2>View Order · {viewingOrder.orderNo}</h2>
+              <button type="button" className="btn-ghost" onClick={() => setViewingOrder(null)}>
+                Close
+              </button>
+            </header>
+            <div className="modal-body" style={{ display: 'grid', gap: '0.65rem' }}>
+              <dl className="otp-meta">
+                <div><dt>Customer</dt><dd>{viewingOrder.partyName || '—'}</dd></div>
+                <div><dt>Order Date</dt><dd>{viewingOrder.orderDate || '—'}</dd></div>
+                <div><dt>DIN</dt><dd>{viewingOrder.dinNumber || '—'}</dd></div>
+                <div><dt>Quality</dt><dd>{viewingOrder.qualityName || '—'}</dd></div>
+                <div><dt>Rate</dt><dd>{fmtInrIn(viewingOrder.salesRate)} / m</dd></div>
+                <div><dt>Total Meter</dt><dd>{viewingOrder.totalMeter}</dd></div>
+                <div><dt>Net Amount</dt><dd>{fmtInrIn(viewingOrder.netAmount)}</dd></div>
+                <div><dt>Delivery (days)</dt><dd>{viewingOrder.deliveryWithinDays ?? '—'}</dd></div>
+                <div><dt>Payment</dt><dd>{viewingOrder.paymentTerms || '—'}</dd></div>
+                <div><dt>Status</dt><dd>{friendlyFactoryStatus(viewingOrder.overallStatus)}</dd></div>
+                <div><dt>Remarks</dt><dd>{viewingOrder.remarks || '—'}</dd></div>
+              </dl>
+              {viewingOrder.previewUrl ? (
+                <ImageLightbox src={viewingOrder.previewUrl} alt={viewingOrder.dinNumber} thumbClassName="otp-preview-img" />
+              ) : null}
+              <h3 className="section-title">Colour / Quantity</h3>
+              <div className="table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Matching</th>
+                      <th>Colour</th>
+                      <th>Meter</th>
+                      <th>Rate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {viewingOrder.lines.map((l) => (
+                      <tr key={l.itemId}>
+                        <td>{l.matchingName}</td>
+                        <td>{l.mainColour || '—'}</td>
+                        <td className="num">{l.orderedMeter}</td>
+                        <td className="num">{fmtInrIn(l.rate)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <footer className="modal-foot" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+              <button type="button" className="btn-ghost" onClick={() => setViewingOrder(null)}>
+                Close
+              </button>
+              <button
+                type="button"
+                className="primary-save"
+                onClick={() => {
+                  const id = viewingOrder.orderId
+                  setViewingOrder(null)
+                  void onEditOrder(id)
+                }}
+              >
+                Edit
+              </button>
+            </footer>
+          </div>
+        </div>
       ) : null}
     </div>
   )

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
+import { RecordActions } from '../components/RecordActions'
 import { ShareActions } from '../components/ShareActions'
 import { SubTabs } from '../components/SubTabs'
 import { useAuth } from '../lib/auth'
 import type { GatePassRecord, MaintenanceMaterial } from '../lib/database.types'
 import { todayISO } from '../lib/mutate'
 import { applyEditDeleteOrQueue } from '../lib/pendingApprovals'
+import { confirmDeleteRecord } from '../lib/recordCrud'
 import { printSummary, rowsToHtml, shareWhatsApp, shareWhatsAppBusiness } from '../lib/share'
 import { supabase } from '../lib/supabase'
 
@@ -39,6 +41,8 @@ export function MaintenanceMaterialScreen() {
   const [purpose, setPurpose] = useState('')
   const [sentTo, setSentTo] = useState('')
   const [entryDate, setEntryDate] = useState(todayISO())
+  const [editId, setEditId] = useState<string | null>(null)
+  const [viewOnly, setViewOnly] = useState(false)
 
   const enteredBy = profile?.full_name || profile?.roles?.role_name || 'Unknown'
 
@@ -75,7 +79,7 @@ export function MaintenanceMaterialScreen() {
 
   async function save(direction: 'out' | 'in', e: React.FormEvent) {
     e.preventDefault()
-    if (!profile) return
+    if (!profile || viewOnly) return
     setBusy(true)
     setError(null)
     setMessage(null)
@@ -88,6 +92,27 @@ export function MaintenanceMaterialScreen() {
         sent_to: sentTo.trim() || null,
         entry_date: entryDate,
         entered_by: enteredBy,
+      }
+      if (editId) {
+        const row = rows.find((r) => r.id === editId)
+        const result = await applyEditDeleteOrQueue({
+          isCeo,
+          createdAt: row?.created_at || new Date().toISOString(),
+          tableName: 'maintenance_material',
+          recordId: editId,
+          action: 'edit',
+          requestedBy: enteredBy,
+          newData: payload,
+          apply: async () => {
+            const { error: uErr } = await supabase.from('maintenance_material').update(payload).eq('id', editId)
+            if (uErr) throw uErr
+          },
+        })
+        setMessage(result === 'applied' ? 'Material updated' : 'Edit queued for CEO approval')
+        resetForm()
+        await load()
+        setTab('list')
+        return
       }
       const { data, error: iErr } = await supabase
         .from('maintenance_material')
@@ -127,9 +152,38 @@ export function MaintenanceMaterialScreen() {
     }
   }
 
+  function openView(row: RowWithGp) {
+    setEditId(row.id)
+    setViewOnly(true)
+    setMaterial(row.material_name)
+    setPurpose(row.purpose || '')
+    setSentTo(row.sent_to || '')
+    setEntryDate(row.entry_date)
+    setTab(row.direction === 'out' ? 'out' : 'in')
+  }
+
+  function openEdit(row: RowWithGp) {
+    setEditId(row.id)
+    setViewOnly(false)
+    setMaterial(row.material_name)
+    setPurpose(row.purpose || '')
+    setSentTo(row.sent_to || '')
+    setEntryDate(row.entry_date)
+    setTab(row.direction === 'out' ? 'out' : 'in')
+  }
+
+  function resetForm() {
+    setEditId(null)
+    setViewOnly(false)
+    setMaterial('')
+    setPurpose('')
+    setSentTo('')
+    setEntryDate(todayISO())
+  }
+
   async function handleDelete(row: RowWithGp) {
     if (!profile) return
-    if (!window.confirm(`Delete material ${row.material_name}?`)) return
+    if (!confirmDeleteRecord({ label: row.material_name, linked: Boolean(row.gate_pass) })) return
     setBusy(true)
     try {
       const result = await applyEditDeleteOrQueue({
@@ -157,25 +211,35 @@ export function MaintenanceMaterialScreen() {
   function formFor(direction: 'out' | 'in') {
     return (
       <form className="form-stack" onSubmit={(e) => void save(direction, e)}>
+        {editId ? (
+          <p className="text-muted2">
+            {viewOnly ? 'Viewing entry' : 'Editing entry'} ·{' '}
+            <button type="button" className="btn-ghost" onClick={resetForm}>
+              {viewOnly ? 'Close' : 'Cancel edit'}
+            </button>
+          </p>
+        ) : null}
         <label className="field">
           <span>Date</span>
-          <input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} required />
+          <input type="date" value={entryDate} readOnly={viewOnly} onChange={(e) => setEntryDate(e.target.value)} required />
         </label>
         <label className="field">
           <span>Material name</span>
-          <input value={material} onChange={(e) => setMaterial(e.target.value)} required />
+          <input value={material} readOnly={viewOnly} onChange={(e) => setMaterial(e.target.value)} required />
         </label>
         <label className="field">
           <span>Purpose</span>
-          <input value={purpose} onChange={(e) => setPurpose(e.target.value)} />
+          <input value={purpose} readOnly={viewOnly} onChange={(e) => setPurpose(e.target.value)} />
         </label>
         <label className="field">
           <span>{direction === 'out' ? 'Sent to' : 'Received from / location'}</span>
-          <input value={sentTo} onChange={(e) => setSentTo(e.target.value)} />
+          <input value={sentTo} readOnly={viewOnly} onChange={(e) => setSentTo(e.target.value)} />
         </label>
-        <button type="submit" disabled={busy}>
-          {busy ? 'Saving…' : direction === 'out' ? 'Save OUT + Gate Pass' : 'Save IN'}
-        </button>
+        {!viewOnly ? (
+          <button type="submit" disabled={busy}>
+            {busy ? 'Saving…' : editId ? 'Update' : direction === 'out' ? 'Save OUT + Gate Pass' : 'Save IN'}
+          </button>
+        ) : null}
       </form>
     )
   }
@@ -267,9 +331,12 @@ export function MaintenanceMaterialScreen() {
                   </div>
                 ) : null}
               </div>
-              <button type="button" className="btn-ghost icon-btn" disabled={busy} onClick={() => void handleDelete(row)}>
-                Del
-              </button>
+              <RecordActions
+                busy={busy}
+                onView={() => openView(row)}
+                onEdit={() => openEdit(row)}
+                onDelete={() => void handleDelete(row)}
+              />
             </article>
           ))}
           {!rows.length ? <p className="text-muted">No material entries yet</p> : null}

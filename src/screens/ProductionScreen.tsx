@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { RecordActions } from '../components/RecordActions'
 import { ShareActions } from '../components/ShareActions'
 import { SubTabs } from '../components/SubTabs'
 import { useAuth } from '../lib/auth'
 import { MACHINES, type JobCard, type ProductionEntry } from '../lib/database.types'
 import { applyOrQueue, nextDocNo, todayISO } from '../lib/mutate'
 import { maybeCompleteProgramFromProduction, programTargetMeter } from '../lib/programs'
+import { applyEditDeleteOrQueue } from '../lib/pendingApprovals'
+import { confirmDeleteRecord } from '../lib/recordCrud'
 import { printSummary, rowsToHtml, shareWhatsApp } from '../lib/share'
 import { supabase } from '../lib/supabase'
 
@@ -61,6 +64,9 @@ export function ProductionScreen({ initialSub = 'job' }: Props) {
 
   const [reportDate, setReportDate] = useState(todayISO())
   const [entries, setEntries] = useState<ProductionEntry[]>([])
+  const [viewEntry, setViewEntry] = useState<ProductionEntry | null>(null)
+
+  const enteredBy = profile?.full_name || profile?.id || 'Unknown'
 
   const wh = Number(workingHour) || 0
   const shiftDiff = 12 - wh
@@ -360,18 +366,55 @@ export function ProductionScreen({ initialSub = 'job' }: Props) {
     }
   }
 
+  async function handleDeleteEntry(row: ProductionEntry) {
+    if (!profile) return
+    const label = `${row.machine_no} · ${row.entry_date} · ${row.total_meter}m`
+    if (!confirmDeleteRecord({ label, linked: Boolean(row.program_id) })) return
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const result = await applyEditDeleteOrQueue({
+        isCeo,
+        createdAt: row.created_at,
+        tableName: 'production_entries',
+        recordId: row.id,
+        action: 'delete',
+        requestedBy: enteredBy,
+        apply: async () => {
+          const { error: dErr } = await supabase.from('production_entries').delete().eq('id', row.id)
+          if (dErr) throw dErr
+        },
+      })
+      setMessage(result === 'applied' ? 'Entry deleted' : 'Delete queued for CEO approval')
+      if (viewEntry?.id === row.id) setViewEntry(null)
+      await loadReport()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Delete failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   function renderShift(title: string, rows: ProductionEntry[]) {
     return (
       <section className="report-section">
         <h2 className="text-weft">{title}</h2>
         <div className="list">
           {rows.map((r) => (
-            <article key={r.id} className="card-row surface">
-              <strong>{r.machine_no}</strong>
-              <div className="text-muted">
-                {r.operator_name ?? '—'} · {r.total_meter} m · eff{' '}
-                <span className="num">{Number(r.efficiency_pct).toFixed(1)}%</span>
+            <article key={r.id} className="card-row surface row-top">
+              <div>
+                <strong>{r.machine_no}</strong>
+                <div className="text-muted">
+                  {r.operator_name ?? '—'} · {r.total_meter} m · WH {Number(r.working_hour).toFixed(1)}h
+                </div>
               </div>
+              <RecordActions
+                busy={busy}
+                canEdit={false}
+                onView={() => setViewEntry(r)}
+                onDelete={() => void handleDeleteEntry(r)}
+              />
             </article>
           ))}
           {!rows.length ? <p className="text-muted">No entries</p> : null}
@@ -692,6 +735,18 @@ export function ProductionScreen({ initialSub = 'job' }: Props) {
           <p className="kpi-total">
             24hr Total Meter: <span className="num text-weft">{total24.toFixed(2)}</span>
           </p>
+
+          {viewEntry ? (
+            <article className="card-row surface form-stack">
+              <div className="row-top">
+                <strong>Production entry</strong>
+                <button type="button" className="btn-ghost" onClick={() => setViewEntry(null)}>
+                  Close
+                </button>
+              </div>
+              <pre className="payload-preview">{JSON.stringify(viewEntry, null, 2)}</pre>
+            </article>
+          ) : null}
         </div>
       ) : null}
 

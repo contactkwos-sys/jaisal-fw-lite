@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { RecordActions } from '../components/RecordActions'
 import { SubTabs } from '../components/SubTabs'
 import { useAuth } from '../lib/auth'
 import { MACHINES } from '../lib/database.types'
@@ -56,6 +57,10 @@ export function ProgramScreen({ initialSub }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [viewProgram, setViewProgram] = useState<PendingRow | null>(null)
+  const [viewPetty, setViewPetty] = useState<Array<{ petty_label: string; item_name: string | null; meter: number }>>([])
+  const [editMachine, setEditMachine] = useState<string>(MACHINES[0])
+  const [editProgramId, setEditProgramId] = useState<string | null>(null)
 
   useEffect(() => {
     if (initialSub === 'pending' || initialSub === 'create') setSub(initialSub)
@@ -224,6 +229,51 @@ export function ProgramScreen({ initialSub }: Props) {
           if (uErr) throw uErr
         },
       })
+      await loadPending()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Update failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function openViewProgram(row: PendingRow) {
+    setViewProgram(row)
+    setEditProgramId(null)
+    const { data } = await supabase
+      .from('program_petty')
+      .select('petty_label, item_name, meter')
+      .eq('program_id', row.id)
+    setViewPetty((data as Array<{ petty_label: string; item_name: string | null; meter: number }>) ?? [])
+  }
+
+  function openEditProgram(row: PendingRow) {
+    setViewProgram(null)
+    setEditProgramId(row.id)
+    setEditMachine(row.machine_no || MACHINES[0])
+  }
+
+  async function saveProgramEdit() {
+    if (!profile || !editProgramId) return
+    setBusy(true)
+    try {
+      await applyOrQueue({
+        isCeo,
+        userId: profile.id,
+        tableName: 'programs',
+        action: 'update',
+        recordId: editProgramId,
+        payload: { machine_no: editMachine },
+        apply: async () => {
+          const { error: uErr } = await supabase
+            .from('programs')
+            .update({ machine_no: editMachine })
+            .eq('id', editProgramId)
+          if (uErr) throw uErr
+        },
+      })
+      setMessage('Program updated')
+      setEditProgramId(null)
       await loadPending()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Update failed')
@@ -445,6 +495,12 @@ export function ProgramScreen({ initialSub }: Props) {
                   </span>
                 </div>
                 <div className="share-actions">
+                  <RecordActions
+                    busy={busy}
+                    canDelete={false}
+                    onView={() => void openViewProgram(row)}
+                    onEdit={() => openEditProgram(row)}
+                  />
                   {row.status === 'pending' ? (
                     <button type="button" className="btn-ghost" disabled={busy} onClick={() => void markRunning(row.id)}>
                       Mark running
@@ -458,6 +514,48 @@ export function ProgramScreen({ initialSub }: Props) {
             ))}
             {!sortedPending.length ? <p className="text-muted">No pending programs</p> : null}
           </div>
+
+          {viewProgram ? (
+            <article className="card-row surface form-stack">
+              <div className="row-top">
+                <strong>
+                  {viewProgram.design_no} · {viewProgram.colour}
+                </strong>
+                <button type="button" className="btn-ghost" onClick={() => setViewProgram(null)}>Close</button>
+              </div>
+              <p className="text-muted">
+                {viewProgram.party} · {viewProgram.machine_no || '—'} · target {viewProgram.target.toFixed(1)} m ·{' '}
+                {viewProgram.status}
+              </p>
+              <ul>
+                {viewPetty.map((p, i) => (
+                  <li key={i}>
+                    {p.petty_label} · {p.item_name || '—'} · {Number(p.meter).toFixed(1)} m
+                  </li>
+                ))}
+              </ul>
+            </article>
+          ) : null}
+
+          {editProgramId ? (
+            <article className="card-row surface form-stack">
+              <h3 className="section-title">Edit machine</h3>
+              <label className="field">
+                <span className="text-muted">Machine</span>
+                <select value={editMachine} onChange={(e) => setEditMachine(e.target.value)}>
+                  {MACHINES.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="share-actions">
+                <button type="button" className="btn-ghost" onClick={() => setEditProgramId(null)}>Cancel</button>
+                <button type="button" className="primary-save" disabled={busy} onClick={() => void saveProgramEdit()}>
+                  Save
+                </button>
+              </div>
+            </article>
+          ) : null}
         </div>
       ) : null}
 

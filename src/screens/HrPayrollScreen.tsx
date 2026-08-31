@@ -3,6 +3,7 @@
  * Attendance → Payroll → Bank Salary Letter (no cheques).
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { RecordActions } from '../components/RecordActions'
 import { useAuth } from '../lib/auth'
 import type {
   Attendance,
@@ -343,6 +344,7 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
   const [workerForm, setWorkerForm] = useState<WorkerForm>(emptyWorkerForm())
   const [workerFormErrors, setWorkerFormErrors] = useState<WorkerFormErrors>({})
   const [showWorkerForm, setShowWorkerForm] = useState(false)
+  const [workerFormViewOnly, setWorkerFormViewOnly] = useState(false)
   const [jobNames, setJobNames] = useState<string[]>([])
   const [empSearch, setEmpSearch] = useState('')
   const [empFilterDesig, setEmpFilterDesig] = useState('')
@@ -808,6 +810,7 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
 
   async function saveWorker(e: React.FormEvent) {
     e.preventDefault()
+    if (workerFormViewOnly) return
     const designation = resolveSelectValue(workerForm.designation_choice, workerForm.designation_other)
     const department = resolveSelectValue(workerForm.department_choice, workerForm.department_other)
     const shift = resolveSelectValue(workerForm.shift_choice, workerForm.shift_other)
@@ -919,6 +922,16 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
   function openAddEmployee() {
     setWorkerForm(emptyWorkerForm())
     setWorkerFormErrors({})
+    setWorkerFormViewOnly(false)
+    setError(null)
+    setShowWorkerForm(true)
+  }
+
+  function openViewEmployee(w: Worker) {
+    const latest = pickLatestRate(salaryRates, w.id, todayISO())
+    setWorkerForm(workerToForm(w, selectOpts, latest))
+    setWorkerFormErrors({})
+    setWorkerFormViewOnly(true)
     setError(null)
     setShowWorkerForm(true)
   }
@@ -927,6 +940,7 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
     const latest = pickLatestRate(salaryRates, w.id, todayISO())
     setWorkerForm(workerToForm(w, selectOpts, latest))
     setWorkerFormErrors({})
+    setWorkerFormViewOnly(false)
     setError(null)
     setShowWorkerForm(true)
   }
@@ -1586,7 +1600,14 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
 
           {showWorkerForm ? (
             <form className="hr-emp-form" onSubmit={(e) => void saveWorker(e)} noValidate>
-              <h2 className="section-title">{workerForm.id ? 'Edit Employee' : 'Add Employee'}</h2>
+              <h2 className="section-title">
+                {workerFormViewOnly
+                  ? 'View Employee'
+                  : workerForm.id
+                    ? 'Edit Employee'
+                    : 'Add Employee'}
+              </h2>
+              <fieldset disabled={workerFormViewOnly}>
 
               <section className="hr-emp-section">
                 <h3 className="hr-emp-section-title">A. Basic Information</h3>
@@ -1885,19 +1906,24 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
                 </div>
               </section>
 
+              </fieldset>
+
               <div className="hr-emp-form-actions share-actions">
+                {!workerFormViewOnly ? (
                 <button type="submit" className="primary-save" disabled={busy}>
                   Save
                 </button>
+                ) : null}
                 <button
                   type="button"
                   className="btn-ghost"
                   onClick={() => {
                     setShowWorkerForm(false)
+                    setWorkerFormViewOnly(false)
                     setWorkerFormErrors({})
                   }}
                 >
-                  Cancel
+                  {workerFormViewOnly ? 'Close' : 'Cancel'}
                 </button>
               </div>
             </form>
@@ -1945,9 +1971,14 @@ export function HrPayrollScreen({ initialSub, onNavigate }: Props) {
                     </td>
                     <td className="hr-emp-actions">
                       <div className="share-actions">
-                        <button type="button" className="btn-ghost" onClick={() => openEditEmployee(w)}>
-                          Edit
-                        </button>
+                        <RecordActions
+                          busy={busy}
+                          canView
+                          canEdit
+                          canDelete={false}
+                          onView={() => openViewEmployee(w)}
+                          onEdit={() => openEditEmployee(w)}
+                        />
                         {w.is_active ? (
                           <button type="button" className="btn-ghost" onClick={() => void deactivateWorker(w)}>
                             Deactivate

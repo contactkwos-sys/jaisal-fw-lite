@@ -22,6 +22,7 @@ import './styles/order-entry.css'
 import './styles/daily-pending-work.css'
 import './styles/notebook.css'
 import './styles/order-to-program.css'
+import './styles/record-actions.css'
 
 import App from './App.tsx'
 

@@ -66,11 +66,12 @@ import {
   type RateMasterRow,
 } from '../lib/rateMaster'
 import { rateMasterItemNames } from '../lib/dinIntakeCosting'
-import {
-  DinDesignImportSection,
+import { DinDesignImportSection,
   type DinImageAttachPayload,
   type MissingRateItem,
 } from '../components/dinCosting/DinDesignImportSection'
+import { RecordActions } from '../components/RecordActions'
+import { confirmDeleteRecord } from '../lib/recordCrud'
 import { RateMasterYarnSelect } from '../components/dinCosting/RateMasterYarnSelect'
 import { CompactRateCell } from '../components/dinCosting/CompactRateCell'
 import {
@@ -214,6 +215,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
   const [desiredProfitPerMtr, setDesiredProfitPerMtr] = useState(() => boot?.desiredProfitPerMtr || '')
   const [productionMeters, setProductionMeters] = useState(() => boot?.productionMeters || '')
   const [isLocked, setIsLocked] = useState(() => Boolean(boot?.isLocked))
+  const [formViewOnly, setFormViewOnly] = useState(false)
   const [formulaDefaults, setFormulaDefaults] = useState(FORMULA_DEFAULTS)
   const [savedId, setSavedId] = useState<string | null>(() => boot?.savedId || null)
   const [status, setStatus] = useState<'draft' | 'final'>(() =>
@@ -670,7 +672,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     production.metersPer28Days,
   ])
 
-  const isReadOnly = !canEdit || isLocked
+  const isReadOnly = !canEdit || isLocked || formViewOnly
 
   const refreshHistory = useCallback(async (opts?: { append?: boolean }) => {
     const append = Boolean(opts?.append)
@@ -937,6 +939,23 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     [applyHeader],
   )
 
+  async function loadForView(id: string) {
+    await loadById(id)
+    setFormViewOnly(true)
+    requestAnimationFrame(() => {
+      document.getElementById('dwc-design-details')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }
+
+  async function loadForEdit(id: string) {
+    await loadById(id)
+    setFormViewOnly(false)
+    setIsLocked(false)
+    requestAnimationFrame(() => {
+      document.getElementById('dwc-design-details')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }
+
   const loadExisting = useCallback(
     async (din: string) => {
       const trimmed = normalizeDesignNumber(din)
@@ -1052,6 +1071,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     setDesiredProfitPerMtr('')
     setProductionMeters('')
     setIsLocked(false)
+    setFormViewOnly(false)
     setSavedId(null)
     setSavedCreatedAt(null)
     setStatus('draft')
@@ -1757,8 +1777,8 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
       setError('Only authorized users (CEO / Manager) can delete finalized costings')
       return
     }
-    const ok = window.confirm(
-      (() => {
+    const ok = confirmDeleteRecord({
+      message: (() => {
         const within =
           isCeo ||
           !createdAt ||
@@ -1766,7 +1786,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         if (within) return 'Delete this DIN costing? Cannot be undone'
         return 'Delete this DIN costing? Cannot be undone. This record is older than 7 days — delete will go to CEO for approval.'
       })(),
-    )
+    })
     if (!ok) return
     setBusy(true)
     setError(null)
@@ -3521,16 +3541,18 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
                         <td>{row.latestAt ? formatDisplayDate(row.latestAt.slice(0, 10)) : '—'}</td>
                         <td>
                           <div className="dwc-history-actions">
-                            <button
-                              type="button"
-                              className="dwc-action-btn dwc-action-edit"
-                              title="Edit latest costing"
-                              onClick={() =>
-                                void loadById(row.costingId).catch((e: Error) => setError(e.message))
+                            <RecordActions
+                              busy={busy}
+                              canView={canView}
+                              canEdit={canEdit}
+                              canDelete={row.status !== 'final' || canDeleteFinal}
+                              onView={() =>
+                                void loadForView(row.costingId).catch((e: Error) => setError(e.message))
                               }
-                            >
-                              Edit
-                            </button>
+                              onEdit={() =>
+                                void loadForEdit(row.costingId).catch((e: Error) => setError(e.message))
+                              }
+                            />
                             <button
                               type="button"
                               className="dwc-action-btn"
@@ -3769,29 +3791,19 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
                             </span>
                           </td>
                           <td>
-                            <div className="dwc-history-actions">
-                              <button
-                                type="button"
-                                className="dwc-action-btn dwc-action-edit"
-                                title="Edit costing"
-                                onClick={() =>
-                                  void loadById(row.id).catch((e: Error) => setError(e.message))
-                                }
-                              >
-                                Edit
-                              </button>
-                              <button
-                                type="button"
-                                className="dwc-action-btn dwc-action-delete"
-                                title="Delete costing"
-                                disabled={row.status === 'final' && !canDeleteFinal}
-                                onClick={() =>
-                                  void deleteCosting(row.id, row.status, row.created_at)
-                                }
-                              >
-                                Delete
-                              </button>
-                            </div>
+                            <RecordActions
+                              busy={busy}
+                              canView={canView}
+                              canEdit={canEdit}
+                              canDelete={row.status !== 'final' || canDeleteFinal}
+                              onView={() =>
+                                void loadForView(row.id).catch((e: Error) => setError(e.message))
+                              }
+                              onEdit={() =>
+                                void loadForEdit(row.id).catch((e: Error) => setError(e.message))
+                              }
+                              onDelete={() => void deleteCosting(row.id, row.status, row.created_at)}
+                            />
                           </td>
                         </tr>
                       )

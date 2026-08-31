@@ -75,6 +75,24 @@ export async function insertDesignCatalog(row: {
   if (error) throw error
 }
 
+export async function updateDesignCatalog(
+  id: string,
+  patch: {
+    jfg_no?: string
+    notes?: string | null
+    design_image_url?: string
+    matching_image_url?: string | null
+  },
+): Promise<void> {
+  const { error } = await supabase.from('design_catalog').update(patch).eq('id', id)
+  if (error) throw error
+}
+
+export async function deleteDesignCatalog(id: string): Promise<void> {
+  const { error } = await supabase.from('design_catalog').delete().eq('id', id)
+  if (error) throw error
+}
+
 /**
  * Share catalog image(s) + caption via Web Share API.
  * Optional phone opens wa.me text fallback when native file share is unavailable.

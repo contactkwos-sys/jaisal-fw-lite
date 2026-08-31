@@ -1,46 +1,12 @@
 /**
- * Touch-friendly View / Edit action buttons for Warp Yarn tables.
+ * Warp Yarn tables — thin wrapper around shared RecordActions.
  */
-type Props = {
-  onView?: () => void
-  onEdit?: () => void
-  onDelete?: () => void
-  canEdit?: boolean
-  canDelete?: boolean
-  viewLabel?: string
-  editLabel?: string
-  deleteLabel?: string
-  busy?: boolean
-}
+import { RecordActions, type RecordActionsProps } from '../RecordActions'
 
-export function WarpRecordActions({
-  onView,
-  onEdit,
-  onDelete,
-  canEdit = true,
-  canDelete = false,
-  viewLabel = 'View',
-  editLabel = 'Edit',
-  deleteLabel = 'Delete',
-  busy = false,
-}: Props) {
+export function WarpRecordActions(props: RecordActionsProps) {
   return (
     <div className="wym-record-actions">
-      {onView ? (
-        <button type="button" className="btn-ghost btn-sm wym-action-btn" disabled={busy} onClick={onView}>
-          {viewLabel}
-        </button>
-      ) : null}
-      {onEdit && canEdit ? (
-        <button type="button" className="btn-warp btn-sm wym-action-btn" disabled={busy} onClick={onEdit}>
-          {editLabel}
-        </button>
-      ) : null}
-      {onDelete && canDelete ? (
-        <button type="button" className="btn-ghost btn-sm wym-action-btn text-danger" disabled={busy} onClick={onDelete}>
-          {deleteLabel}
-        </button>
-      ) : null}
+      <RecordActions {...props} />
     </div>
   )
 }

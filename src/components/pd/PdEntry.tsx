@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
+import { RecordActions } from '../../components/RecordActions'
 import { useAuth } from '../../lib/auth'
-import { MACHINES } from '../../lib/database.types'
+import { MACHINES, type ProductionEntry } from '../../lib/database.types'
 import { applyOrQueue, todayISO } from '../../lib/mutate'
 import { maybeCompleteProgramFromProduction } from '../../lib/programs'
 import { supabase } from '../../lib/supabase'
@@ -33,6 +34,8 @@ export function PdEntry() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [recent, setRecent] = useState<ProductionEntry[]>([])
+  const [viewRow, setViewRow] = useState<ProductionEntry | null>(null)
 
   const selected = programs.find((p) => p.id === programId)
 
@@ -89,6 +92,13 @@ export function PdEntry() {
       setProgramId(opts[0].id)
       setMachine(opts[0].machine_no)
     }
+
+    const { data: recentEntries } = await supabase
+      .from('production_entries')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(20)
+    setRecent((recentEntries as ProductionEntry[]) ?? [])
   }, [programId])
 
   useEffect(() => {
@@ -255,6 +265,43 @@ export function PdEntry() {
           Save Production Entry
         </button>
       </form>
+
+      <section className="pd-panel" style={{ marginTop: 16 }}>
+        <h2>Recent Entries</h2>
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Machine</th>
+                <th className="num">Meter</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recent.map((r) => (
+                <tr key={r.id}>
+                  <td>{r.entry_date}</td>
+                  <td>{r.machine_no}</td>
+                  <td className="num">{Number(r.total_meter || 0).toFixed(1)}</td>
+                  <td>
+                    <RecordActions busy={busy} canEdit={false} canDelete={false} onView={() => setViewRow(r)} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {viewRow ? (
+          <article className="card-row surface form-stack" style={{ marginTop: 12 }}>
+            <div className="row-top">
+              <strong>Entry detail</strong>
+              <button type="button" className="btn-ghost" onClick={() => setViewRow(null)}>Close</button>
+            </div>
+            <pre className="payload-preview">{JSON.stringify(viewRow, null, 2)}</pre>
+          </article>
+        ) : null}
+      </section>
     </div>
   )
 }

@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { RecordActions } from '../../components/RecordActions'
 import { useAuth } from '../../lib/auth'
 import { applyOrQueue, todayISO } from '../../lib/mutate'
+import { applyEditDeleteOrQueue } from '../../lib/pendingApprovals'
+import { confirmDeleteRecord } from '../../lib/recordCrud'
 import { DAMAGE_TYPES, nextLotNo } from '../../lib/programDispatch'
 import { supabase } from '../../lib/supabase'
 import { handleUserError } from '../../lib/userError'
@@ -58,6 +61,9 @@ export function PdFolding({ onGo }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [recent, setRecent] = useState<Array<Record<string, unknown>>>([])
+  const [viewLot, setViewLot] = useState<Record<string, unknown> | null>(null)
+
+  const enteredBy = profile?.full_name || profile?.id || 'Unknown'
 
   const damageTotal = useMemo(
     () => damages.reduce((s, d) => s + (Number(d.damage_meter) || 0), 0),
@@ -241,6 +247,41 @@ export function PdFolding({ onGo }: Props) {
     }
   }
 
+  async function handleDeleteLot(row: Record<string, unknown>) {
+    if (!profile) return
+    const id = String(row.id || '')
+    if (!id) return
+    if (row.challan_id) {
+      setError('Cannot delete: lot is linked to a challan / dispatch.')
+      return
+    }
+    const label = String(row.lot_no || 'lot')
+    if (!confirmDeleteRecord({ label, linked: Boolean(row.program_id) })) return
+    setBusy(true)
+    try {
+      const result = await applyEditDeleteOrQueue({
+        isCeo,
+        createdAt: String(row.created_at || ''),
+        tableName: 'checking_lots',
+        recordId: id,
+        action: 'delete',
+        requestedBy: enteredBy,
+        apply: async () => {
+          await supabase.from('lot_damages').delete().eq('lot_id', id)
+          const { error: dErr } = await supabase.from('checking_lots').delete().eq('id', id)
+          if (dErr) throw dErr
+        },
+      })
+      setMessage(result === 'applied' ? 'Lot deleted' : 'Delete queued for CEO approval')
+      if (viewLot?.id === row.id) setViewLot(null)
+      await load()
+    } catch (err) {
+      setError(handleUserError('PD.folding.delete', err, 'Could not delete lot.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="pd-sub">
       <header className="pd-sub-header">
@@ -415,6 +456,7 @@ export function PdFolding({ onGo }: Props) {
                 <th>Lot</th>
                 <th>Status</th>
                 <th className="num">Final m</th>
+                <th>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -423,11 +465,29 @@ export function PdFolding({ onGo }: Props) {
                   <td>{String(r.lot_no || '—')}</td>
                   <td>{String(r.status || '—')}</td>
                   <td className="num">{Number(r.final_meter || 0).toFixed(1)}</td>
+                  <td>
+                    <RecordActions
+                      busy={busy}
+                      canEdit={false}
+                      canDelete={!r.challan_id}
+                      onView={() => setViewLot(r)}
+                      onDelete={!r.challan_id ? () => void handleDeleteLot(r) : undefined}
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+        {viewLot ? (
+          <article className="card-row surface form-stack" style={{ marginTop: 12 }}>
+            <div className="row-top">
+              <strong>Lot detail</strong>
+              <button type="button" className="btn-ghost" onClick={() => setViewLot(null)}>Close</button>
+            </div>
+            <pre className="payload-preview">{JSON.stringify(viewLot, null, 2)}</pre>
+          </article>
+        ) : null}
       </section>
     </div>
   )

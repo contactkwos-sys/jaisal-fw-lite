@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { RecordActions } from '../components/RecordActions'
 import { SubTabs } from '../components/SubTabs'
 import { useAuth } from '../lib/auth'
 import { LOAN_PARTY_DEFAULTS, type LoanEntry } from '../lib/database.types'
 import { todayISO } from '../lib/mutate'
 import { applyEditDeleteOrQueue } from '../lib/pendingApprovals'
+import { confirmDeleteRecord } from '../lib/recordCrud'
 import { supabase } from '../lib/supabase'
 
 type TabId = 'entry' | 'ledger'
@@ -22,6 +24,8 @@ export function LoanTrackerScreen() {
   const [amount, setAmount] = useState('')
   const [purpose, setPurpose] = useState('')
   const [entryDate, setEntryDate] = useState(todayISO())
+  const [editId, setEditId] = useState<string | null>(null)
+  const [viewOnly, setViewOnly] = useState(false)
 
   const enteredBy = profile?.full_name || profile?.roles?.role_name || 'Unknown'
 
@@ -65,7 +69,7 @@ export function LoanTrackerScreen() {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
-    if (!profile) return
+    if (!profile || viewOnly) return
     if (!partyName) {
       setError('Party name is required')
       return
@@ -79,16 +83,37 @@ export function LoanTrackerScreen() {
     setError(null)
     setMessage(null)
     try {
-      const { error: iErr } = await supabase.from('loan_entries').insert({
+      const payload = {
         party_name: partyName,
         direction,
         amount: amt,
         purpose: purpose.trim() || null,
         entry_date: entryDate,
         entered_by: enteredBy,
-      })
-      if (iErr) throw iErr
-      setMessage('Loan entry saved')
+      }
+      if (editId) {
+        const row = rows.find((r) => r.id === editId)
+        const result = await applyEditDeleteOrQueue({
+          isCeo,
+          createdAt: row?.created_at || new Date().toISOString(),
+          tableName: 'loan_entries',
+          recordId: editId,
+          action: 'edit',
+          requestedBy: enteredBy,
+          newData: payload,
+          apply: async () => {
+            const { error: uErr } = await supabase.from('loan_entries').update(payload).eq('id', editId)
+            if (uErr) throw uErr
+          },
+        })
+        setMessage(result === 'applied' ? 'Loan entry updated' : 'Edit queued for CEO approval')
+      } else {
+        const { error: iErr } = await supabase.from('loan_entries').insert(payload)
+        if (iErr) throw iErr
+        setMessage('Loan entry saved')
+      }
+      setEditId(null)
+      setViewOnly(false)
       setAmount('')
       setPurpose('')
       setTab('ledger')
@@ -100,9 +125,48 @@ export function LoanTrackerScreen() {
     }
   }
 
+  function openView(row: LoanEntry) {
+    setEditId(row.id)
+    setViewOnly(true)
+    setPartyPreset(
+      (LOAN_PARTY_DEFAULTS as readonly string[]).includes(row.party_name) ? row.party_name : 'Other',
+    )
+    setPartyOther((LOAN_PARTY_DEFAULTS as readonly string[]).includes(row.party_name) ? '' : row.party_name)
+    setDirection(row.direction as 'given' | 'received')
+    setAmount(String(row.amount))
+    setPurpose(row.purpose || '')
+    setEntryDate(row.entry_date)
+    setTab('entry')
+  }
+
+  function openEdit(row: LoanEntry) {
+    setEditId(row.id)
+    setViewOnly(false)
+    setPartyPreset(
+      (LOAN_PARTY_DEFAULTS as readonly string[]).includes(row.party_name) ? row.party_name : 'Other',
+    )
+    setPartyOther((LOAN_PARTY_DEFAULTS as readonly string[]).includes(row.party_name) ? '' : row.party_name)
+    setDirection(row.direction as 'given' | 'received')
+    setAmount(String(row.amount))
+    setPurpose(row.purpose || '')
+    setEntryDate(row.entry_date)
+    setTab('entry')
+  }
+
+  function resetEntryForm() {
+    setEditId(null)
+    setViewOnly(false)
+    setAmount('')
+    setPurpose('')
+    setPartyPreset(LOAN_PARTY_DEFAULTS[0])
+    setPartyOther('')
+    setDirection('given')
+    setEntryDate(todayISO())
+  }
+
   async function handleDelete(row: LoanEntry) {
     if (!profile) return
-    if (!window.confirm(`Delete loan entry for ${row.party_name}?`)) return
+    if (!confirmDeleteRecord({ label: row.party_name })) return
     setBusy(true)
     try {
       const result = await applyEditDeleteOrQueue({
@@ -146,9 +210,17 @@ export function LoanTrackerScreen() {
 
       {tab === 'entry' ? (
         <form className="form-stack" onSubmit={(e) => void handleSave(e)}>
+          {editId ? (
+            <p className="text-muted2">
+              {viewOnly ? 'Viewing entry' : 'Editing entry'} ·{' '}
+              <button type="button" className="btn-ghost" onClick={resetEntryForm}>
+                {viewOnly ? 'Close' : 'Cancel edit'}
+              </button>
+            </p>
+          ) : null}
           <label className="field">
             <span>Party</span>
-            <select value={partyPreset} onChange={(e) => setPartyPreset(e.target.value)}>
+            <select value={partyPreset} disabled={viewOnly} onChange={(e) => setPartyPreset(e.target.value)}>
               {LOAN_PARTY_DEFAULTS.map((p) => (
                 <option key={p} value={p}>
                   {p}
@@ -159,7 +231,7 @@ export function LoanTrackerScreen() {
           {partyPreset === 'Other' ? (
             <label className="field">
               <span>Other party name</span>
-              <input value={partyOther} onChange={(e) => setPartyOther(e.target.value)} required />
+              <input value={partyOther} readOnly={viewOnly} onChange={(e) => setPartyOther(e.target.value)} required />
             </label>
           ) : null}
           <div className="field">
@@ -168,6 +240,7 @@ export function LoanTrackerScreen() {
               <button
                 type="button"
                 className={direction === 'given' ? 'cashbook-type-btn debit active' : 'cashbook-type-btn debit'}
+                disabled={viewOnly}
                 onClick={() => setDirection('given')}
               >
                 Given
@@ -175,6 +248,7 @@ export function LoanTrackerScreen() {
               <button
                 type="button"
                 className={direction === 'received' ? 'cashbook-type-btn credit active' : 'cashbook-type-btn credit'}
+                disabled={viewOnly}
                 onClick={() => setDirection('received')}
               >
                 Received
@@ -183,19 +257,21 @@ export function LoanTrackerScreen() {
           </div>
           <label className="field">
             <span>Amount</span>
-            <input className="num" type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required />
+            <input className="num" type="number" min="0.01" step="0.01" value={amount} readOnly={viewOnly} onChange={(e) => setAmount(e.target.value)} required />
           </label>
           <label className="field">
             <span>Purpose</span>
-            <input value={purpose} onChange={(e) => setPurpose(e.target.value)} />
+            <input value={purpose} readOnly={viewOnly} onChange={(e) => setPurpose(e.target.value)} />
           </label>
           <label className="field">
             <span>Date</span>
-            <input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} required />
+            <input type="date" value={entryDate} readOnly={viewOnly} onChange={(e) => setEntryDate(e.target.value)} required />
           </label>
-          <button type="submit" disabled={busy}>
-            {busy ? 'Saving…' : 'Save'}
-          </button>
+          {!viewOnly ? (
+            <button type="submit" disabled={busy}>
+              {busy ? 'Saving…' : editId ? 'Update' : 'Save'}
+            </button>
+          ) : null}
         </form>
       ) : null}
 
@@ -214,9 +290,12 @@ export function LoanTrackerScreen() {
                     <span>
                       {e.entry_date} · {e.direction} ₹{Number(e.amount).toFixed(2)} · {e.purpose || '—'}
                     </span>
-                    <button type="button" className="btn-ghost icon-btn" disabled={busy} onClick={() => void handleDelete(e)}>
-                      Del
-                    </button>
+                    <RecordActions
+                      busy={busy}
+                      onView={() => openView(e)}
+                      onEdit={() => openEdit(e)}
+                      onDelete={() => void handleDelete(e)}
+                    />
                   </li>
                 ))}
               </ul>

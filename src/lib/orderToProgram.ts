@@ -572,6 +572,9 @@ export type CustomerOrderDetail = {
   paymentTerms: string
   remarks: string
   discountPct: number
+  overallStatus: string
+  totalMeter: number
+  netAmount: number
   lines: Array<{
     itemId: string
     matchingNo: number
@@ -588,7 +591,7 @@ export async function loadCustomerOrderDetail(orderId: string): Promise<Customer
   const { data, error } = await supabase
     .from('order_book')
     .select(
-      'id, order_no, party_name, order_date, item_name, din_id, quality_name, sales_rate, design_preview_url, delivery_within_days, payment_terms, remarks, discount_pct, order_book_items(id, design_no, colour, matching_no, matching_id, matching_name, other_info, qty_meter, rate, din_id)',
+      'id, order_no, party_name, order_date, item_name, din_id, quality_name, sales_rate, design_preview_url, delivery_within_days, payment_terms, remarks, discount_pct, overall_status, status, total_order_meter, net_amount, order_book_items(id, design_no, colour, matching_no, matching_id, matching_name, other_info, qty_meter, rate, din_id)',
     )
     .eq('id', orderId)
     .maybeSingle()
@@ -613,6 +616,9 @@ export async function loadCustomerOrderDetail(orderId: string): Promise<Customer
     paymentTerms: data.payment_terms || '30 Days',
     remarks: data.remarks || '',
     discountPct: Number(data.discount_pct) || 0,
+    overallStatus: String(data.overall_status || data.status || 'ORDER RECEIVED'),
+    totalMeter: Number(data.total_order_meter) || 0,
+    netAmount: Number(data.net_amount) || 0,
     lines: items.map((it) => ({
       itemId: String(it.id),
       matchingNo: Number(it.matching_no) || 1,
@@ -678,6 +684,26 @@ export async function updateCustomerOrder(
   await ensurePartyMarka(input.partyName)
 
   return { orderId, orderNo: existing.order_no || '' }
+}
+
+/**
+ * Delete a customer order when it is not linked to programs / production.
+ * Prevents FK breakage — linked orders must not be hard-deleted.
+ */
+export async function deleteCustomerOrder(orderId: string): Promise<void> {
+  const { count: progCount, error: pErr } = await supabase
+    .from('programs')
+    .select('id', { count: 'exact', head: true })
+    .eq('order_id', orderId)
+  if (pErr) throw pErr
+  if ((progCount || 0) > 0) {
+    throw new Error('Cannot delete: this order is already used in existing Program / Production transactions.')
+  }
+
+  const { error: iErr } = await supabase.from('order_book_items').delete().eq('order_id', orderId)
+  if (iErr) throw iErr
+  const { error } = await supabase.from('order_book').delete().eq('id', orderId)
+  if (error) throw error
 }
 
 export type BookedOrderOption = {

@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { RecordActions } from '../components/RecordActions'
 import { SubTabs } from '../components/SubTabs'
 import { useAuth } from '../lib/auth'
 import type { YarnInward } from '../lib/database.types'
 import { todayISO, uploadInvoicePhoto } from '../lib/mutate'
 import { applyEditDeleteOrQueue } from '../lib/pendingApprovals'
+import { confirmDeleteRecord } from '../lib/recordCrud'
 import { supabase } from '../lib/supabase'
 
 type TabId = 'scan' | 'list'
@@ -35,6 +37,8 @@ export function YarnInwardScreen() {
   })
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
+  const [editId, setEditId] = useState<string | null>(null)
+  const [viewOnly, setViewOnly] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -146,7 +150,7 @@ export function YarnInwardScreen() {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
-    if (!profile) return
+    if (!profile || viewOnly) return
     if (!fields.supplier_name.trim()) {
       setError('Supplier name is required')
       return
@@ -165,9 +169,28 @@ export function YarnInwardScreen() {
         entry_date: entryDate,
         entered_by: enteredBy,
       }
-      const { error: iErr } = await supabase.from('yarn_inward').insert(payload)
-      if (iErr) throw iErr
-      setMessage('Yarn inward saved')
+      if (editId) {
+        const result = await applyEditDeleteOrQueue({
+          isCeo,
+          createdAt: rows.find((r) => r.id === editId)?.created_at || new Date().toISOString(),
+          tableName: 'yarn_inward',
+          recordId: editId,
+          action: 'edit',
+          requestedBy: enteredBy,
+          newData: payload,
+          apply: async () => {
+            const { error: uErr } = await supabase.from('yarn_inward').update(payload).eq('id', editId)
+            if (uErr) throw uErr
+          },
+        })
+        setMessage(result === 'applied' ? 'Yarn inward updated' : 'Update queued for CEO approval')
+      } else {
+        const { error: iErr } = await supabase.from('yarn_inward').insert(payload)
+        if (iErr) throw iErr
+        setMessage('Yarn inward saved')
+      }
+      setEditId(null)
+      setViewOnly(false)
       setFields({ supplier_name: '', item: '', qty: '', amount: '' })
       setImageUrl(null)
       setPreview(null)
@@ -180,9 +203,41 @@ export function YarnInwardScreen() {
     }
   }
 
+  function openView(row: YarnInward) {
+    setEditId(row.id)
+    setViewOnly(true)
+    setYarnType(row.yarn_type as YarnType)
+    setEntryDate(row.entry_date || todayISO())
+    setFields({
+      supplier_name: row.supplier_name || '',
+      item: row.item || '',
+      qty: row.qty != null ? String(row.qty) : '',
+      amount: row.amount != null ? String(row.amount) : '',
+    })
+    setImageUrl(row.invoice_image_url)
+    setPreview(row.invoice_image_url)
+    setTab('scan')
+  }
+
+  function openEdit(row: YarnInward) {
+    setEditId(row.id)
+    setViewOnly(false)
+    setYarnType(row.yarn_type as YarnType)
+    setEntryDate(row.entry_date || todayISO())
+    setFields({
+      supplier_name: row.supplier_name || '',
+      item: row.item || '',
+      qty: row.qty != null ? String(row.qty) : '',
+      amount: row.amount != null ? String(row.amount) : '',
+    })
+    setImageUrl(row.invoice_image_url)
+    setPreview(row.invoice_image_url)
+    setTab('scan')
+  }
+
   async function handleDelete(row: YarnInward) {
     if (!profile) return
-    if (!window.confirm(`Delete inward for ${row.supplier_name}?`)) return
+    if (!confirmDeleteRecord({ label: row.supplier_name })) return
     setBusy(true)
     try {
       const result = await applyEditDeleteOrQueue({
@@ -226,12 +281,31 @@ export function YarnInwardScreen() {
 
       {tab === 'scan' ? (
         <div className="form-stack">
+          {editId ? (
+            <p className="text-muted2">
+              {viewOnly ? 'Viewing inward' : 'Editing inward'} ·{' '}
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={() => {
+                  setEditId(null)
+                  setViewOnly(false)
+                  setFields({ supplier_name: '', item: '', qty: '', amount: '' })
+                  setImageUrl(null)
+                  setPreview(null)
+                }}
+              >
+                {viewOnly ? 'Close' : 'Cancel edit'}
+              </button>
+            </p>
+          ) : null}
           <div className="field">
             <span>Yarn type</span>
             <div className="cashbook-type-toggle" role="group">
               <button
                 type="button"
                 className={yarnType === 'weft' ? 'cashbook-type-btn credit active' : 'cashbook-type-btn credit'}
+                disabled={viewOnly}
                 onClick={() => setYarnType('weft')}
               >
                 Weft Yarn
@@ -239,6 +313,7 @@ export function YarnInwardScreen() {
               <button
                 type="button"
                 className={yarnType === 'warp' ? 'cashbook-type-btn debit active' : 'cashbook-type-btn debit'}
+                disabled={viewOnly}
                 onClick={() => setYarnType('warp')}
               >
                 Warp Yarn
@@ -248,9 +323,15 @@ export function YarnInwardScreen() {
 
           <label className="field">
             <span>Entry date</span>
-            <input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} />
+            <input
+              type="date"
+              value={entryDate}
+              readOnly={viewOnly}
+              onChange={(e) => setEntryDate(e.target.value)}
+            />
           </label>
 
+          {!viewOnly ? (
           <div className="share-actions">
             {!cameraOn ? (
               <button type="button" disabled={ocrBusy} onClick={() => void startCamera()}>
@@ -281,6 +362,7 @@ export function YarnInwardScreen() {
               }}
             />
           </div>
+          ) : null}
 
           {cameraOn ? (
             <video ref={videoRef} playsInline muted className="surface" style={{ width: '100%', maxHeight: 280 }} />
@@ -293,13 +375,18 @@ export function YarnInwardScreen() {
               <span>Supplier name</span>
               <input
                 value={fields.supplier_name}
+                readOnly={viewOnly}
                 onChange={(e) => setFields((f) => ({ ...f, supplier_name: e.target.value }))}
                 required
               />
             </label>
             <label className="field">
               <span>Item</span>
-              <input value={fields.item} onChange={(e) => setFields((f) => ({ ...f, item: e.target.value }))} />
+              <input
+                value={fields.item}
+                readOnly={viewOnly}
+                onChange={(e) => setFields((f) => ({ ...f, item: e.target.value }))}
+              />
             </label>
             <label className="field">
               <span>Qty</span>
@@ -308,6 +395,7 @@ export function YarnInwardScreen() {
                 type="number"
                 step="0.01"
                 value={fields.qty}
+                readOnly={viewOnly}
                 onChange={(e) => setFields((f) => ({ ...f, qty: e.target.value }))}
               />
             </label>
@@ -318,12 +406,15 @@ export function YarnInwardScreen() {
                 type="number"
                 step="0.01"
                 value={fields.amount}
+                readOnly={viewOnly}
                 onChange={(e) => setFields((f) => ({ ...f, amount: e.target.value }))}
               />
             </label>
+            {!viewOnly ? (
             <button type="submit" disabled={busy || ocrBusy}>
-              {busy ? 'Saving…' : 'Confirm & save'}
+              {busy ? 'Saving…' : editId ? 'Update' : 'Confirm & save'}
             </button>
+            ) : null}
           </form>
         </div>
       ) : null}
@@ -351,9 +442,15 @@ export function YarnInwardScreen() {
                   ) : null}
                 </div>
               </div>
-              <button type="button" className="btn-ghost icon-btn" disabled={busy} onClick={() => void handleDelete(row)}>
-                Del
-              </button>
+              <RecordActions
+                busy={busy}
+                canView
+                canEdit
+                canDelete
+                onView={() => openView(row)}
+                onEdit={() => openEdit(row)}
+                onDelete={() => void handleDelete(row)}
+              />
             </article>
           ))}
           {!rows.length ? <p className="text-muted">No yarn inward yet</p> : null}
