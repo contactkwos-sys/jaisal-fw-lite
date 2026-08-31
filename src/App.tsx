@@ -10,7 +10,7 @@ import {
   type MainModuleId,
   type NavTarget,
 } from './lib/nav'
-import { firstAllowedLanding, DESIGN_MASTER_SCREENS, isSalesmanRole } from './lib/permissions'
+import { firstAllowedLanding, DESIGN_MASTER_SCREENS, isSalesmanRole, isSecurityRole } from './lib/permissions'
 import { AdminScreen } from './screens/AdminScreen'
 import { AttendanceScreen } from './screens/AttendanceScreen'
 import { CostingScreen } from './screens/CostingScreen'
@@ -27,6 +27,7 @@ import { ProductionScreen } from './screens/ProductionScreen'
 import { ProgramScreen } from './screens/ProgramScreen'
 import { PurchaseScreen } from './screens/PurchaseScreen'
 import { SecurityGateScreen } from './screens/SecurityGateScreen'
+import { SecurityMachineProductionScreen } from './screens/SecurityMachineProductionScreen'
 import { StockScreen } from './screens/StockScreen'
 import { SampleJobCard } from './pages/SampleJobCard'
 import { SampleRegister } from './pages/SampleRegister'
@@ -116,6 +117,18 @@ function AuthenticatedApp() {
     }
   }, [session, roleName, tab, activeModule])
 
+  // Hard-block Security to Machine & Production Update only
+  useEffect(() => {
+    if (!session || !isSecurityRole(roleName || '') || isCeo) return
+    if (tab !== 'security-machine-production') {
+      const landing = firstAllowedLanding('Security')
+      setTab(landing.screen)
+      setSub(landing.sub)
+      setFilter(undefined)
+      setActiveModule(landing.module)
+    }
+  }, [session, roleName, isCeo, tab])
+
   if (loading) {
     return (
       <div className="app-loading">
@@ -159,6 +172,10 @@ function AuthenticatedApp() {
         t.hub === 'design-to-order' ||
         DESIGN_MASTER_SCREENS.has(t.screen))
     ) {
+      return
+    }
+    // Security may only open Machine & Production Update
+    if (isSecurityRole(roleName || '') && !isCeo && t.screen !== 'security-machine-production') {
       return
     }
     const nextScreen = t.screen
@@ -313,6 +330,7 @@ function AuthenticatedApp() {
           onNavigate={go}
         />
        ) : null}
+      {tab === 'security-machine-production' ? <SecurityMachineProductionScreen /> : null}
       {tab === 'parties' ? <PartyMasterScreen /> : null}
       {tab === 'item-master' ? <ItemMasterScreen /> : null}
       {tab === 'purchase' ? <PurchaseScreen initialSub={sub || 'general'} /> : null}

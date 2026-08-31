@@ -87,7 +87,7 @@ const ROLE_DEFAULTS: Record<string, MainModuleId[]> = {
     'design-to-order',
     'utilities',
   ],
-  security: ['security', 'inventory', 'warp-yarn', 'hr-payroll'],
+  security: ['security'],
   account: ['cash-book', 'hr-payroll', 'reports', 'masters', 'security'],
   admin: ['cash-book', 'hr-payroll', 'reports', 'masters', 'security', 'settings'],
   accounts: ['cash-book', 'hr-payroll', 'reports', 'masters'],
@@ -104,27 +104,9 @@ const OPERATOR_SUBS: Partial<Record<MainModuleId, string[]>> = {
   'program-dispatch': ['prod-entry', 'folding', 'tracking'],
 }
 
-/** Security role — Security Inventory entry + gate + yarn OCR + GEB + attendance */
+/** Security role — ONLY Machine & Production Update (no ERP modules) */
 const SECURITY_SUBS: Partial<Record<MainModuleId, string[]>> = {
-  security: [
-    'security-inventory',
-    'si-warp',
-    'si-weft',
-    'si-maint-in',
-    'si-maint-out',
-    'si-general',
-    'si-others',
-    'si-pending',
-    'si-documents',
-    'si-reports',
-    'security-gate',
-    'yarn-inward-sec',
-    'geb-sec',
-    'login-activity',
-  ],
-  inventory: ['yarn-stock', 'warp-yarn-link', 'stock-reports'],
-  'warp-yarn': ['wy-overview', 'wy-machines', 'wy-godown', 'wy-empty', 'wy-warper', 'wy-reports'],
-  'hr-payroll': ['hr-attendance', 'hr-dash'],
+  security: ['machine-production-update'],
 }
 
 /** Program / Production — Program to Machine + production workflow (no customer order entry) */
@@ -204,6 +186,11 @@ const SALESMAN_REPORTS_SUBS: string[] = ['otp-report-link', 'party-delivery', 'p
 
 function normalizeRole(name: string): string {
   return name.trim().toLowerCase()
+}
+
+export function isSecurityRole(roleName: string): boolean {
+  const n = normalizeRole(roleName)
+  return n === 'security' || (n.includes('security') && !n.includes('supervisor'))
 }
 
 export function isSalesmanRole(roleName: string): boolean {
@@ -351,7 +338,7 @@ export function getDefaultPermissions(roleName: string): ModulePermission[] {
   const modules = matchDefaultModules(roleName)
   const n = normalizeRole(roleName)
   const isOperator = n.includes('operator')
-  const isSecurity = n === 'security' || (n.includes('security') && !n.includes('supervisor'))
+  const isSecurity = isSecurityRole(roleName)
   const isManager = n === 'manager'
   const salesman = isSalesmanRole(n)
   const dispatch = isDispatchRole(n)
@@ -480,9 +467,9 @@ export function firstAllowedLanding(roleName: string): {
   filter?: string
 } {
   const n = normalizeRole(roleName)
-  const isSecurity = n === 'security' || (n.includes('security') && !n.includes('supervisor'))
+  const isSecurity = isSecurityRole(roleName)
   if (isSecurity) {
-    return { module: 'security', screen: 'security-inventory', sub: 'dashboard' }
+    return { module: 'security', screen: 'security-machine-production' }
   }
   // Salesman opens Order to Program dashboard (not Design Master)
   if (isSalesmanRole(n)) {
