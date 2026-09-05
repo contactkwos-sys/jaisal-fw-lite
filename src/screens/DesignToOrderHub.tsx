@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { DtoEmpty, DtoQuickNav, DtoStatusPill, ImageLightbox } from '../components/ImageLightbox'
+import { RecordActions } from '../components/RecordActions'
+import { useAuth } from '../lib/auth'
 import {
+  deleteDin,
   fetchDinById,
   fetchDins,
   fetchDtoStats,
@@ -9,6 +12,9 @@ import {
 } from '../lib/designToOrder'
 import { perMeterCostSuffix } from '../lib/designWiseCosting'
 import type { NavTarget } from '../lib/nav'
+import { canEditDesignMaster } from '../lib/permissions'
+import { applyEditDeleteOrQueue, isWithinEditWindow } from '../lib/pendingApprovals'
+import { confirmDeleteRecord } from '../lib/recordCrud'
 
 type Props = { onNavigate: (t: NavTarget) => void }
 
@@ -17,6 +23,8 @@ type Props = { onNavigate: (t: NavTarget) => void }
  * Sales/Production (Customer Order → Program) lives in Order to Program module.
  */
 export function DesignToOrderHub({ onNavigate }: Props) {
+  const { isCeo, profile, roleName } = useAuth()
+  const canMutate = canEditDesignMaster(roleName || '')
   const [dins, setDins] = useState<DinWithMatchings[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [detail, setDetail] = useState<DinWithMatchings | null>(null)
@@ -31,6 +39,8 @@ export function DesignToOrderHub({ onNavigate }: Props) {
     dispatchedMt: 0,
   })
   const [error, setError] = useState<string | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
 
   const load = useCallback(async () => {
     const [list, s] = await Promise.all([fetchDins(80), fetchDtoStats()])
@@ -64,6 +74,60 @@ export function DesignToOrderHub({ onNavigate }: Props) {
   }, [dins, q])
 
   const matchings = detail?.din_matchings?.slice().sort((a, b) => a.matching_no - b.matching_no) || []
+
+  function openCosting(dinNumber: string) {
+    onNavigate({
+      screen: 'design-wise-costing',
+      filter: dinNumber,
+      module: 'design-to-order',
+    })
+  }
+
+  async function handleDeleteDin(row: DinWithMatchings) {
+    if (!canMutate) {
+      setError('You do not have permission to delete DINs')
+      return
+    }
+    const within =
+      isCeo || !row.created_at || isWithinEditWindow(row.created_at)
+    const ok = confirmDeleteRecord({
+      message: within
+        ? 'Delete this DIN? This cannot be undone'
+        : 'Delete this DIN? This cannot be undone. This record is older than 7 days — delete will go to CEO for approval.',
+    })
+    if (!ok) return
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const result = await applyEditDeleteOrQueue({
+        isCeo,
+        createdAt: row.created_at || new Date().toISOString(),
+        tableName: 'dins',
+        recordId: row.id,
+        action: 'delete',
+        requestedBy: profile?.id || 'unknown',
+        apply: async () => {
+          await deleteDin(row.id)
+        },
+      })
+      if (result === 'applied') {
+        setDins((prev) => prev.filter((d) => d.id !== row.id))
+        if (selectedId === row.id) {
+          setSelectedId(null)
+          setDetail(null)
+        }
+        setMessage(`DIN ${row.din_number} deleted`)
+      } else {
+        setMessage('Delete sent for CEO approval — not deleted until CEO approves')
+      }
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Delete failed')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const quickDesign = [
     {
@@ -136,6 +200,7 @@ export function DesignToOrderHub({ onNavigate }: Props) {
       </div>
 
       {error ? <p className="form-error">{error}</p> : null}
+      {message ? <p className="form-ok">{message}</p> : null}
 
       <section className="dto-kpi-row">
         {(
@@ -178,7 +243,7 @@ export function DesignToOrderHub({ onNavigate }: Props) {
                     <th>Warp</th>
                     <th>Matchings</th>
                     <th>Status</th>
-                    <th />
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -202,10 +267,16 @@ export function DesignToOrderHub({ onNavigate }: Props) {
                       <td>
                         <DtoStatusPill status={d.status} />
                       </td>
-                      <td>
-                        <button type="button" className="link-btn" onClick={() => setSelectedId(d.id)}>
-                          View
-                        </button>
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <RecordActions
+                          busy={busy}
+                          canView
+                          canEdit={canMutate}
+                          canDelete={canMutate}
+                          onView={() => setSelectedId(d.id)}
+                          onEdit={() => openCosting(d.din_number)}
+                          onDelete={() => void handleDeleteDin(d)}
+                        />
                       </td>
                     </tr>
                   ))}
@@ -245,17 +316,30 @@ export function DesignToOrderHub({ onNavigate }: Props) {
             <div className="dto-detail-actions">
               <button
                 type="button"
-                className="btn-warp"
-                onClick={() =>
-                  onNavigate({
-                    screen: 'design-wise-costing',
-                    filter: detail.din_number,
-                    module: 'design-to-order',
-                  })
-                }
+                className="btn-ghost"
+                onClick={() => openCosting(detail.din_number)}
               >
                 View Costing
               </button>
+              {canMutate ? (
+                <button
+                  type="button"
+                  className="btn-warp"
+                  onClick={() => openCosting(detail.din_number)}
+                >
+                  Edit Costing
+                </button>
+              ) : null}
+              {canMutate ? (
+                <button
+                  type="button"
+                  className="btn-danger"
+                  disabled={busy}
+                  onClick={() => void handleDeleteDin(detail)}
+                >
+                  Delete DIN
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="primary-save"
