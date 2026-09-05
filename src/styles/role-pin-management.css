@@ -1,0 +1,227 @@
+/* KMOS-style Role / PIN Management cards */
+
+.role-pin-mgmt {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.role-pin-quickref {
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.role-pin-quickref-head h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.role-pin-quickref-head p {
+  margin: 0.2rem 0 0;
+}
+
+.role-pin-quickref-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.role-pin-quickref-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--teal-soft, #e8f5f2);
+  cursor: pointer;
+  text-align: left;
+  min-width: 7.5rem;
+}
+
+.role-pin-quickref-chip:hover {
+  border-color: var(--teal-deep, #0f766e);
+}
+
+.role-pin-quickref-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.role-pin-quickref-pin {
+  font-family: var(--font-mono, 'IBM Plex Mono', ui-monospace, monospace);
+  font-size: 1.35rem;
+  letter-spacing: 0.2em;
+  color: var(--teal-deep, #0f766e);
+}
+
+.role-pin-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+
+.role-pin-search-wrap {
+  flex: 1 1 16rem;
+  margin: 0;
+}
+
+.role-pin-search {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md, 10px);
+  background: var(--surface);
+}
+
+.role-pin-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.role-pin-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16.5rem, 1fr));
+  gap: 0.85rem;
+}
+
+.role-pin-card {
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.role-pin-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+}
+
+.role-pin-card-head h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.role-pin-card-icon {
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.role-pin-status {
+  margin-left: auto;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.role-pin-status.active {
+  background: var(--mint, #d1fae5);
+  color: var(--teal-deep, #0f766e);
+}
+
+.role-pin-status.inactive {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.role-pin-digits {
+  font-family: var(--font-mono, 'IBM Plex Mono', ui-monospace, monospace);
+  font-size: 2.35rem;
+  font-weight: 800;
+  letter-spacing: 0.35em;
+  color: var(--teal-deep, #0f766e);
+  text-align: center;
+  padding: 0.55rem 0.35rem;
+  background: var(--teal-soft, #e8f5f2);
+  border-radius: var(--radius-sm, 8px);
+}
+
+.role-pin-card-actions,
+.role-pin-edit-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.role-pin-edit-row input {
+  width: 5.5rem;
+  min-height: 2.4rem;
+}
+
+.role-pin-dev-footer {
+  padding: 1.1rem 1.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-top: 0.35rem;
+}
+
+.role-pin-dev-footer h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.role-pin-dev-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.role-pin-dev-tag {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: var(--radius-sm, 8px);
+  padding: 0.45rem 0.7rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.role-pin-dev-tag:hover {
+  border-color: var(--teal, #14b8a6);
+  background: var(--teal-soft, #e8f5f2);
+}
+
+.role-pin-rename {
+  padding: 1rem;
+}
+
+.role-pin-rename-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.role-pin-rename-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.role-pin-rename-row input {
+  flex: 1 1 12rem;
+  min-width: 10rem;
+}
+
+@media (max-width: 640px) {
+  .role-pin-digits {
+    font-size: 1.85rem;
+    letter-spacing: 0.25em;
+  }
+}

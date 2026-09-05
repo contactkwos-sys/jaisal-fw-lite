@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ApprovalsWidget } from '../components/ApprovalsWidget'
 import { GmailAdminSection } from '../components/GmailAdminSection'
-import { PinOverviewTable } from '../components/PinOverviewTable'
+import { RolePinManagement } from '../components/RolePinManagement'
 import { ShareActions } from '../components/ShareActions'
 import { SubTabs } from '../components/SubTabs'
 import { useAuth } from '../lib/auth'
@@ -53,8 +53,6 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
   const [roles, setRoles] = useState<Role[]>([])
   const [rolesLoading, setRolesLoading] = useState(true)
   const [roleHasPin, setRoleHasPin] = useState<Record<string, boolean>>({})
-  const [newPin, setNewPin] = useState<Record<string, string>>({})
-  const [confirmPin, setConfirmPin] = useState<Record<string, string>>({})
   const [editName, setEditName] = useState<Record<string, string>>({})
   const [bulkPins, setBulkPins] = useState<Array<{ role: string; pin: string }> | null>(null)
   const [pinOverviewKey, setPinOverviewKey] = useState(0)
@@ -217,42 +215,6 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
     }
   }
 
-  async function resetPin(role: Role) {
-    if (!isCeo) {
-      setError('CEO only')
-      return
-    }
-    const pin = newPin[role.id] || ''
-    const confirm = confirmPin[role.id] || ''
-    if (!/^\d{4}$/.test(pin)) {
-      setError('PIN must be exactly 4 numeric digits')
-      return
-    }
-    if (pin !== confirm) {
-      setError('New PIN and Confirm PIN must match')
-      return
-    }
-    setBusy(true)
-    setError(null)
-    try {
-      const { data, error: fnErr } = await supabase.functions.invoke('pin-reset', {
-        body: { role_id: role.id, role_name: role.role_name, pin },
-      })
-      if (fnErr) throw fnErr
-      if (data?.error) throw new Error(data.error)
-      await writePinAudit(role, 'change')
-      setMessage(`PIN updated for ${role.role_name}`)
-      setNewPin((p) => ({ ...p, [role.id]: '' }))
-      setConfirmPin((p) => ({ ...p, [role.id]: '' }))
-      setRoleHasPin((m) => ({ ...m, [role.id]: true }))
-      setPinOverviewKey((k) => k + 1)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'PIN reset failed')
-    } finally {
-      setBusy(false)
-    }
-  }
-
   async function autoGenerateAllPins() {
     if (!isCeo) {
       setError('CEO only')
@@ -284,16 +246,9 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
       }
       for (const role of ordered) {
         let pin = ''
-        const isCeoRole = role.role_name.toLowerCase() === 'ceo'
-        if (isCeoRole) {
-          do {
-            pin = String(cryptoRand())
-          } while (used.has(pin))
-        } else {
-          do {
-            pin = String(cryptoRand())
-          } while (used.has(pin))
-        }
+        do {
+          pin = String(cryptoRand())
+        } while (used.has(pin))
         used.add(pin)
 
         const { data, error: fnErr } = await supabase.functions.invoke('pin-reset', {
@@ -306,8 +261,6 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
       }
       setBulkPins(assigned)
       setRoleHasPin(Object.fromEntries(ordered.map((r) => [r.id, true])))
-      setNewPin({})
-      setConfirmPin({})
       setMessage(`Auto-generated PINs for ${assigned.length} roles — note them securely (shown once)`)
       setPinOverviewKey((k) => k + 1)
     } catch (e) {
@@ -563,206 +516,72 @@ export function AdminScreen({ initialSub = 'roles' }: Props) {
 
       {sub === 'roles' ? (
         <div className="pin-mgmt">
-          {isCeo ? (
-            <PinOverviewTable
-              roles={pinRoles}
-              isCeo={isCeo}
-              refreshKey={pinOverviewKey}
-              onMessage={(msg) => {
-                setMessage(msg)
-                if (msg) setError(null)
-              }}
-              onError={(msg) => {
-                setError(msg)
-                if (msg) setMessage(null)
-              }}
-            />
-          ) : null}
-          {isCeo ? (
-            <div className="pin-mgmt-toolbar">
-              <p className="text-muted" style={{ margin: 0 }}>
-                All roles on one page. PINs are hashed — current values stay masked.
-              </p>
-              <button
-                type="button"
-                className="btn-primary"
-                disabled={busy}
-                onClick={() => void autoGenerateAllPins()}
-              >
-                Auto-Generate All PINs
-              </button>
-            </div>
-          ) : (
-            <p className="text-muted">Only CEO can view and change PINs.</p>
-          )}
+          <RolePinManagement
+            roles={pinRoles}
+            isCeo={isCeo}
+            busy={busy}
+            refreshKey={pinOverviewKey}
+            bulkPins={bulkPins}
+            onDismissBulk={() => setBulkPins(null)}
+            onAutoGenerateAll={() => void autoGenerateAllPins()}
+            onMessage={(msg) => {
+              setMessage(msg)
+              if (msg) setError(null)
+            }}
+            onError={(msg) => {
+              setError(msg)
+              if (msg) setMessage(null)
+            }}
+            onPinsChanged={() => {
+              void loadRoles()
+              setPinOverviewKey((k) => k + 1)
+            }}
+          />
 
-          {bulkPins && isCeo ? (
-            <div className="pin-bulk-banner">
-              <strong>Generated PINs — copy now (shown once to CEO)</strong>
-              <ul>
-                {bulkPins.map((row) => (
-                  <li key={row.role}>
-                    <span>{row.role}</span>
-                    <strong className="num">{row.pin}</strong>
-                  </li>
+          {isCeo ? (
+            <section className="role-pin-rename surface form-stack" aria-label="Rename roles">
+              <h2 className="ceo-pin-section-title">Rename / manage roles</h2>
+              <p className="text-muted2">Optional — change display names or remove custom roles</p>
+              {rolesLoading ? <p className="text-muted">Loading roles…</p> : null}
+              <div className="role-pin-rename-list">
+                {pinRoles.map((role) => (
+                  <div key={role.id} className="role-pin-rename-row">
+                    <input
+                      value={editName[role.id] ?? role.role_name}
+                      onChange={(e) =>
+                        setEditName((m) => ({ ...m, [role.id]: e.target.value }))
+                      }
+                      aria-label={`Rename ${role.role_name}`}
+                    />
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      disabled={busy}
+                      onClick={() => void renameRole(role)}
+                    >
+                      Save name
+                    </button>
+                    {role.is_custom ? (
+                      <button
+                        type="button"
+                        className="btn-ghost text-danger"
+                        disabled={busy}
+                        onClick={() => void deleteRole(role)}
+                      >
+                        Delete
+                      </button>
+                    ) : (
+                      <span className="text-muted2" style={{ fontSize: '0.72rem' }}>
+                        {(SYSTEM_ROLE_NAMES as readonly string[]).includes(role.role_name)
+                          ? 'system'
+                          : 'default'}
+                      </span>
+                    )}
+                  </div>
                 ))}
-              </ul>
-              <button
-                type="button"
-                className="btn-secondary"
-                style={{ marginTop: '0.65rem' }}
-                onClick={() => setBulkPins(null)}
-              >
-                Dismiss
-              </button>
-            </div>
+              </div>
+            </section>
           ) : null}
-
-          <div className="pin-table-wrap">
-            {rolesLoading ? (
-              <p className="text-muted" style={{ padding: '1rem' }}>
-                Loading roles…
-              </p>
-            ) : null}
-            <table className="pin-table">
-              <thead>
-                <tr>
-                  <th>Role</th>
-                  <th>User / Role Name</th>
-                  <th>Current PIN</th>
-                  <th>New PIN</th>
-                  <th>Confirm PIN</th>
-                  <th>Status</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {!rolesLoading && pinRoles.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="yarn-empty">
-                      No roles found
-                    </td>
-                  </tr>
-                ) : null}
-                {pinRoles.map((role) => {
-                  const hasPin = !!roleHasPin[role.id]
-                  return (
-                    <tr key={role.id}>
-                      <td>
-                        <strong>{role.role_name}</strong>
-                        <div className="text-muted2" style={{ fontSize: '0.72rem' }}>
-                          {role.is_custom
-                            ? 'custom'
-                            : (SYSTEM_ROLE_NAMES as readonly string[]).includes(role.role_name)
-                              ? 'system'
-                              : 'default'}
-                        </div>
-                      </td>
-                      <td>
-                        {isCeo ? (
-                          <div className="form-stack" style={{ gap: '0.35rem' }}>
-                            <input
-                              value={editName[role.id] ?? role.role_name}
-                              onChange={(e) =>
-                                setEditName((m) => ({ ...m, [role.id]: e.target.value }))
-                              }
-                              aria-label={`Rename ${role.role_name}`}
-                            />
-                            <div className="share-actions">
-                              <button
-                                type="button"
-                                className="btn-secondary"
-                                disabled={busy}
-                                onClick={() => void renameRole(role)}
-                              >
-                                Save name
-                              </button>
-                              {role.is_custom ? (
-                                <button
-                                  type="button"
-                                  className="btn-ghost text-danger"
-                                  disabled={busy}
-                                  onClick={() => void deleteRole(role)}
-                                >
-                                  Delete
-                                </button>
-                              ) : null}
-                            </div>
-                          </div>
-                        ) : (
-                          role.role_name
-                        )}
-                      </td>
-                      <td>
-                        <span className="pin-masked">{hasPin ? '••••' : '— —'}</span>
-                      </td>
-                      <td>
-                        {isCeo ? (
-                          <input
-                            className="num"
-                            inputMode="numeric"
-                            maxLength={4}
-                            autoComplete="off"
-                            placeholder="••••"
-                            value={newPin[role.id] ?? ''}
-                            onChange={(e) =>
-                              setNewPin((m) => ({
-                                ...m,
-                                [role.id]: e.target.value.replace(/\D/g, '').slice(0, 4),
-                              }))
-                            }
-                            aria-label={`New PIN for ${role.role_name}`}
-                          />
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                      <td>
-                        {isCeo ? (
-                          <input
-                            className="num"
-                            inputMode="numeric"
-                            maxLength={4}
-                            autoComplete="off"
-                            placeholder="••••"
-                            value={confirmPin[role.id] ?? ''}
-                            onChange={(e) =>
-                              setConfirmPin((m) => ({
-                                ...m,
-                                [role.id]: e.target.value.replace(/\D/g, '').slice(0, 4),
-                              }))
-                            }
-                            aria-label={`Confirm PIN for ${role.role_name}`}
-                          />
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                      <td>
-                        <span className={`pin-status-pill ${hasPin ? 'set' : 'unset'}`}>
-                          {hasPin ? 'SET' : 'NOT SET'}
-                        </span>
-                      </td>
-                      <td>
-                        {isCeo ? (
-                          <button
-                            type="button"
-                            className="btn-primary"
-                            disabled={busy}
-                            onClick={() => void resetPin(role)}
-                          >
-                            Change
-                          </button>
-                        ) : (
-                          <span className="text-muted2">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
         </div>
       ) : null}
 
