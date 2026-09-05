@@ -517,7 +517,9 @@ export function DashboardScreen({ onNavigate }: Props) {
     },
     {
       label: 'Checking Pending',
-      value: pdKpis.pendingChecking || kpis.checkingPending,
+      // Always show meters from PD KPI (program-linked produced − checked). Do not fall
+      // back to kpis.checkingPending (that is a lot *count*, not meters).
+      value: `${Number(pdKpis.pendingChecking || 0).toFixed(0)} m`,
       tone: 'att',
       nav: { screen: 'program-dispatch', sub: 'folding', module: 'program-dispatch' },
     },

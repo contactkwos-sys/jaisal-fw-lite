@@ -90,27 +90,46 @@ export async function loadTrackingTotals(): Promise<TrackingTotals> {
 
 export async function loadTodayKpis(): Promise<TodayKpis> {
   const today = todayISO()
-  const [{ data: prod }, { data: lots }, { data: challans }, { data: allLots }] = await Promise.all([
-    supabase.from('production_entries').select('total_meter').eq('entry_date', today),
-    supabase.from('checking_lots').select('final_meter').eq('entry_date', today),
-    supabase.from('challans').select('meter, created_at').gte('created_at', `${today}T00:00:00`),
-    supabase.from('checking_lots').select('final_meter, challan_id, status'),
-  ])
+  const [{ data: prod }, { data: lots }, { data: challans }, { data: allLots }, { data: allProd }] =
+    await Promise.all([
+      supabase.from('production_entries').select('total_meter').eq('entry_date', today),
+      supabase.from('checking_lots').select('final_meter').eq('entry_date', today),
+      supabase.from('challans').select('meter, created_at').gte('created_at', `${today}T00:00:00`),
+      supabase.from('checking_lots').select('final_meter, challan_id, status, program_id'),
+      // Only program-linked production counts toward Checking Pending (matches PdFolding).
+      // Orphan/smoke rows with null program_id must not inflate this KPI.
+      supabase.from('production_entries').select('total_meter, program_id').not('program_id', 'is', null),
+    ])
 
   const todayProduction = (prod ?? []).reduce((s, r) => s + Number(r.total_meter || 0), 0)
   const todayChecked = (lots ?? []).reduce((s, r) => s + Number(r.final_meter || 0), 0)
   const todayDispatched = (challans ?? []).reduce((s, r) => s + Number(r.meter || 0), 0)
 
+  const producedByProgram = new Map<string, number>()
+  for (const e of allProd ?? []) {
+    if (!e.program_id) continue
+    producedByProgram.set(
+      e.program_id,
+      (producedByProgram.get(e.program_id) || 0) + Number(e.total_meter || 0),
+    )
+  }
+  const checkedByProgram = new Map<string, number>()
+  for (const l of allLots ?? []) {
+    if (!l.program_id) continue
+    const st = String(l.status || '')
+    if (/hold|reject/i.test(st)) continue
+    checkedByProgram.set(
+      l.program_id,
+      (checkedByProgram.get(l.program_id) || 0) + Number(l.final_meter || 0),
+    )
+  }
   let pendingChecking = 0
-  let pendingDispatch = 0
-  // Pending checking ≈ produced − checked (floor at 0)
-  const [{ data: allProd }] = await Promise.all([
-    supabase.from('production_entries').select('total_meter'),
-  ])
-  const totalProduced = (allProd ?? []).reduce((s, r) => s + Number(r.total_meter || 0), 0)
-  const totalChecked = (allLots ?? []).reduce((s, r) => s + Number(r.final_meter || 0), 0)
-  pendingChecking = Math.max(0, totalProduced - totalChecked)
-  pendingDispatch = (allLots ?? [])
+  for (const [programId, produced] of producedByProgram) {
+    const checked = checkedByProgram.get(programId) || 0
+    pendingChecking += Math.max(0, produced - checked)
+  }
+
+  const pendingDispatch = (allLots ?? [])
     .filter((l) => !l.challan_id && l.status !== 'Dispatched')
     .reduce((s, r) => s + Number(r.final_meter || 0), 0)
 

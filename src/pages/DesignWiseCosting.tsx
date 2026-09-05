@@ -844,13 +844,20 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
 
   const loadById = useCallback(
     async (id: string, quiet = false) => {
+      // Prevent draft autosave from racing while we hydrate from DB
+      skipDraftSaveRef.current = true
+      clearDinCostingDraft()
+
       const { data: header, error: hErr } = await supabase
         .from('design_costing')
         .select('*')
         .eq('id', id)
         .maybeSingle()
       if (hErr) throw hErr
-      if (!header) return
+      if (!header) {
+        skipDraftSaveRef.current = false
+        return
+      }
 
       applyHeader(header as Record<string, unknown>)
 
@@ -862,12 +869,18 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
       const mappedWarps: WarpDraft[] =
         (warpRows ?? []).length > 0
           ? (warpRows ?? []).map((r, i) => {
-              const base = r.base_denier != null ? String(r.base_denier) : ''
+              const rawBase = r.base_denier != null ? String(r.base_denier) : ''
+              // Legacy rows often stored only costing denier (base+10) — backfill Base for edit
+              const candidateBase =
+                rawBase ||
+                (r.denier != null && Number(r.denier) > 10
+                  ? String(Number(r.denier) - 10)
+                  : '')
               const row: WarpDraft = {
                 key: r.id || crypto.randomUUID(),
                 sr_no: r.sr_no ?? i + 1,
                 yarn_name: r.yarn_name || '',
-                base_denier: base,
+                base_denier: '',
                 denier: r.denier != null ? String(r.denier) : '',
                 tar_ends: r.tar_ends != null ? String(r.tar_ends) : String(DEFAULT_TAR_ENDS),
                 width: String(DEFAULT_WIDTH),
@@ -884,7 +897,9 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
                         : '',
                 rate_master_id: r.rate_master_id || undefined,
               }
-              return base ? syncCostingDenierFromBase(row) : row
+              return candidateBase
+                ? ensureBaseDenier(row, candidateBase, row.yarn_name)
+                : row
             })
           : [emptyWarp(1)]
 
@@ -892,7 +907,12 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         (weftRows ?? []).length > 0
           ? (weftRows ?? []).map((r, i) => {
               const feederNo = r.feeder_no != null ? Number(r.feeder_no) : i + 1
-              const base = r.base_denier != null ? String(r.base_denier) : ''
+              const rawBase = r.base_denier != null ? String(r.base_denier) : ''
+              const candidateBase =
+                rawBase ||
+                (r.denier != null && Number(r.denier) > 10
+                  ? String(Number(r.denier) - 10)
+                  : '')
               const row: WeftDraft = {
                 key: r.id || crypto.randomUUID(),
                 sr_no: r.sr_no ?? i + 1,
@@ -902,7 +922,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
                   ? String((r as { colour?: string | null }).colour)
                   : '',
                 weft_name: r.weft_name || '',
-                base_denier: base,
+                base_denier: '',
                 denier: r.denier != null ? String(r.denier) : '',
                 pic: r.pic != null ? String(r.pic) : '',
                 width: r.width != null ? String(r.width) : String(DEFAULT_WIDTH),
@@ -919,7 +939,9 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
                 rate_master_id: r.rate_master_id || undefined,
                 strings_ref: r.strings_ref != null ? String(r.strings_ref) : '',
               }
-              return base ? syncCostingDenierFromBase(row) : row
+              return candidateBase
+                ? ensureBaseDenier(row, candidateBase, row.weft_name)
+                : row
             })
           : [emptyWeft(1)]
 
@@ -935,6 +957,10 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
       }
 
       if (!quiet) setMessage(`Loaded costing for ${header.din_number}`)
+      // Allow draft autosave again on next tick (after state settles)
+      requestAnimationFrame(() => {
+        skipDraftSaveRef.current = false
+      })
     },
     [applyHeader],
   )
@@ -956,6 +982,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
     })
   }
 
+  // When opening a DIN from Orders / navigation, enter edit mode (not sticky view-only)
   const loadExisting = useCallback(
     async (din: string) => {
       const trimmed = normalizeDesignNumber(din)
@@ -970,15 +997,21 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
       const header = rows?.[0]
       if (header) {
         await loadById(header.id)
+        setFormViewOnly(false)
+        setIsLocked(false)
         return
       }
       // Bridge: Design Intake may store the same fabric under dins.design_name / din_number
       const shared = await findSharedDesign(trimmed)
       if (shared?.costingId) {
         await loadById(shared.costingId)
+        setFormViewOnly(false)
+        setIsLocked(false)
         return
       }
       if (shared?.din) {
+        setFormViewOnly(false)
+        setIsLocked(false)
         setDinNumber(shared.din.din_number)
         if (shared.din.design_name) setQualityName(shared.din.design_name)
         if (shared.din.din_image_url) {
@@ -1275,6 +1308,19 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
 
   async function persist(asDraft: boolean, finalize = false, overrides?: PersistOverrides) {
     if (!validateBeforeSave(overrides, finalize)) return
+
+    // 7-day CEO-approval rule for edits (new inserts always allowed)
+    const editingId = overrides?.forceNew ? null : savedId
+    if (editingId && !finalize) {
+      const created = savedCreatedAt || new Date().toISOString()
+      if (!isCeo && !isWithinEditWindow(created)) {
+        setError(
+          'This costing is older than 7 days. Edit requires CEO — ask CEO to edit, or use Delete to send a CEO approval request.',
+        )
+        return
+      }
+    }
+
     setBusy(true)
     setError(null)
     setMessage(null)
@@ -1805,6 +1851,11 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
         },
       })
       if (savedId === id) resetForm()
+      // Optimistic UI update so the row disappears immediately even if refresh lags
+      if (result === 'applied') {
+        setHistory((prev) => prev.filter((r) => r.id !== id))
+        setDesignNoSeries((prev) => prev.filter((r) => r.costingId !== id))
+      }
       await refreshHistory()
       await refreshDesignNoSeries()
       setMessage(
@@ -3552,6 +3603,9 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
                               onEdit={() =>
                                 void loadForEdit(row.costingId).catch((e: Error) => setError(e.message))
                               }
+                              onDelete={() =>
+                                void deleteCosting(row.costingId, row.status, row.latestAt)
+                              }
                             />
                             <button
                               type="button"
@@ -3716,7 +3770,7 @@ export function DesignWiseCosting({ initialDin = '', viewOnly = false, onNavigat
                               className="dwc-din-link"
                               title="Edit this costing"
                               onClick={() =>
-                                void loadById(row.id).catch((e: Error) => setError(e.message))
+                                void loadForEdit(row.id).catch((e: Error) => setError(e.message))
                               }
                             >
                               {row.din_number}
