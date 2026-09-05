@@ -318,6 +318,16 @@ export async function updateDin(
   if (error) throw error
 }
 
+/**
+ * Hard-delete a DIN master row. Matchings / sample cards / follow-ups cascade in DB.
+ * Linked `design_costing` rows are left in place (FK is on delete set null via costing_id).
+ */
+export async function deleteDin(id: string): Promise<void> {
+  await assertDesignMasterWrite()
+  const { error } = await supabase.from('dins').delete().eq('id', id)
+  if (error) throw error
+}
+
 export async function upsertDinMatchings(dinId: string, matchings: DinMatchingDraft[]): Promise<void> {
   await assertDesignMasterWrite()
   await supabase.from('din_matchings').delete().eq('din_id', dinId)
